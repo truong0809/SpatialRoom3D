@@ -1,0 +1,26 @@
+# Cảnh tự chụp: thư mục ảnh JPG/JPEG/PNG hoặc một video quay bằng điện thoại / máy ảnh thường (không cần LiDAR).
+# Nguồn gốc nằm trong data/custom_scenes/<cảnh>/ và không bị sửa; mọi thứ sinh ra nằm trong outputs/custom_scenes/<cảnh>/.
+# Cách chụp: docs/data/capture_protocol.md. Cách chạy: docs/USAGE_GUIDE.md.
+
+kind: custom
+required: false
+root: ${WS}/data/custom_scenes
+source_layout: "<cảnh>/: các ảnh JPG/JPEG/PNG nằm thẳng trong thư mục, hoặc một file video"
+
+# COLMAP nằm trong thư mục kết quả của từng cảnh: prepared phải đúng bằng <results.gsplat>/<cảnh>/colmap.
+prepared: ${WS}/outputs/custom_scenes/<cảnh>/colmap
+layout: [input, images, sparse/0]
+
+results:
+  gsplat: ${WS}/outputs/custom_scenes
+results_layout:
+  gsplat: "<cảnh>/<chế_độ>[_<TAG>]_s<seed>/, cạnh <cảnh>/colmap/ (ảnh đã chuẩn hóa, COLMAP, báo cáo)"
+
+commands:
+  run: "bash scripts/pod/run_scene.sh <thư_mục_ảnh | file_video | -> <tên_cảnh> --background"
+  prepare: "bash scripts/prepare_data.sh custom <thư_mục_ảnh | file_video> <tên_cảnh>"
+  train: "bash scripts/run_train.sh custom <tên_cảnh> [default] [mcmc]"
+  render: "bash scripts/run_render.sh custom <tên_cảnh> [<lượt>]"
+  evaluate: "bash scripts/run_evaluate.sh custom <tên_cảnh>"
+
+status: "mỗi cảnh một thư mục; chưa có cảnh nào chạy xong xác minh được trên pod"

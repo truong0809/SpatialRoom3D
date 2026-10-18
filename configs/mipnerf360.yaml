@@ -1,0 +1,59 @@
+# Mip-NeRF 360: 4 cảnh trong nhà, 5 cảnh ngoài trời. ĐÃ CẤU HÌNH, CHƯA CHẠY.
+# Dữ liệu và kết quả nằm trên volume, không đưa lên Git. Chạy và protocol: experiments/mipnerf360/README.md.
+
+kind: benchmark
+required: false
+root: ${WS}/data/benchmarks/mipnerf360
+scenes: [room, counter, kitchen, bonsai, bicycle, garden, stump, flowers, treehill]
+indoor_scenes: [room, counter, kitchen, bonsai]
+layout: [images, images_2, images_4, sparse/0]
+
+source:
+  urls:
+    - https://storage.googleapis.com/gresearch/refraw360/360_v2.zip
+  download_dir: ${WS}/data/downloads
+  extract_to: ${WS}/data/downloads/360_v2_extracted
+  auto_download: false
+  note: "360_v2.zip có 7 cảnh; flowers và treehill nằm trong gói riêng của trang dự án Mip-NeRF 360 (chưa xác minh đường dẫn). Không tự tải: đặt DOWNLOAD=1 khi thật sự cần"
+
+protocol:
+  split: "cứ 8 ảnh lấy 1 làm test"
+  resolution: "images_2 cho 4 cảnh trong nhà, images_4 cho 5 cảnh ngoài trời (Inria full_eval.py @54c035f; gsplat examples/benchmarks/basic.sh @6e8c837 dùng data_factor 2 / 4)"
+
+results:
+  inria_b0: ${WS}/outputs/benchmarks/mipnerf360/inria_b0
+  gsplat: ${WS}/outputs/benchmarks/mipnerf360/gsplat
+  gsplat_quick: ${WS}/outputs/benchmarks/mipnerf360/gsplat_quick
+results_layout:
+  inria_b0: "<cảnh>/"
+  gsplat: "<cảnh>/<chế_độ>_s<seed>/ (ảnh PNG thu nhỏ của gsplat: <cảnh>/.images_<N>_png_<dấu mô hình>/)"
+  gsplat_quick: "<cảnh>/<chế_độ>_s<seed>/"
+
+commands:
+  prepare: bash scripts/prepare_data.sh mipnerf360
+  inria_b0: bash scripts/run_train.sh mipnerf360 b0
+  gsplat_default_and_mcmc: bash scripts/run_train.sh mipnerf360 gsplat
+  gsplat_quick_check: QUICK=1 bash scripts/run_train.sh mipnerf360 gsplat
+  evaluate: bash scripts/run_evaluate.sh mipnerf360
+
+status: "đã cấu hình, chưa chạy; chưa xác minh dữ liệu trên pod"
+
+# Quy ước benchmark chính chủ của mỗi bên: Inria đọc images_<N>/, gsplat dùng data_factor N.
+benchmark:
+  name: baseline_inria_mipnerf360
+  description: "Mip-NeRF 360 (4 cảnh trong nhà, 5 cảnh ngoài trời): B0 = 3DGS gốc của Inria (54c035f) theo full_eval.py; gsplat default / mcmc theo examples/benchmarks/basic.sh (6e8c837). ĐÃ CẤU HÌNH, CHƯA CHẠY"
+  tag: mipnerf360
+  image_factor: {room: 2, counter: 2, kitchen: 2, bonsai: 2, bicycle: 4, garden: 4, stump: 4, flowers: 4, treehill: 4}
+  image_factor_source: "Inria full_eval.py @54c035f: -i images_2 cho room, counter, kitchen, bonsai; -i images_4 cho bicycle, flowers, garden, stump, treehill. gsplat examples/benchmarks/basic.sh @6e8c837: data_factor 2 / 4 cho cùng các nhóm cảnh"
+  train_args: [--disable_viewer, --quiet, --eval, --test_iterations, "-1"]
+  render_iterations: [7000, 30000]
+  render_args: [--quiet, --eval, --skip_train]
+  method: ours_30000
+  iteration: 30000
+  gsplat:
+    mcmc_set: ""
+    mcmc_set_source: "giữ opacity_reg mặc định của preset mcmc trong gsplat (0.01); chỉ Deep Blending dùng 0.001"
+  reference:
+    metrics: {PSNR: 27.572, SSIM: 0.816, LPIPS: 0.215}
+    source: "Inria gaussian-splatting results.md @54c035f, charts assets/charts/base_{PSNR,SSIM,LPIPS}.png: default rasterizer, ORIGINAL configuration, MipNeRF360 mean (checked 2026-10-18)"
+  tolerance: {PSNR: 0.5, SSIM: 0.01, LPIPS: 0.01}

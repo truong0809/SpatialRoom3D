@@ -1,0 +1,10 @@
+# Phụ thuộc Python của env gs-inria cho bước 6 của scripts/setup/setup_3dgs_inria.sh
+# (ngoài torch/torchvision cài ở bước 3 và 3 CUDA extension build từ submodule của repo Inria ở bước 7).
+# Lấy từ pip freeze của lượt cài trên pod RTX 4090 ngày 17/10/2026; B0 Deep Blending (drjohnson, playroom)
+# đã chạy với đúng bộ phiên bản này. Đã kiểm tra các phiên bản có trên PyPI.
+joblib==1.6.0
+ninja==1.13.2
+numpy==2.2.6
+opencv-python-headless==5.0.0.93
+plyfile==1.1.5
+tqdm==4.70.1

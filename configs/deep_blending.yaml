@@ -1,0 +1,60 @@
+# Deep Blending: 2 cảnh trong nhà (drjohnson, playroom). Benchmark chính để đối chiếu với số liệu của Inria.
+# Dữ liệu và kết quả nằm trên volume, không đưa lên Git. Chạy và protocol: experiments/deep_blending/README.md.
+
+kind: benchmark
+required: true
+root: ${WS}/data/benchmarks/deep_blending
+scenes: [drjohnson, playroom]
+layout: [images, sparse/0]
+
+source:
+  urls:
+    - https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip
+  download_dir: ${WS}/data/downloads
+  extract_to: ${WS}/data/downloads/tandt_db_extracted
+  sha256:
+    tandt_db.zip: 816e62f22a161abbfe841d2a6b10cdf036e297c9fa289b3bfeee9c6ec526d7e1
+  auto_download: true
+  note: "tandt_db.zip có db/ (Deep Blending) và tandt/ (Tanks&Temples): giải nén vào extract_to, rồi thư mục chứa các cảnh (db/) được dời tới root"
+
+protocol:
+  split: "cứ 8 ảnh lấy 1 làm test (Inria --eval, gsplat test_every 8: cùng tập test)"
+  resolution: "ảnh có sẵn của bộ dữ liệu (data_factor 1)"
+
+results:
+  inria_b0: ${WS}/outputs/benchmarks/deep_blending/inria_b0
+  gsplat: ${WS}/outputs/benchmarks/deep_blending/gsplat
+  gsplat_quick: ${WS}/outputs/benchmarks/deep_blending/gsplat_quick
+results_layout:
+  inria_b0: "<cảnh>/ (results.json, run_meta.json, point_cloud/...)"
+  gsplat: "<cảnh>/<chế_độ>_s<seed>/ (summary.json, run_meta.json, ...)"
+  gsplat_quick: "<cảnh>/<chế_độ>_s<seed>/ (chạy thử 3.000 vòng)"
+
+commands:
+  prepare: bash scripts/prepare_data.sh deep_blending
+  inria_b0: bash scripts/run_train.sh deep_blending b0
+  gsplat_default_and_mcmc: bash scripts/run_train.sh deep_blending gsplat
+  gsplat_quick_check: QUICK=1 bash scripts/run_train.sh deep_blending gsplat
+  gsplat_three_seeds: SEEDS="42 43 44" bash scripts/run_train.sh deep_blending gsplat
+  evaluate: bash scripts/run_evaluate.sh deep_blending
+
+status: "chưa chạy bằng repo này; ngày 17/10/2026 repo trước (3D-Indoor-Scene-Reconstruction-from-Images @8037a66) đã chạy B0 Inria và gsplat default/mcmc 30.000 vòng, seed 42, trên volume cũ (docs/PROJECT_STATUS.md)"
+
+# Quy ước benchmark: B0 = 3DGS gốc của Inria; gsplat default / mcmc cùng tập test.
+benchmark:
+  name: baseline_inria_deepblending
+  description: "Deep Blending (2 cảnh trong nhà): B0 = 3DGS gốc của Inria (commit 54c035f), tham số giống full_eval.py; gsplat default / mcmc cùng tập test"
+  tag: db                      # tên báo cáo và log: reports/modes_db_*, reports/baseline_db_summary_*
+  image_factor: {}             # ảnh gốc trong images/
+  train_args: [--disable_viewer, --quiet, --eval, --test_iterations, "-1"]
+  render_iterations: [7000, 30000]
+  render_args: [--quiet, --eval, --skip_train]
+  method: ours_30000
+  iteration: 30000
+  gsplat:
+    mcmc_set: opacity_reg=0.001
+    mcmc_set_source: "paper 3DGS-MCMC dùng lambda_o = 0.001 cho Deep Blending (config chính chủ chỉ đặt cho drjohnson; ở đây dùng cho cả hai cảnh, như lượt 17/10/2026)"
+  reference:
+    metrics: {PSNR: 29.690, SSIM: 0.906, LPIPS: 0.238}
+    source: "Inria gaussian-splatting results.md, charts assets/charts/base_{PSNR,SSIM,LPIPS}.png: default rasterizer, ORIGINAL configuration, Deep Blending mean (checked 2026-10-09)"
+  tolerance: {PSNR: 0.5, SSIM: 0.01, LPIPS: 0.01}

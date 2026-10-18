@@ -1,0 +1,60 @@
+# --- Dữ liệu và kết quả lớn: lưu trên Runpod network volume / ổ ngoài, không đưa lên Git ---
+# Dấu "/" ở đầu: chỉ áp dụng cho thư mục ở gốc repo (không chặn docs/data/ hay src/datasets/).
+/data/
+/datasets/
+/outputs/
+/output/
+/checkpoints/
+/results/raw/
+*.ckpt
+*.pth
+*.pt
+*.ply
+*.splat
+*.ksplat
+*.spz
+*.sog
+*.mp4
+*.MP4
+*.mov
+*.MOV
+*.zip
+*.tar
+*.tar.gz
+# file COLMAP (database.db, *.bin) và mảng số: thuộc dữ liệu / kết quả
+*.db
+*.bin
+*.npy
+
+# --- Môi trường và cache ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.ipynb_checkpoints/
+.cache/
+wandb/
+/runs/
+
+# --- Bí mật ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Hệ điều hành / IDE ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Ghi đè cấu hình của từng pod (configs/*.yaml) ---
+configs/local.yaml
+
+# --- experiments/<benchmark>/: chỉ README vào Git; dữ liệu / kết quả đặt tạm ở đây không được commit ---
+/experiments/*/*
+!/experiments/*/README.md
+
