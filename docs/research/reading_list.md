@@ -37,6 +37,11 @@ _Phiên bản 1 · 09/10/2026_
   - Rota Bulò et al. — Revising Densification in Gaussian Splatting, ECCV 2024
   - Ye et al. — AbsGS: Recovering Fine Details for 3D Gaussian Splatting, ACM MM 2024
   - Lu et al. — Scaffold-GS: Structured 3D Gaussians for View-Adaptive Rendering, CVPR 2024
+- Cải tiến 3DGS-MCMC, khảo sát ngày 19/10/2026 để chọn chế độ thứ ba (chỉ ghi những gì đã đọc được):
+  - ★ Huang, Chen, Liu, Ji — Opt3DGS: Optimizing 3D Gaussian Splatting with Adaptive Exploration and Curvature-Aware Exploitation, AAAI 2026 ([AAAI](https://ojs.aaai.org/index.php/AAAI/article/view/37438); arXiv 2511.13571). Xây trên 3DGS-MCMC; đổi cách tối ưu (Adaptive Weighted SGLD, rồi quasi-Newton cho vị trí), không đổi cách đặt Gaussian. Chưa thấy code công bố. Được chọn làm hướng cho chế độ thứ ba (chưa cài)
+  - ☆ Hofer, Köhler, Windisch, Kerbl, Steinberger, Radl — Efficient Confidence-Aware Densification for 3DGS (†, arXiv 2610.13541, 09/10/2026): đặt và dời Gaussian theo sai số ảnh và độ tin cậy học được, trong khung ngân sách cố định của MCMC. Mới đọc tóm tắt; chưa thấy code
+  - ☆ Radl et al. — Confidence-Based Mesh Extraction from 3D Gaussians (†, arXiv 2603.24725): độ tin cậy học được cho mỗi Gaussian (nguồn của ý tưởng độ tin cậy ở mục trên)
+  - ☆ Kim, Jung, Park — Metropolis-Hastings Sampling for 3D Gaussian Reconstruction, NeurIPS 2025 ([NeurIPS](https://proceedings.neurips.cc/paper_files/paper/2025/hash/d25ed2a375a33257d33e83fd9010ec60-Abstract-Conference.html)): thêm Gaussian theo sai số nhiều góc nhìn với phép thử chấp nhận; so với 3DGS-MCMC ở cùng số Gaussian, kết quả lẫn lộn (Deep Blending tốt hơn, Mip-NeRF 360 kém hơn)
 - ☆ Nén mô hình:
   - Fan et al. — LightGaussian, NeurIPS 2024
   - Niedermayr et al. — Compressed 3D Gaussian Splatting for Accelerated Novel View Synthesis, CVPR 2024

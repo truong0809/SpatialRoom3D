@@ -91,6 +91,21 @@ def test_overview_shows_every_section(tmp_path):
     assert "ket_qua_1017_1200.tar.gz" in text
 
 
+def test_overview_shows_the_latest_experiment(tmp_path):
+    ws = make_ws(tmp_path)
+    text = "\n".join(build(ws, None))
+    assert "Thực nghiệm (scripts/pod/run_experiment.sh): chưa có" in text
+    reports = ws / "outputs" / "reports"
+    write(reports / "experiment_main_20261019_120000.tsv",
+          "# experiment main 20261019_120000 | repo abc1234\n# step\tstatus\texit\tseconds\tnote\n"
+          "fetch_mipnerf360\tOK\t0\t600\t\ngsplat_mipnerf360_s44\tSKIP\t\t\tkhông đủ chỗ trống cho seed 44\n")
+    text = "\n".join(build(ws, None))
+    assert f"== Thực nghiệm (experiment_main_20261019_120000.tsv); bảng so sánh: {reports}" in text
+    assert "experiment main 20261019_120000 | repo abc1234" in text
+    assert "fetch_mipnerf360             OK             0:10:00" in text
+    assert "gsplat_mipnerf360_s44        BỎ QUA         không đủ chỗ trống cho seed 44" in text
+
+
 def test_uploaded_scene_not_yet_prepared_is_listed(tmp_path):
     ws = make_ws(tmp_path)
     for i in range(3):

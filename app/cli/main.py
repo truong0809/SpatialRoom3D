@@ -28,8 +28,11 @@ COMMANDS: dict[str, tuple[str, list[str], str]] = {
     "prepare": ("scripts/prepare_data.sh", [], "chuẩn bị dữ liệu: custom <ảnh|video> <cảnh> | <benchmark>"),
     "train": ("scripts/run_train.sh", [], "huấn luyện: custom <cảnh> [chế độ ...] | <benchmark> [gsplat|b0]"),
     "render": ("scripts/run_render.sh", [], "render ảnh / video, xuất PLY: custom <cảnh> [lượt] | <benchmark> <cảnh> [lượt]"),
-    "evaluate": ("scripts/run_evaluate.sh", [], "đánh giá, so sánh default / mcmc / B0: <benchmark> | custom [cảnh ...]"),
+    "evaluate": ("scripts/run_evaluate.sh", [], "đánh giá, so sánh các chế độ và B0: <benchmark> | custom [cảnh ...]"),
     "scene": ("scripts/pod/run_scene.sh", [], "cả luồng cho một cảnh tự chụp: <ảnh|video|-> <cảnh> [--background]"),
+    "fetch": ("scripts/pod/fetch_data.sh", [], "tải dữ liệu benchmark về volume: <benchmark> [cảnh ...] [--dry-run]"),
+    "experiment": ("scripts/pod/run_experiment.sh", [],
+                   "một thực nghiệm trọn vẹn (configs/experiments/): <tên> --plan | --background"),
     "setup": ("scripts/pod/run_all.sh", ["--background"], "cài / kiểm tra môi trường trên pod (chạy nền, không train)"),
     "status": ("scripts/pod/job.sh", ["status"], "trạng thái các việc chạy nền"),
     "log": ("scripts/pod/job.sh", ["log"], "cuối log của một việc: log <tên> [số dòng]"),
@@ -43,8 +46,8 @@ def usage() -> str:
     lines = ["Cách dùng: python -m app.cli [--dry-run] <lệnh> [tham số của script]", "",
              "SpatialRoom3D: tái tạo không gian nội thất 3D từ ảnh / video. Các lệnh:"]
     for name, (script, fixed, help_text) in COMMANDS.items():
-        lines.append(f"  {name:<9} {help_text}")
-        lines.append(f"  {'':<9}   = bash {script} {' '.join(fixed)}".rstrip())
+        lines.append(f"  {name:<10} {help_text}")
+        lines.append(f"  {'':<10}   = bash {script} {' '.join(fixed)}".rstrip())
     lines += ["", "--dry-run: chỉ in lệnh bash sẽ chạy. Hướng dẫn: docs/USAGE_GUIDE.md"]
     return "\n".join(lines)
 

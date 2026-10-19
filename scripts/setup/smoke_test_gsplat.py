@@ -5,9 +5,11 @@ Kiểm tra:
 2. rasterization chạy xuôi/ngược; DefaultStrategy và MCMCStrategy chạy vài bước (kể cả nhân relocation).
 3. fused_ssim: SSIM(x, x) ~ 1 và có gradient.
 4. LPIPS (VGG, như Inria) tính được; lần đầu sẽ tải trọng số.
-5. examples/simple_trainer.py import được và phân giải đúng tham số của chế độ default và mcmc.
+5. examples/simple_trainer.py import được và phân giải đúng tham số của mọi chế độ trong configs/base.yaml (strategy,
+   protocol, cap_max, tham số riêng của chế độ), không train.
 
     python scripts/setup/smoke_test_gsplat.py --examples-dir /workspace/code/gsplat/examples
+    python scripts/setup/smoke_test_gsplat.py --examples-dir ... --modes default mcmc   # chỉ mục 5, vài giây
 """
 
 from __future__ import annotations
@@ -139,18 +141,30 @@ def check_lpips():
     print("LPIPS(a, b) =", lpips(a, torch.rand_like(a)).item())
 
 
-@check("simple_trainer.py arguments for default and mcmc")
-def check_trainer_cli(examples_dir: Path):
+def resolved_value(cfg: dict, flag: str):
+    """Giá trị trong cấu hình đã phân giải của một tham số dòng lệnh, vd. 'strategy.refine-stop-iter'."""
+    value = cfg
+    for part in flag.split("."):
+        value = value[part.replace("-", "_")]
+    return value
+
+
+@check("simple_trainer.py arguments of the training modes")
+def check_trainer_cli(examples_dir: Path, modes: list[str] | None = None):
     sys.path.insert(0, str(REPO_DIR))
-    from src.training.profiles import load_config, resolve_mode, trainer_args
+    from src.training.profiles import load_config, resolve_cap_max, resolve_mode, trainer_args
 
     config = load_config(REPO_DIR / "configs" / "base.yaml")
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_DIR), env.get("PYTHONPATH")]))
     with tempfile.TemporaryDirectory() as tmp:
-        # 1_234_567 khác giá trị mặc định của MCMCStrategy.cap_max (1_000_000): kiểm tra được tham số có tác dụng
-        for mode, cap in (("default", None), ("mcmc", 1_234_567)):
+        for mode in modes or list(config["modes"]):
             spec = resolve_mode(config, mode)
+            cap = None
+            if spec.preset == "mcmc":
+                # 1_234_567 khác giá trị mặc định của MCMCStrategy.cap_max (1_000_000): kiểm tra được tham số có tác dụng
+                policy = (spec.cap_max_policy or {}).get("policy")
+                cap = resolve_cap_max(spec)[0] if policy == "fixed" else 1_234_567
             out = Path(tmp) / f"{mode}.json"
             cmd = [sys.executable, "-m", "src.training.gsplat_launcher", "--examples-dir", str(examples_dir),
                    "--resolve-only", "--resolved-config", str(out), "--",
@@ -159,7 +173,7 @@ def check_trainer_cli(examples_dir: Path):
             if proc.returncode != 0:
                 raise RuntimeError(proc.stdout[-2000:] + proc.stderr[-4000:])
             cfg = json.loads(out.read_text(encoding="utf-8"))
-            expected = "DefaultStrategy" if mode == "default" else "MCMCStrategy"
+            expected = "DefaultStrategy" if spec.preset == "default" else "MCMCStrategy"
             assert cfg["strategy_type"] == expected, cfg["strategy_type"]
             assert cfg["max_steps"] == spec.max_steps and cfg["lpips_net"] == spec.protocol["lpips_net"]
             # đánh giá tách riêng sau huấn luyện; checkpoint và PLY chỉ ở bước cuối
@@ -168,22 +182,28 @@ def check_trainer_cli(examples_dir: Path):
             assert cfg["data_factor"] == spec.protocol["data_factor"] and cfg["init_type"] == "sfm"
             if cap is not None:
                 assert cfg["strategy"]["cap_max"] == cap
-            print(f"{mode}: {expected}, max_steps {cfg['max_steps']}, lpips {cfg['lpips_net']}")
+            for flag, value in spec.args.items():  # tham số riêng của chế độ có tác dụng
+                assert resolved_value(cfg, flag) == value, (mode, flag, resolved_value(cfg, flag), value)
+            extra = ", ".join(f"{flag}={value}" for flag, value in spec.args.items())
+            print(f"{mode}: {expected}, max_steps {cfg['max_steps']}, lpips {cfg['lpips_net']}"
+                  + (f", {extra}" if extra else ""))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--examples-dir", required=True, type=Path)
+    parser.add_argument("--modes", nargs="+", help="chỉ kiểm tra tham số của các chế độ này (mục 5, không train)")
     args = parser.parse_args()
     if not torch.cuda.is_available():
         print("FAIL: PyTorch cannot see a GPU")
         return 1
     print("torch", torch.__version__, "| CUDA", torch.version.cuda, "|", torch.cuda.get_device_name(0))
-    check_extension()
-    check_strategies()
-    check_fused_ssim()
-    check_lpips()
-    check_trainer_cli(args.examples_dir.resolve())
+    if not args.modes:
+        check_extension()
+        check_strategies()
+        check_fused_ssim()
+        check_lpips()
+    check_trainer_cli(args.examples_dir.resolve(), args.modes)
     print("\n===== SUMMARY =====")
     for name, ok in RESULTS:
         print(f"{'PASS' if ok else 'FAIL'}  {name}")

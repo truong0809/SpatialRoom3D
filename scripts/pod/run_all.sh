@@ -13,7 +13,7 @@
 #   env_probe     GPU, driver, mang; co [FAIL] thi dung ca luot      scripts/setup/env_probe.sh
 #   setup_inria   env gs-inria + 3DGS goc cua Inria (B0)             scripts/setup/setup_3dgs_inria.sh
 #   data_tools    env gs-tools: COLMAP + ffmpeg (can Miniforge)        scripts/setup/setup_data_tools.sh
-#   setup_gsplat  env gs-gsplat: gsplat (default / mcmc), smoke test   scripts/setup/setup_gsplat.sh
+#   setup_gsplat  env gs-gsplat: gsplat (cac che do huan luyen), smoke test   scripts/setup/setup_gsplat.sh
 #   pack          goi log va bao cao nhe de tai ve (scripts/pod/pack_results.sh), luon chay
 #
 # Bien tuy chon (dat truoc lenh, vd. MAX_JOBS=4 bash scripts/pod/run_all.sh --background):

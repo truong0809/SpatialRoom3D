@@ -1,0 +1,32 @@
+# Thực nghiệm chính: các chế độ huấn luyện (configs/base.yaml, train_modes) trên cùng dữ liệu, cùng protocol, cùng số
+# Gaussian cuối:
+#   default   3DGS, DefaultStrategy (baseline)
+#   mcmc      3DGS-MCMC (Kheradmand et al., 2024)
+# Chạy trên pod (một việc nền; dữ liệu còn thiếu thì tự tải; lượt đã xong tự bỏ qua; mọi file kết quả được giữ):
+#   VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh main --background
+# Thêm một chế độ vào `modes` rồi chạy lại: chỉ các lượt của chế độ đó được train, lượt default / mcmc đã xong được dùng
+# lại (cap_max của chế độ preset mcmc lấy từ lượt default cùng cảnh, cùng seed). Thiết kế: docs/design/experiments.md mục 2.
+
+name: main
+description: "default / mcmc trên Deep Blending (2 cảnh) và 4 cảnh trong nhà của Mip-NeRF 360; 3 seed; 30.000 vòng"
+modes: [default, mcmc]   # default chạy trước trên mỗi cảnh và seed: mcmc lấy cap_max từ nó
+seeds: [42, 43, 44]      # chạy xen kẽ: seed 42 trên mọi cảnh trước, rồi 43, rồi 44
+benchmarks:
+  - dataset: deep_blending
+    scenes: [drjohnson, playroom]
+    b0: true    # B0 Inria trước: điều kiện để dùng default (gsplat) làm baseline (docs/design/training_modes.md mục 1)
+  - dataset: mipnerf360
+    scenes: [room, counter, kitchen, bonsai]   # indoor_scenes của configs/mipnerf360.yaml
+    b0: false   # không bắt buộc; số Inria công bố là trung bình 9 cảnh nên không đối chiếu được với 4 cảnh
+
+# Ước lượng trên RTX 4090, chỉ để in ra và kiểm tra chỗ trống trước khi chạy (không phải kết quả):
+#   - Thời gian: Deep Blending từ số đo ngày 17/10/2026 của repo trước (B0 49,5 phút; default + mcmc 74 phút mỗi seed);
+#     Mip-NeRF 360 chưa đo (giả định khoảng 2,5 giờ mỗi seed cho 4 cảnh × 2 chế độ).
+#   - Dung lượng thêm vào volume, giữ mọi file: Deep Blending khoảng 19 GB (checkpoint và PLY mỗi file 236 byte mỗi Gaussian,
+#     số Gaussian đo ngày 17/10/2026, cộng ảnh render và video); Mip-NeRF 360 khoảng 22–30 GB (số Gaussian chưa đo, cộng ảnh
+#     PNG thu nhỏ gsplat ghi một lần cho mỗi cảnh); B0 và dữ liệu khoảng 7 GB. File zip tải về bị xóa sau khi giải nén.
+#   Kiểm tra chỗ trống (scripts/pod/run_experiment.sh): lượt chưa xong tính theo dung lượng thật của lượt cùng cảnh,
+#   cùng chế độ đã xong ở seed khác; chưa có thì theo disk_gb chia đều cho mọi lượt (src/training/experiment.py).
+estimate:
+  gpu_hours: 12
+  disk_gb: 56

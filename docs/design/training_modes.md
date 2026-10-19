@@ -1,6 +1,6 @@
 # Thiết kế: hai chế độ huấn luyện 3DGS — Default (baseline) và MCMC
 
-_09/10/2026, cập nhật 19/10/2026 · Trạng thái: **đã chạy trên GPU** với Deep Blending bằng repo trước (17/10/2026, RTX 4090, seed 42; số liệu ở `docs/ENVIRONMENT_AUDIT.md` mục 7); repo này dùng cùng mã huấn luyện, chưa chạy trên pod. Mới một seed nên chưa kết luận về `mcmc`. Mip-NeRF 360 đã cấu hình, chưa chạy._
+_09/10/2026, cập nhật 19/10/2026 · Trạng thái: `default` và `mcmc` **đã chạy trên GPU** với Deep Blending bằng repo trước (17/10/2026, RTX 4090, seed 42; số liệu ở `docs/ENVIRONMENT_AUDIT.md` mục 7); repo này dùng cùng mã huấn luyện, chưa chạy trên pod. Mới một seed nên chưa kết luận về `mcmc`. Mip-NeRF 360 đã cấu hình, chưa chạy. Thực nghiệm chính (3 seed, 6 cảnh trong nhà): `docs/design/experiments.md` mục 2._
 
 ## 1. Mục tiêu và ranh giới
 
@@ -62,7 +62,7 @@ Giá trị dưới đây đọc từ cấu hình mà `simple_trainer.py` thật 
 | `antialiased` | `false` | Inria mặc định tắt; gsplat ghi chú antialiased có thể làm giảm nhẹ chỉ số |
 | `save_ply` | `true` | Đo dung lượng mô hình; dùng cho viewer |
 | `disable_video` | `false` | Video quỹ đạo để đánh giá định tính |
-| `init_type` | `sfm` | Cả hai chế độ khởi tạo từ điểm SfM, như B0. Code chính chủ 3DGS-MCMC mặc định khởi tạo ngẫu nhiên; paper báo cả hai kiểu (Bảng 1, Bảng 5), nên khi đối chiếu với paper phải lấy các dòng khởi tạo SfM |
+| `init_type` | `sfm` | Mọi chế độ khởi tạo từ điểm SfM, như B0. Code chính chủ 3DGS-MCMC mặc định khởi tạo ngẫu nhiên; paper báo cả hai kiểu (Bảng 1, Bảng 5), nên khi đối chiếu với paper phải lấy các dòng khởi tạo SfM |
 
 Đổi một khóa protocol (trong file cấu hình hoặc bằng `--protocol`) sẽ được ghi thành `deviations`. Bảng so sánh đánh dấu lượt chạy đó là khác điều kiện.
 
@@ -104,7 +104,7 @@ Giá trị dưới đây đọc từ cấu hình mà `simple_trainer.py` thật 
 Chỉ khi đủ tất cả các điều kiện sau:
 
 - mọi mục kiểm tra trong báo cáo `compare_modes` là OK, và ngân sách Gaussian là EQUAL;
-- hai chế độ dùng cùng một bộ seed, ít nhất 3 seed;
+- các chế độ được so dùng cùng một bộ seed, ít nhất 3 seed;
 - báo cáo trung bình ± độ lệch chuẩn theo từng cảnh, kèm chênh lệch theo từng cảnh, không chỉ trung bình gộp;
 - chênh lệch nhất quán trên các cảnh. Nếu không nhất quán, nêu rõ cảnh nào tốt hơn, cảnh nào kém hơn.
 
@@ -120,12 +120,13 @@ Kết quả không cải thiện vẫn được báo cáo đầy đủ (`docs/PR
 | `src/training/gsplat_launcher.py` | Chạy `simple_trainer.py` **không sửa file nào của gsplat**: đổi seed, áp tập test cho trước, ghi tập ảnh thực sự dùng và cấu hình đã phân giải; `--resolve-only` để kiểm tra tham số không cần GPU |
 | `src/training/run.py` | Điều phối một lượt chạy: kiểm tra cảnh → split → huấn luyện → đánh giá → `summary.json`; ghi lệnh, commit, GPU, thời gian vào `run_meta.json`; `--dry-run` |
 | `src/evaluation/gsplat_results.py` | Đọc kết quả gsplat (`stats/*.json`, checkpoint, PLY, nhật ký GPU) thành một bản tóm tắt |
-| `src/evaluation/compare_modes.py` | Nhóm các lượt chạy theo (cảnh, biến thể). Biến thể = chế độ + tham số riêng; lượt sai khác protocol bị loại.<br>Tính trung bình ± độ lệch chuẩn theo seed và chênh lệch so với baseline.<br>Kiểm tra điều kiện: protocol, tập test, commit, GPU, bộ seed, ngân sách.<br>Đối chiếu baseline với số liệu công bố và với lượt B0 tự chạy, từng cảnh |
+| `src/evaluation/compare_modes.py` | Nhóm các lượt chạy theo (cảnh, biến thể). Biến thể = chế độ + tham số riêng; lượt sai khác protocol bị loại.<br>Tính trung bình ± độ lệch chuẩn theo seed và chênh lệch so với baseline (`default`, hoặc một chế độ khác, vd. `--baseline mcmc` để so một chế độ tự thêm với `mcmc`).<br>Kiểm tra điều kiện: protocol, tập test, commit, GPU, bộ seed, ngân sách.<br>Đối chiếu baseline `default` với số liệu công bố (chỉ khi đủ mọi cảnh của benchmark; một phần cảnh thì ghi SKIPPED) và với lượt B0 tự chạy, từng cảnh |
 | `scripts/setup/setup_gsplat.sh`, `configs/environment/gs-gsplat.conf`, `configs/environment/gs-gsplat.in`, `configs/environment/gs-gsplat.lock.txt` | Env `gs-gsplat`: gsplat `6e8c837` (build sẵn extension), fused-ssim `328dc98`, phụ thuộc ghim theo ngày |
-| `scripts/setup/smoke_test_gsplat.py` | Kiểm tra trên GPU: extension, rasterization, hai strategy, fused-ssim, LPIPS-VGG, tham số của hai chế độ |
+| `scripts/setup/smoke_test_gsplat.py` | Kiểm tra trên GPU: extension, rasterization, hai strategy, fused-ssim, LPIPS-VGG; `simple_trainer.py` thật nhận đúng tham số của mọi chế độ. `--modes ...`: chỉ phần tham số, vài giây (bước đầu của `scripts/pod/run_experiment.sh`) |
 | `scripts/run_train.sh custom` → `scripts/pipeline/train_scene.sh` | Một cảnh tự chụp, một chế độ mỗi lượt; tự tìm lượt `default` cùng seed cho `mcmc` |
-| `scripts/run_train.sh <benchmark> gsplat` → `scripts/pipeline/train_gsplat_modes.sh` | Deep Blending hoặc Mip-NeRF 360: `default` → `mcmc` (cùng ngân sách) → bảng so sánh; đối chiếu `default` với lượt B0 tự chạy (từng cảnh) và với số liệu Inria công bố |
-| `scripts/run_evaluate.sh` | Lập lại bảng so sánh từ kết quả đã có (benchmark hoặc cảnh tự chụp), không train |
+| `scripts/run_train.sh <benchmark> gsplat` → `scripts/pipeline/train_gsplat_modes.sh` | Deep Blending hoặc Mip-NeRF 360: `default` → các chế độ khác (`MODES`, mặc định `mcmc`; cùng ngân sách) → bảng so sánh; đối chiếu `default` với lượt B0 tự chạy (từng cảnh) và với số liệu Inria công bố |
+| `configs/experiments/main.yaml`, `src/training/experiment.py`, `scripts/pod/run_experiment.sh` | Thực nghiệm chính trong một việc nền: tải dữ liệu còn thiếu, B0, gsplat theo từng seed, bảng so sánh (`docs/design/experiments.md` mục 2) |
+| `scripts/run_evaluate.sh` | Lập lại bảng so sánh từ kết quả đã có (benchmark hoặc cảnh tự chụp), mọi chế độ đã chạy (`MODES`, `SCENES`, `BASELINE` để chọn), không train |
 | `src/rendering/render.py`, `scripts/run_render.sh` | Render lại ảnh test và video quỹ đạo từ checkpoint của một lượt đã xong (thư mục mới, không train, không ghi đè); xuất PLY của bước cuối vào `outputs/checkpoints/` |
 
 ## 6. Cách chạy trên pod
@@ -133,7 +134,8 @@ Kết quả không cải thiện vẫn được báo cáo đầy đủ (`docs/PR
 ```bash
 cd /workspace/SpatialRoom3D
 bash scripts/setup/setup_gsplat.sh                         # một lần: env gs-gsplat (scripts/pod/run_all.sh đã gồm bước này)
-bash scripts/run_train.sh deep_blending gsplat             # kiểm chứng trên Deep Blending, dữ liệu tự đưa lên (SEEDS="42 43 44" để chạy lặp)
+bash scripts/run_train.sh deep_blending gsplat             # kiểm chứng trên Deep Blending (SEEDS="42 43 44" để chạy lặp)
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # thực nghiệm chính, một việc nền
 bash scripts/run_train.sh custom phong01 default           # cảnh tự chụp, đã qua scripts/prepare_data.sh custom
 bash scripts/run_train.sh custom phong01 mcmc              # cap_max = số Gaussian cuối của default_s42
 TAG=or001 BASELINE_TAG= bash scripts/run_train.sh custom phong01 mcmc -- --set opacity_reg=0.001   # đổi tham số mcmc

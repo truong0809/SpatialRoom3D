@@ -12,7 +12,7 @@ Giao diện hiện có:
 
 ### 1.1 Network volume
 
-Runpod → **Storage → New Network Volume**: ≥ 100 GB, ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
+Runpod → **Storage → New Network Volume**: ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
 
 ### 1.2 Pod
 
@@ -42,8 +42,9 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | Lúc nào | Chạy các ô |
 |---|---|
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
-| Đưa dữ liệu lên (bạn tự làm, mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
-| Benchmark bạn chọn: Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
+| Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `CHAY = True`), theo dõi ở ô 5 |
+| Đưa dữ liệu của bạn lên (mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
+| Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
 | Cảnh tự chụp: thư mục ảnh hoặc video (tốn GPU) | 8 (`CHAY = True`), theo dõi ở ô 5, kết quả ở ô 9 |
 | Xem mọi kết quả, đóng gói để tải về | 10 |
 | Dừng mọi việc đang chạy | 11 (`DUNG=1`) |
@@ -55,14 +56,14 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | 3 | Lấy code: chưa có thì clone nhánh `main` vào `/workspace/SpatialRoom3D`; đã có thì `git pull --ff-only`. Code trên pod có thay đổi chưa commit thì **không cập nhật** và in danh sách (không xóa, không cất gì). Không chạy khi đang có việc nền | Không |
 | 4 | Cài môi trường ở nền: `scripts/pod/run_all.sh` (env `gs-inria`, `gs-tools`, `gs-gsplat`, kèm smoke test). **Không train.** Lần đầu khoảng 80 phút (đo ngày 17/10/2026 trên RTX 4090) | Có (smoke test) |
 | 5 | Theo dõi việc nền, cập nhật mỗi 15 giây; tự dừng khi hết việc | Không |
-| 6 | Kiểm tra dữ liệu bạn đã đưa lên (chỉ đọc): thư mục gốc của từng bộ dữ liệu, từng cảnh có `images/` và `sparse/0/` không | Không |
-| 7 | Benchmark bạn chọn (`BENCH`): `WHAT` = `check` (kiểm tra dữ liệu), `gsplat` (`default` / `mcmc`), `b0` (3DGS gốc của Inria) hoặc `evaluate` (lập lại bảng). `gsplat` và `b0` chỉ chạy khi `CHAY = True`, và chỉ được xếp hàng khi dữ liệu qua bước kiểm tra (mục 5) | Tùy |
+| 6 | Kiểm tra dữ liệu (chỉ đọc): thư mục gốc của từng bộ dữ liệu, từng cảnh có `images/` và `sparse/0/` không | Không |
+| 7 | `WHAT` = `experiment` (thực nghiệm chính, mục 5.1; `CHAY = False` chỉ in kế hoạch), hoặc với benchmark `BENCH`: `check` (kiểm tra dữ liệu), `fetch` (tải dữ liệu về volume), `gsplat` (`default` / `mcmc`), `b0` (3DGS gốc của Inria), `evaluate` (lập lại bảng). Việc chạy nền chỉ chạy khi `CHAY = True`; `gsplat` và `b0` chỉ được xếp hàng khi dữ liệu qua bước kiểm tra (mục 5) | Tùy |
 | 8 | Cảnh tự chụp (`CHAY = True`): ảnh / video → COLMAP → `default` → `mcmc` (mục 3) | Có |
 | 9 | Kết quả một cảnh; `XUAT_PLY` (xuất PLY, không cần GPU), `RENDER_LAI` (render lại video quỹ đạo, chạy nền) | Tùy |
 | 10 | Mọi kết quả và gói kết quả nhẹ `ket_qua_*.tar.gz` | Không |
 | 11 | Dừng mọi việc nền, kể cả việc đang xếp hàng (`DUNG=1`) | — |
 
-- Notebook không tự chạy train: dữ liệu do bạn tự đưa lên (mục 2.1), chạy với dữ liệu nào do bạn chọn (ô 7, ô 8).
+- Notebook không tự chạy train hay tự tải dữ liệu: bạn chọn ở ô 7, ô 8. Dữ liệu benchmark tải được thẳng về pod (ô 7); ảnh / video của bạn thì bạn tự đưa lên (mục 2.1).
 - Việc dài đều chạy nền: đóng trình duyệt không sao, nhưng **pod vẫn tính tiền** tới khi Stop / Terminate.
 - Mỗi lúc chỉ một việc dùng GPU; việc gửi sau tự xếp hàng.
 - Chạy lại ô nào cũng an toàn: phần đã xong tự bỏ qua.
@@ -70,7 +71,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 
 ### 2.1 Đưa dữ liệu lên
 
-Bạn tự đưa dữ liệu lên volume (kéo thả vào thanh file của Jupyter, hoặc cách khác), đúng chỗ dưới đây. Chỗ đặt lấy từ `configs/*.yaml`.
+Bạn tự đưa dữ liệu lên volume (kéo thả vào thanh file của Jupyter, hoặc cách khác), đúng chỗ dưới đây. Chỗ đặt lấy từ `configs/*.yaml`. Hai benchmark không cần đưa lên: pod tự tải về đúng chỗ (`bash scripts/pod/fetch_data.sh <benchmark> [cảnh ...]`, ô 7 `WHAT = "fetch"`, hoặc thực nghiệm chính tự tải; mục 5).
 
 | Dữ liệu | Đặt ở |
 |---|---|
@@ -81,7 +82,7 @@ Bạn tự đưa dữ liệu lên volume (kéo thả vào thanh file của Jupyt
 
 - Tên cảnh: chữ không dấu, số và `. _ -`, không dấu cách. Không đặt dữ liệu trong `/workspace/SpatialRoom3D` (thư mục code).
 - Dữ liệu nằm chỗ khác: tạo `configs/local.yaml` (chỉ nhận mục `datasets`), vd. `datasets: {mipnerf360: {root: "${WS}/data/MipNeRF360"}}`, hoặc đặt biến `SR3D_DATA_MIPNERF360`.
-- Benchmark chưa có dữ liệu thì mọi lệnh của nó dừng trước khi train, báo `dataset not found` kèm chỗ cần đặt.
+- Benchmark chưa có dữ liệu thì mọi lệnh train của nó dừng trước khi train, báo `dataset not found` kèm chỗ cần đặt và lệnh tải.
 
 ## 3. Cảnh tự chụp
 
@@ -206,22 +207,41 @@ bash scripts/run_render.sh deep_blending playroom default_s42        # benchmark
 
 ## 5. Benchmark: Deep Blending, Mip-NeRF 360
 
-Chạy benchmark nào, lúc nào là do bạn quyết định; chỉ chạy khi đã duyệt chi phí GPU. Dữ liệu phải có sẵn (mục 2.1): thiếu thì lệnh dừng trước khi train. Protocol, số liệu đối chiếu và lệnh từng benchmark: `experiments/deep_blending/README.md`, `experiments/mipnerf360/README.md`; quy tắc so sánh: `docs/design/experiments.md`.
+Chạy benchmark nào, lúc nào là do bạn quyết định; chỉ chạy khi đã duyệt chi phí GPU. Lệnh train cần dữ liệu có sẵn: thiếu thì dừng trước khi train. Protocol, số liệu đối chiếu và lệnh từng benchmark: `experiments/deep_blending/README.md`, `experiments/mipnerf360/README.md`; quy tắc so sánh: `docs/design/experiments.md`.
 
 ```bash
-bash scripts/prepare_data.sh deep_blending             # kiểm tra dữ liệu bạn đã đưa lên (không dùng GPU)
+bash scripts/pod/fetch_data.sh deep_blending           # tải drjohnson, playroom (tandt_db.zip của Inria, kiểm SHA-256)
+bash scripts/pod/fetch_data.sh mipnerf360 room counter kitchen bonsai   # 4 cảnh trong nhà (tải cả 360_v2.zip)
+bash scripts/prepare_data.sh deep_blending             # kiểm tra dữ liệu (không dùng GPU)
 QUICK=1 bash scripts/pod/job.sh start gsplat_db_quick -- bash scripts/run_train.sh deep_blending gsplat  # chạy thử 3.000 vòng
 bash scripts/pod/job.sh start b0_db -- bash scripts/run_train.sh deep_blending b0          # B0: 3DGS gốc của Inria, chạy nền
 bash scripts/pod/job.sh start gsplat_db -- bash scripts/run_train.sh deep_blending gsplat  # default / mcmc, chạy nền
 SEEDS="42 43 44" bash scripts/pod/job.sh start gsplat_db3 -- bash scripts/run_train.sh deep_blending gsplat
-bash scripts/run_evaluate.sh deep_blending             # lập lại bảng từ kết quả đã có (không dùng GPU)
+bash scripts/run_evaluate.sh deep_blending             # lập lại bảng từ kết quả đã có, mọi chế độ (không dùng GPU)
 ```
 
 - Mip-NeRF 360: thay `deep_blending` bằng `mipnerf360`; chạy một phần cảnh: `SCENES="room counter"`.
 - Muốn bảng đối chiếu đủ thì chạy `b0` trước `gsplat`. Chưa có B0, bước so sánh cuối của `gsplat` (30.000 vòng) báo phần đối chiếu B0 là INCOMPLETE và việc kết thúc với exit 1; các lượt train vẫn được giữ. Chạy `b0` sau đó rồi `bash scripts/run_evaluate.sh <benchmark>` để lập lại bảng.
-- Thời gian đo trên RTX 4090 ngày 17/10/2026 (repo trước, Deep Blending, seed 42): chạy thử 3.000 vòng 17 phút, B0 khoảng 50 phút, gsplat đầy đủ 74 phút.
+- Thời gian đo trên RTX 4090 ngày 17/10/2026 (repo trước, Deep Blending, seed 42): chạy thử 3.000 vòng 17 phút, B0 khoảng 50 phút, gsplat đầy đủ (`default` + `mcmc`) 74 phút.
+- Tải dữ liệu: chỉ cảnh còn thiếu, chỉ thư mục cần dùng; file zip nằm tạm ở `/workspace/data/downloads/` và bị xóa sau khi giải nén (`KEEP_ARCHIVE=1` để giữ). Không bao giờ sửa hay ghi đè thư mục cảnh đã có; thư mục cảnh có nhưng thiếu phần thì dừng và báo.
 
-Trong notebook: ô 7 (`BENCH`, `WHAT`, `CHAY`, `QUICK`, `SEEDS`, `SCENES`).
+Trong notebook: ô 7 (`WHAT`, `CHAY`, `BENCH`, `QUICK`, `SEEDS`, `SCENES`).
+
+### 5.1 Thực nghiệm chính: `default` / `mcmc`
+
+Một việc nền làm trọn thực nghiệm chính (thiết kế: `docs/design/experiments.md` mục 2): tải dữ liệu còn thiếu → B0 trên Deep Blending → `default`, `mcmc` với seed 42, 43, 44 trên Deep Blending (2 cảnh) và 4 cảnh trong nhà của Mip-NeRF 360 → bảng so sánh → gói kết quả. Luôn chạy đầy đủ 30.000 vòng; giữ mọi file kết quả. Thêm một chế độ vào `modes` của `configs/experiments/main.yaml` rồi chạy lại thì chỉ các lượt của chế độ đó được train.
+
+```bash
+bash scripts/pod/run_experiment.sh main --plan                       # kế hoạch, ước lượng, dữ liệu đã có
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # chạy nền (việc exp_main)
+```
+
+Trong notebook: ô 7 với `WHAT = "experiment"`, `VOLUME_GB` = dung lượng thật của volume, rồi `CHAY = True`. Gửi được ngay sau ô 4: việc xếp hàng và tự chạy khi cài xong.
+
+- Ước lượng (chưa đo trên Mip-NeRF 360): khoảng 12 giờ GPU trên RTX 4090; thêm khoảng 56 GB trên volume, cộng môi trường conda khoảng 15–20 GB, nên volume 100 GB đủ. Thêm chế độ thứ ba thì cần thêm chỗ: tăng volume rồi đặt `VOLUME_GB` bằng dung lượng mới.
+- Chỗ trống được kiểm tra trước khi chạy và trước mỗi seed, chỉ cho các lượt chưa xong: mỗi lượt tính theo dung lượng thật của lượt cùng cảnh, cùng chế độ đã xong ở seed khác (chưa có thì theo ước lượng). Không đủ thì dừng train, các lượt đã xong vẫn giữ; tăng volume rồi chạy lại để làm nốt. `SPACE_CHECK=0` bỏ qua.
+- Pod vẫn tính tiền suốt lượt chạy. `AUTO_STOP = True` ở ô 7 (`AUTO_STOP=1` khi chạy lệnh) dừng pod khi việc cuối cùng xong; chưa thử trên pod.
+- Kết quả: `/workspace/outputs/reports/experiment_main_<thời_gian>.md` (các bước, bảng so với `default` của từng benchmark); ô 10 cũng in các bước của lượt gần nhất.
 
 ## 6. Giao diện dòng lệnh `python -m app.cli`
 
@@ -234,6 +254,8 @@ Một lệnh cho mọi bước; mỗi lệnh gọi đúng một script trong `sc
 | `train` | `scripts/run_train.sh` | `custom <cảnh> [chế độ ...]` hoặc `<benchmark> [gsplat\|b0]` |
 | `render` | `scripts/run_render.sh` | `custom <cảnh> [lượt]` hoặc `<benchmark> <cảnh> [lượt]` |
 | `evaluate` | `scripts/run_evaluate.sh` | `<benchmark>` hoặc `custom [cảnh ...]` |
+| `fetch` | `scripts/pod/fetch_data.sh` | Tải dữ liệu benchmark: `<benchmark> [cảnh ...] [--dry-run]` |
+| `experiment` | `scripts/pod/run_experiment.sh` | Thực nghiệm trọn vẹn: `<tên> --plan` hoặc `<tên> --background` (mục 5.1) |
 | `scene` | `scripts/pod/run_scene.sh` | Cả luồng cho một cảnh tự chụp: `<ảnh\|video\|-> <cảnh> [--background]` |
 | `setup` | `scripts/pod/run_all.sh --background` | Cài / kiểm tra môi trường (chạy nền, không train) |
 | `status`, `log`, `stop` | `scripts/pod/job.sh` | Việc chạy nền: trạng thái, cuối log, dừng |
@@ -271,7 +293,10 @@ Gói kết quả gồm báo cáo, log, trạng thái việc nền, JSON / CSV k�
 | `compute capability ... is not in TORCH_CUDA_ARCH_LIST` | GPU không được hỗ trợ (vd. T4, RTX 50xx): deploy GPU khác |
 | `another job is using the GPU` | Đang có việc khác chạy: xem ô 5; muốn dừng thì ô 11 |
 | `MẤT` ở ô 5 | Pod tắt hoặc việc bị giết giữa chừng: chạy lại ô vừa dùng |
-| `dataset not found` (ô 7) | Dữ liệu benchmark chưa có ở chỗ `configs/<benchmark>.yaml` ghi: tự đưa lên đúng chỗ (mục 2.1), hoặc ghi đường dẫn vào `configs/local.yaml` |
+| `dataset not found` (ô 7) | Dữ liệu benchmark chưa có ở chỗ `configs/<benchmark>.yaml` ghi: tải bằng ô 7 (`WHAT = "fetch"`) hoặc lệnh in trong thông báo, tự đưa lên đúng chỗ (mục 2.1), hoặc ghi đường dẫn vào `configs/local.yaml` |
+| `seed ... would not fit in a ... GB volume`, `may not fit`, `không đủ chỗ trống cho seed` (thực nghiệm chính) | Volume không đủ chỗ: tăng dung lượng network volume trên trang Runpod, đặt `VOLUME_GB` bằng dung lượng mới (ô 7) rồi chạy lại; phần đã xong tự bỏ qua |
+| `SHA-256 of ... expected`, `is damaged`, `curl exited with code` (tải dữ liệu) | File tải về hỏng, khác bản gốc hoặc mạng lỗi: file dở đã bị xóa, chạy lại để tải lại |
+| `already exist(s) ... but are incomplete` (tải dữ liệu) | Thư mục cảnh đã có nhưng thiếu phần (vd. tự đưa lên dở dang): xem lại hoặc dời thư mục đó đi rồi chạy lại; bước tải không sửa dữ liệu đã có |
 | `prepared must be <results.gsplat>/<cảnh>/colmap` | `configs/local.yaml` chỉ đổi một trong hai khóa của `custom_scene`: đổi cả hai |
 | `Chỉ có 1 ảnh`, `Chỉ có N ảnh dùng được` | Chụp thêm (ít nhất 10, nên 30–100 ảnh), tải vào cùng thư mục, chạy lại ô 8 |
 | `ảnh khác kích thước` | Lẫn ảnh dọc và ngang, hoặc khác ống kính: bỏ các ảnh ở nhóm ít hơn (tên in trong thông báo) hoặc chụp lại cùng chiều máy |
@@ -293,6 +318,7 @@ Sự cố môi trường đã biết: `docs/ENVIRONMENT_AUDIT.md` mục 6.
 | Cùng luồng với COLMAP thật | Bước chuẩn bị (ảnh / video → COLMAP → kiểm tra) đã chạy với COLMAP 3.9.1 bản CPU trên ảnh và video tổng hợp (không phải dữ liệu thực nghiệm); bước train thay bằng stub | `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox" (log nằm trong sandbox, không vào repo) |
 | Render lại, xuất PLY, CLI | Đã kiểm thử trên CPU với runner giả / stub (không có gsplat thật) | `tests/unit/test_render.py`, `tests/unit/test_cli.py` |
 | Notebook `runpod.ipynb` | Đã mô phỏng trên `/workspace` giả: GitHub thay bằng repo Git cục bộ, `ssh` / `curl` giả, không GPU, không conda (các việc cần GPU dừng sớm) | `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox" |
+| Tải dữ liệu benchmark, thực nghiệm chính | Đã kiểm thử với curl giả, file zip tổng hợp và các bước giả (stub); **chưa tải thật, chưa chạy trên pod** | `tests/unit/test_fetch.py`, `tests/unit/test_experiment.py` |
 | Trên pod (COLMAP 4.2.1, GPU) bằng repo này | **Chưa chạy** | — |
 
 Tóm tắt các ca với COLMAP thật (sandbox):

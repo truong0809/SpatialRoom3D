@@ -7,12 +7,13 @@ _Cập nhật: 19/10/2026_
 1. Dựng **pod mới gắn network volume mới (trống)** bằng repo này (`docs/USAGE_GUIDE.md` mục 1–2):
    - khóa deploy chỉ đọc, clone code vào `/workspace/SpatialRoom3D`;
    - cài 3 env conda (`scripts/pod/run_all.sh`: chỉ cài môi trường, không train).
-2. Bạn tự đưa dữ liệu lên volume (`docs/USAGE_GUIDE.md` mục 2.1), kiểm tra bằng ô 6.
-3. Chạy với dữ liệu bạn chọn:
-   - cảnh tự chụp (thư mục ảnh hoặc video) qua ô 8 của notebook;
-   - benchmark qua ô 7, ví dụ chạy lại Deep Blending bằng repo này: B0 Inria rồi gsplat `default` / `mcmc`, seed 42. Cả chạy thử, B0 và gsplat khoảng 2,4 giờ GPU trên RTX 4090: **chỉ chạy khi đã duyệt chi phí**.
+2. **Thực nghiệm chính** (D12, `docs/design/experiments.md` mục 2): ô 7 với `WHAT = "experiment"`.
+   - Một việc nền: tự tải Deep Blending và 4 cảnh trong nhà của Mip-NeRF 360, B0 trên Deep Blending, rồi `default` / `mcmc` × seed 42, 43, 44 trên 6 cảnh, rồi bảng so sánh.
+   - Ước lượng: khoảng 12 giờ GPU trên RTX 4090 và thêm khoảng 56 GB trên volume (volume 100 GB đủ theo ước lượng). **Chỉ chạy khi đã duyệt chi phí.**
+   - Chế độ cải tiến thứ ba theo Opt3DGS (D13): đã chọn hướng, kế hoạch cài đặt chờ duyệt; khi xong chỉ cần thêm vào `modes` của kế hoạch và chạy lại, các lượt `default` / `mcmc` đã xong được dùng lại.
+3. Cảnh tự chụp (thư mục ảnh hoặc video): bạn tự đưa lên (`docs/USAGE_GUIDE.md` mục 2.1), chạy qua ô 8 của notebook.
 
-**Repo này:** bắt đầu ngày 19/10/2026 (D7–D10). **Chưa chạy trên pod nào.** Mọi số liệu GPU dưới đây là của repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`), chạy ngày 17/10/2026 trên volume cũ.
+**Repo này:** bắt đầu ngày 19/10/2026 (D7–D13). **Chưa chạy trên pod nào.** Mọi số liệu GPU dưới đây là của repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`), chạy ngày 17/10/2026 trên volume cũ.
 
 ## Quy ước trạng thái
 
@@ -31,15 +32,18 @@ Chỉ mức cuối cùng mới được tính là hoàn thành.
 | D6 | 18/10/2026 | Đầu vào: video, hoặc thư mục nhiều ảnh JPG/JPEG/PNG chụp cùng một căn phòng. Ảnh dùng thẳng, không chọn frame; chung bước COLMAP và huấn luyện với video. Một ảnh luôn bị từ chối, không có chế độ dựng từ một ảnh | Theo yêu cầu. Không đổi thuật toán huấn luyện, chế độ, baseline hay phiên bản thư viện |
 | D7 | 19/10/2026 | Cấu trúc repo theo sơ đồ "SpatialRoom3D_v2": `app/{cli,web,notebooks}`, package `src/{input,reconstruction,training,rendering,evaluation,datasets,utils}`, `configs/{base,custom_scene,mipnerf360,deep_blending}.yaml`, bốn lệnh chính `scripts/{prepare_data,run_train,run_render,run_evaluate}.sh` (phần thực thi trong `scripts/{pipeline,pod,setup,lib}/`), `tests/{test_dataset,test_pipeline}.py` + `tests/unit/`, `docs/{README,ENVIRONMENT_AUDIT,USAGE_GUIDE,PROJECT_PLAN}.md`, `experiments/{deep_blending,mipnerf360}/` (chỉ README). Code dùng chung, mỗi luồng dữ liệu một file cấu hình và thư mục riêng | Theo sơ đồ và các lựa chọn của bạn ngày 19/10/2026 ("đủ như ảnh, giữ phần cần chạy", "src/ là package", "YAML như ảnh"). Phần đã chạy trên pod ngày 17/10/2026 được dời chỗ, không viết lại; thuật toán, chế độ, protocol, phiên bản không đổi. Phần viết sau ngày đó chưa chạy trên pod (`docs/design/architecture.md` mục 7) |
 | D8 | 19/10/2026 | Bố cục `/workspace`: code ở `SpatialRoom3D/`; `data/` chỉ chứa dữ liệu gốc (`custom_scenes/<cảnh>/`, `benchmarks/{deep_blending,mipnerf360}/`); `outputs/` chứa mọi thứ sinh ra (`custom_scenes/<cảnh>/{colmap,<chế_độ>_s<seed>}/`, `benchmarks/<benchmark>/{inria_b0,gsplat,gsplat_quick}/`, `checkpoints/`, `logs/`, `reports/`, `jobs/`) | Theo sơ đồ của bạn. `docs/design/architecture.md` mục 2 |
-| D9 | 19/10/2026 | Repo GitHub mới `truong0809/SpatialRoom3D` (private), lịch sử bắt đầu bằng một commit; repo cũ giữ làm lưu trữ, không sửa. Pod mới + volume mới: cài lại từ đầu, dữ liệu do bạn tự đưa lên (D10), chạy lại B0 + gsplat bằng code mới khi được duyệt GPU. Bỏ phần dời dữ liệu của volume cũ và mọi phần tương thích bố cục cũ | Theo ba lựa chọn của bạn ngày 19/10/2026 |
-| D10 | 19/10/2026 | `scripts/pod/run_all.sh` (ô 4) chỉ cài / kiểm tra môi trường, không train. Dữ liệu (cảnh tự chụp, Deep Blending, Mip-NeRF 360) do người dùng tự đưa lên `data/`; chạy với dữ liệu nào do người dùng chọn (ô 7, ô 8). Thiếu dữ liệu thì dừng trước khi train và báo chỗ cần đặt. Không luồng dữ liệu nào bắt buộc | Theo yêu cầu của bạn ngày 19/10/2026 ("base cài set up môi trường thôi, còn chạy với data nào để t tự quyết"). Ô 6 chỉ kiểm tra bố cục và số ảnh |
+| D9 | 19/10/2026 | Repo GitHub mới `truong0809/SpatialRoom3D` (private), lịch sử bắt đầu bằng một commit; repo cũ giữ làm lưu trữ, không sửa. Pod mới + volume mới: cài lại từ đầu, dữ liệu benchmark tải về pod (D11), chạy lại B0 + gsplat bằng code mới khi được duyệt GPU. Bỏ phần dời dữ liệu của volume cũ và mọi phần tương thích bố cục cũ | Theo ba lựa chọn của bạn ngày 19/10/2026 |
+| D10 | 19/10/2026 | `scripts/pod/run_all.sh` (ô 4) chỉ cài / kiểm tra môi trường: không train, không tải dữ liệu. Chạy với dữ liệu nào do người dùng chọn (ô 7, ô 8). Lệnh train không tự tải: thiếu dữ liệu thì dừng trước khi train và báo chỗ cần đặt. Không luồng dữ liệu nào bắt buộc | Theo yêu cầu của bạn ngày 19/10/2026 ("base cài set up môi trường thôi, còn chạy với data nào để t tự quyết"). Ô 6 chỉ kiểm tra bố cục và số ảnh |
+| D11 | 19/10/2026 | Dữ liệu benchmark tải thẳng về pod bằng một bước riêng, chỉ khi người dùng gọi: `scripts/pod/fetch_data.sh` (ô 7 `WHAT = "fetch"`, hoặc thực nghiệm chính). Nguồn trong mục `download` của `configs/<benchmark>.yaml`; kiểm SHA-256 khi có; chỉ tải cảnh còn thiếu, chỉ giải nén thư mục cần dùng, xóa file zip sau đó; không sửa dữ liệu đã có. Ảnh / video tự chụp vẫn do người dùng tự đưa lên | Theo yêu cầu của bạn ngày 19/10/2026 ("chuẩn bị để setup runpod tải data về vì ổ trên runpod t có 100gb") |
+| D12 | 19/10/2026 | Thực nghiệm chính: `default` / `mcmc` (cùng số Gaussian) trên Deep Blending (2 cảnh, kèm B0) và 4 cảnh trong nhà của Mip-NeRF 360; seed 42, 43, 44; 30.000 vòng, không chạy thử; một việc nền (`configs/experiments/main.yaml`, `scripts/pod/run_experiment.sh`); giữ mọi file kết quả của mọi seed | Theo các lựa chọn của bạn ngày 19/10/2026: "Deep Blending + 4 cảnh M360", "3 seed", "chạy đầy đủ ko chạy test", "giữ lại hết" (seed 43, 44) |
+| D13 | 19/10/2026 | Chế độ cải tiến thứ ba theo Opt3DGS (Huang et al., AAAI 2026): tinh chỉnh quá trình tối ưu của 3DGS-MCMC, cùng số Gaussian. Cài lại theo mô tả của paper (paper chưa công bố code), không phải thuật toán mới. **Chưa cài**: kế hoạch cài đặt chờ duyệt | Theo lựa chọn của bạn ngày 19/10/2026 ("opt 3dgs") sau khảo sát các cải tiến của 3DGS-MCMC (`docs/research/reading_list.md`, mục C) |
 
 ## Đề xuất chờ xác nhận
 
 | Hạng mục | Đề xuất | Lý do |
 |---|---|---|
 | Loại cloud | Secure Cloud | Network volume chỉ dùng được với pod trên Secure Cloud |
-| Lưu trữ | Network volume ≥ 100 GB, cùng data center với GPU | Dữ liệu tồn tại độc lập với pod. Volume mới: chọn data center có sẵn loại GPU ở dòng dưới |
+| Lưu trữ | Network volume ≥ 100 GB, cùng data center với GPU; thực nghiệm chính (D12) giữ mọi file: khoảng 56 GB cộng môi trường; thêm chế độ thứ ba (D13) thì cần thêm chỗ | Dữ liệu tồn tại độc lập với pod. Volume mới: chọn data center có sẵn loại GPU ở dòng dưới. Volume hiện có: 100 GB, EU-RO-1; tăng được, không giảm được |
 | GPU | RTX A6000 48 GB (thay thế: A40 48 GB, RTX 4090 24 GB) | Xem tiêu chí bên dưới. RTX 4090 đã chạy được cả luồng hai lần ngày 17/10/2026 (repo trước) |
 | Bản gsplat | Commit `6e8c837` (v1.5.3 + 4 commit), không dùng v1.3.0 của demo hay bản phát hành v1.5.3 | v1.5.3 có lỗi khiến `DefaultStrategy` không reset opacity; v1.3.0 reset cả ở bước 0 (`docs/research/demo_review.md`, mục 3.2) |
 | So sánh MCMC với Default | Cùng protocol; `cap_max` của MCMC bằng số Gaussian cuối của Default trên cùng cảnh; ≥ 3 seed trước khi kết luận | Giao thức của paper 3DGS-MCMC; chất lượng MCMC phụ thuộc trực tiếp vào `cap_max` |
@@ -69,7 +73,9 @@ Chỉ mức cuối cùng mới được tính là hoàn thành.
 | Giao diện dòng lệnh `python -m app.cli` | Đã viết; đã kiểm thử | `tests/unit/test_cli.py` |
 | Notebook `app/notebooks/runpod.ipynb` cho pod mới, volume trống | Đã viết; đã mô phỏng; **chưa chạy trên pod** | Mục "Kiểm thử trong sandbox" |
 | Luồng cảnh tự chụp với COLMAP thật trên cây này | Đã chạy với COLMAP 3.9.1 bản CPU trên dữ liệu tổng hợp, huấn luyện thay bằng stub | Mục "Kiểm thử trong sandbox" |
-| Rà soát độc lập (một lượt, người rà soát không tham gia viết code) | Đã làm; lỗi chặn và lỗi vừa đã sửa, kèm test | Mục "Rà soát độc lập ngày 19/10/2026" bên dưới |
+| Rà soát độc lập (hai lượt, người rà soát không tham gia viết code) | Đã làm; lỗi chặn và lỗi vừa đã sửa, kèm test | Mục "Rà soát độc lập ngày 19/10/2026" bên dưới |
+| Tải dữ liệu benchmark (D11): `src/datasets/fetch.py`, `scripts/pod/fetch_data.sh` | Đã viết; đã kiểm thử với curl giả và file zip tổng hợp; **chưa tải file thật** (sandbox không ra được Internet) | `tests/unit/test_fetch.py`: chỉ cảnh còn thiếu, chỉ thư mục `keep`; SHA-256 sai hoặc zip hỏng thì xóa file và dừng; đường dẫn không an toàn, thiếu thư mục thì dừng trước khi giải nén; bỏ file ẩn / symlink; không đụng thư mục cảnh đã có; cảnh đã vào chỗ có bản ghi ngay cả khi cảnh sau lỗi, báo cáo được ghi cả khi lỗi; curl ngắt khi kết nối treo |
+| Thực nghiệm chính (D12): `configs/experiments/main.yaml`, `src/training/experiment.py`, `scripts/pod/run_experiment.sh`; nhiều chế độ trong `train_gsplat_modes.sh` (`MODES`); bảng theo tập cảnh con và theo mốc khác `default` | Đã viết; đã kiểm thử bằng stub; đã mô phỏng qua notebook; **chưa chạy trên pod** | `tests/unit/test_experiment.py` (thứ tự các bước, xen kẽ seed, biến môi trường của người dùng không đổi được kế hoạch, chỗ trống trước khi chạy và trước mỗi seed kể cả khi chạy lại sau khi dừng giữa chừng, tải lỗi chỉ bỏ benchmark đó, chạy nền một việc, kế hoạch có thêm chế độ tự định nghĩa), `tests/unit/test_benchmarks.py`, `tests/unit/test_compare_modes.py`; rà soát độc lập lần 2 (mục bên dưới) |
 
 ### Lịch sử: repo trước (đã chạy trên pod ngày 17/10/2026)
 
@@ -94,16 +100,18 @@ Các lượt dưới đây chạy bằng repo trước, trên volume cũ, với 
 ### Kiểm thử trong sandbox (không GPU)
 
 **Repo này, 19/10/2026:**
-- **pytest:** 245 test đều qua trên bốn môi trường: Python 3.13.16 với numpy 2.5.4 / opencv 4.11.0.86; Python 3.13.16 và 3.10.20 cài đúng `requirements.txt` (numpy 2.2.6, opencv 5.0.0.93 như env `gs-inria`); Python 3.10.20 với numpy 1.26.4 / opencv 4.11.0.86 như env `gs-gsplat`. Không test nào bị bỏ qua (máy có `colmap`, `ffmpeg`).
+- **pytest:** 282 test đều qua trên bốn môi trường: Python 3.13.16 với numpy 2.5.4 / opencv 4.11.0.86; Python 3.13.16 và 3.10.20 cài đúng `requirements.txt` (numpy 2.2.6, opencv 5.0.0.93 như env `gs-inria`); Python 3.10.20 với numpy 1.26.4 / opencv 4.11.0.86 như env `gs-gsplat`. Không test nào bị bỏ qua (máy có `colmap`, `ffmpeg`).
 - **shellcheck** 0.11.0 (`scripts/*.sh scripts/*/*.sh`) và **pyflakes** (`src app tests scripts/setup/*.py`): sạch.
-- **Notebook** (`app/notebooks/runpod.ipynb`) trên `/workspace` giả, pod mới, volume trống. GitHub được thay bằng một bare repo cục bộ, `ssh` và `curl` là stub (không kết nối mạng; mọi lần gọi `curl` được ghi lại), không GPU, không conda. **54/54 kiểm tra đạt**:
-  - không ô code nào có lệnh tải (`curl`, `wget`, `DOWNLOAD`, `zipfile`, `unzip`); cả lượt, `curl` chỉ được `env_probe` gọi để thử kết nối tới GitHub, gitlab.inria.fr, PyPI, kho PyTorch và conda (`-o /dev/null`); không có `data/downloads`;
+- **Notebook** (`app/notebooks/runpod.ipynb`) trên `/workspace` giả, pod mới, volume trống. GitHub được thay bằng một bare repo cục bộ, `ssh` và `curl` là stub (không kết nối mạng; mọi lần gọi `curl` được ghi lại; khi tải thì báo lỗi mạng, hoặc trả về một file zip giả), không GPU, không conda. **59/59 kiểm tra đạt**:
+  - không ô code nào tự tải (`curl`, `wget`, `unzip`); chỉ ô 7 gọi bước tải riêng (`fetch_data.sh`, `run_experiment.sh`). Cả lượt, `curl` chỉ được `env_probe` gọi để thử kết nối tới GitHub, gitlab.inria.fr, PyPI, kho PyTorch và conda (`-o /dev/null`), và cho hai lần tải `tandt_db.zip` được bật ở ô 7; không tải Mip-NeRF 360; không còn `data/downloads`;
   - ô 1 báo ĐẠT với GPU giả (RTX 4090, driver CUDA 13.0) và cảnh báo khi `python3` không có PyYAML;
   - ô 2 tạo khóa ed25519 (`600`, thư mục `700`), chỉ in khóa công khai, chạy lại không tạo khóa mới; `ssh` được gọi với đúng khóa, `IdentitiesOnly`, `known_hosts` trên volume;
   - ô 3 clone đúng commit, cây file giống hệt repo, giữ quyền thực thi; chạy lại thì `pull --ff-only`; code trên pod có thay đổi chưa commit thì từ chối (exit 1), không stash, thay đổi còn nguyên; đang có việc nền hoặc thư mục không phải repo Git thì từ chối;
   - ô 4 chạy nền `run_all.sh` (không tham số); tóm tắt chỉ có `env_probe` (FAIL vì không có GPU) và ba bước cài đặt (SKIP); không cài gì, không tạo `outputs/benchmarks` hay `data/benchmarks`; log và báo cáo nằm trong `outputs/`;
   - ô 6 trên volume trống: Deep Blending và Mip-NeRF 360 chỉ báo "chưa có" (không luồng nào bắt buộc), không tạo thư mục nào; thiếu PyYAML thì lỗi hiện rõ trong ô; sau khi đưa Deep Blending giả (đúng bố cục) lên thì báo OK;
-  - ô 7: `WHAT = "check"` (mặc định) báo `dataset not found` kèm chỗ cần đưa lên, cho cả Deep Blending và Mip-NeRF 360; `gsplat` / `b0` với `CHAY = False` không chạy; `CHAY = True` khi chưa có dữ liệu thì báo ngay, không xếp hàng; `evaluate` khi chưa có kết quả báo rõ; `WHAT` không hợp lệ chỉ in hướng dẫn. Khi đã có dữ liệu: `check` báo OK; `gsplat` với `QUICK = True` thành việc nền `gsplat_quick_deep_blending` (thư mục `gsplat_quick`), `b0` thành `b0_deep_blending`, cả hai dừng sớm vì không có GPU / env và không tạo lượt nào; dữ liệu đã đưa lên không bị sửa;
+  - ô 7, thực nghiệm chính: `WHAT = "experiment"` (mặc định) với `CHAY = False` chỉ in kế hoạch (2 chế độ, 3 seed, 6 cảnh còn thiếu, ước lượng), không tạo việc, không tải, không tạo thư mục dữ liệu; `QUICK = True` bị từ chối; `CHAY = True` thành đúng một việc nền `exp_main`, dừng ở `env_check` (không GPU, không env), không tải, không train, vẫn có bảng các bước và gói kết quả;
+  - ô 7, tải dữ liệu: `fetch` với `CHAY = False` không chạy; `CHAY = True` thành việc nền `fetch_deep_blending`, gọi đúng `tandt_db.zip` của Inria; lỗi mạng thì dừng, không có cảnh, không còn file tải dở; file sai SHA-256 thì dừng trước khi giải nén và xóa file zip;
+  - ô 7, các lệnh khác: `WHAT = "check"` báo `dataset not found` kèm chỗ cần đưa lên, cho cả Deep Blending và Mip-NeRF 360; `gsplat` / `b0` với `CHAY = False` không chạy; `CHAY = True` khi chưa có dữ liệu thì báo ngay, không xếp hàng; `evaluate` khi chưa có kết quả báo rõ; `WHAT` không hợp lệ chỉ in hướng dẫn. Khi đã có dữ liệu: `check` báo OK; `gsplat` với `QUICK = True` thành việc nền `gsplat_quick_deep_blending` (thư mục `gsplat_quick`), `b0` thành `b0_deep_blending`, cả hai dừng sớm vì không có GPU / env và không tạo lượt nào; dữ liệu đã đưa lên không bị sửa;
   - ô 8 từ chối 1 ảnh, 5 ảnh, một file ảnh, `SOURCE = "-"` không có `SCENE`; tên cảnh lấy đúng từ thư mục ảnh, thư mục chứa video, hoặc tên file video; ảnh / video gốc không bị sửa;
   - ô 8 với `CHAY = False` (mặc định) không chạy gì; ô 9 xuất PLY bằng liên kết cứng; render lại chạy nền và dừng sớm khi không có GPU, không đụng lượt gốc;
   - ô 10 tạo gói kết quả không có PLY, checkpoint, video, ảnh gốc, `data/` hay `.ssh`; ô 11 với `DUNG=0` (mặc định) không dừng gì, `DUNG=1` dừng mọi việc; sau mọi ô `git status` của repo trên pod vẫn sạch.
@@ -136,6 +144,18 @@ Giữ nguyên, có lý do:
 - File PLY xuất là liên kết cứng tới PLY của lượt (không tốn thêm chỗ): tài liệu ghi chỉ đọc / tải về, không sửa tại chỗ.
 - Gói `ket_qua_*.tar.gz` ở gốc `/workspace` (như sơ đồ).
 
+**Lượt 2: thực nghiệm chính, tải dữ liệu** (bản chưa commit sau `5d83cd7`). Người rà soát chạy lại 279 test và shellcheck trên một bản sao và dựng lại lỗi bằng stub. Kiểm tra thêm và thấy đúng: chạy lại bỏ qua lượt đã xong, lượt dở dang được đổi tên `.prev_*` rồi train lại; biến môi trường của người dùng không vào được các bước; tải lỗi chỉ bỏ benchmark đó; đường dẫn không an toàn trong zip bị chặn; bảng so với một mốc khác `default` ghép đúng seed.
+
+Đã sửa (đã kiểm thử trên CPU, chưa chạy trên pod):
+
+| Mức | Lỗi | Đã sửa | Test |
+|---|---|---|---|
+| Vừa | Chạy lại sau khi dừng (đúng cách tài liệu hướng dẫn) thì kiểm tra chỗ trống gần như không còn tác dụng: chỗ cần cho seed sau lấy theo phần ghi thêm trong lần chạy này (lượt đã xong không ghi gì), và kiểm tra lúc đầu không tính phần thực nghiệm đã dùng. Người rà soát dựng lại được: volume 52 GB, đã xong 2 seed, seed 44 vẫn được train và lên tới 64 GB | Chỗ cần cho một seed = tổng các lượt chưa xong của seed đó, mỗi lượt theo dung lượng thật của lượt cùng cảnh, cùng chế độ đã xong ở seed khác (chưa có thì theo ước lượng); kiểm tra trước mọi seed, kể cả seed đầu; lúc đầu so với tổng dung lượng đang dùng | `tests/unit/test_experiment.py`: hai ca của người rà soát (chạy lại sau khi dừng vì thiếu chỗ; pod dừng giữa seed 43) |
+| Nhỏ | Bản ghi nguồn tải chỉ được ghi khi mọi cảnh của file zip xong: cảnh sau lỗi thì cảnh trước đã vào chỗ mà không có nguồn, SHA-256 | Ghi sau mỗi cảnh; báo cáo được ghi cả khi lỗi, kèm lỗi | `tests/unit/test_fetch.py` |
+| Nhỏ | curl không ngắt khi kết nối treo: việc treo ở giờ đầu mà vẫn giữ khóa GPU | `--speed-limit 102400 --speed-time 300` (dưới 100 KB/s suốt 5 phút thì ngắt, `--retry` thử lại) | `tests/unit/test_fetch.py` |
+
+Tìm thêm khi chạy lại test (trước lượt rà soát): khi `run_experiment.sh` chạy trực tiếp (không qua việc nền), tiến trình `tee` ghi log giữ fd khóa GPU, nên khóa có thể được nhả chậm một chút sau khi script kết thúc (4/30 lượt test hỏng khi máy bận). Sửa: `tee` đóng fd khóa, như `scripts/lib/gpu_lock.sh` hướng dẫn cho tiến trình phụ; 60/60 lượt qua.
+
 **Repo trước, 18–19/10/2026** (cùng code chuẩn bị cảnh, bố cục trước khi dời sang repo này):
 
 | Ca | Kết quả COLMAP | Kết luận | Đúng mong đợi? |
@@ -152,7 +172,11 @@ Số điểm 3D lệch nhẹ giữa các lượt vì COLMAP chạy nhiều luồ
 
 ## Chưa xác minh / còn mở
 
-- **Repo này chưa chạy trên pod.** Chưa chạy thật: khóa deploy với GitHub thật, clone qua SSH, cài 3 env trên volume trống, đọc dữ liệu benchmark do bạn đưa lên, B0 và gsplat bằng code mới, render lại bằng chế độ `--ckpt` của gsplat thật, mở PLY trên một trình xem 3DGS.
+- **Repo này chưa chạy trên pod.** Chưa chạy thật: khóa deploy với GitHub thật, clone qua SSH, cài 3 env trên volume trống, tải dữ liệu benchmark, B0 và gsplat bằng code mới, render lại bằng chế độ `--ckpt` của gsplat thật, mở PLY trên một trình xem 3DGS.
+- Thực nghiệm chính (D12) chưa chạy:
+  - ước lượng thời gian (khoảng 12 giờ) và dung lượng (khoảng 56 GB) chỉ có phần Deep Blending dựa trên số đo; Mip-NeRF 360 chưa đo; môi trường conda trên volume (khoảng 15–20 GB) chưa đo;
+  - `AUTO_STOP=1` (dừng pod khi xong) chưa thử trên pod.
+- Tải dữ liệu: URL và SHA-256 của `tandt_db.zip` đã dùng được trên pod ngày 17/10/2026 (repo trước). URL của `360_v2.zip` lấy từ script tải của gsplat @6e8c837, chưa tải thử bằng repo này; dung lượng file chưa biết (script in ra khi tải).
 - Ảnh không có EXIF tiêu cự: hai lượt COLMAP trên cùng 24 ảnh tổng hợp cho hai mô hình khác nhau; một lượt có tiêu cự lệch hai trục (fx 689 / fy 500 px) và ảnh sau khử méo bị cắt còn 548×393, vẫn PASS. Cần thêm cảnh báo (vd. fx/fy lệch nhau, ảnh sau khử méo nhỏ hơn hẳn ảnh vào) và thử lại với ảnh thật trước khi dùng ảnh không EXIF.
 - PyYAML trong `python3` của template Runpod: suy ra từ JupyterLab 4.2.5 có trong template (`jupyter_events` cần PyYAML), chưa kiểm tra trực tiếp. Ô 1 của notebook kiểm tra; `env_probe.sh` nay liệt kê PyYAML. Không có thì chỉ các lệnh đọc cấu hình chạy trước khi cài xong `gs-gsplat` bị ảnh hưởng, kèm thông báo cách sửa.
 - Câu trả lời của GVHD cho Q1–Q3 và Q5–Q12 (`docs/PROJECT_PLAN.md`, mục 2): đang dùng giả định tạm.
@@ -161,7 +185,7 @@ Số điểm 3D lệch nhẹ giữa các lượt vì COLMAP chạy nhiều luồ
 - Cảnh tự chụp: chưa có lượt nào chạy xong xác minh được trên pod.
 - Mip-NeRF 360:
   - chưa có dữ liệu trên volume (`bash scripts/pod/check_datasets.sh --dataset mipnerf360`);
-  - `360_v2.zip` chỉ có 7 cảnh; flowers và treehill nằm trong gói riêng (cần đưa lên thêm nếu chạy đủ 9 cảnh);
+  - `360_v2.zip` chỉ có 7 cảnh; flowers và treehill nằm trong gói riêng `360_extra_scenes.zip` (đã ghi trong mục `download`, bố cục bên trong chưa kiểm tra);
   - trung bình công bố chỉ so được khi chạy đủ 9 cảnh;
   - gsplat và Inria dùng ảnh thu nhỏ khác nhau (gsplat tự thu nhỏ từ `images/`, Inria đọc `images_N/`), cần ghi rõ khi so `default` với B0.
 - Đầu vào ảnh:
@@ -184,9 +208,11 @@ Lệnh chính: `docs/README.md` mục "Chạy trên pod Runpod"; từng bước 
 
 Lưu trên network volume của Runpod tại `/workspace`, không đưa lên Git. Nơi lưu của từng luồng: `configs/*.yaml`; bố cục: `docs/design/architecture.md` mục 2.
 
-- Volume mới: **chưa có gì**. Sau ô 3–4 của notebook, khi bạn đã đưa dữ liệu lên và chạy ô 7, 8:
+- Volume mới (100 GB, EU-RO-1): **chưa có gì**. Sau ô 3–4 của notebook và khi chạy ô 7, 8:
   - code `/workspace/SpatialRoom3D`; env `/workspace/miniforge3`; mã nguồn Inria / gsplat `/workspace/code`;
-  - Deep Blending (bạn tự đưa lên) `/workspace/data/benchmarks/deep_blending/{drjohnson,playroom}`; kết quả `/workspace/outputs/benchmarks/deep_blending/{inria_b0,gsplat,gsplat_quick}/`;
+  - Deep Blending (ô 7 tải về, hoặc bạn tự đưa lên) `/workspace/data/benchmarks/deep_blending/{drjohnson,playroom}`; kết quả `/workspace/outputs/benchmarks/deep_blending/{inria_b0,gsplat,gsplat_quick}/`;
+  - Mip-NeRF 360, 4 cảnh trong nhà (ô 7 tải về) `/workspace/data/benchmarks/mipnerf360/{room,counter,kitchen,bonsai}`; kết quả `/workspace/outputs/benchmarks/mipnerf360/gsplat/`;
+  - thực nghiệm chính: `/workspace/outputs/reports/experiment_main_<thời_gian>.{md,tsv}`;
   - cảnh tự chụp: nguồn `/workspace/data/custom_scenes/<cảnh>/`, kết quả `/workspace/outputs/custom_scenes/<cảnh>/`;
   - PLY đã xuất `/workspace/outputs/checkpoints/`; báo cáo, log, trạng thái việc nền `/workspace/outputs/{reports,logs,jobs}`; gói kết quả nhẹ `/workspace/ket_qua_*.tar.gz`.
 - Volume cũ (EU-RO-1): còn kết quả ngày 17/10/2026 của repo trước, ở bố cục cũ. Repo này không đọc và không sửa volume đó.
@@ -197,21 +223,21 @@ Lưu trên network volume của Runpod tại `/workspace`, không đưa lên Git
 
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
-| P1 | Tạo network volume ≥ 100 GB và pod (`docs/USAGE_GUIDE.md` mục 1); tải `app/notebooks/runpod.ipynb` lên `/workspace`; chạy ô 1 | Ô 1 báo `=> ĐẠT`; có dòng `✓ python3 có PyYAML` (không có thì cài theo hướng dẫn trong ô) |
+| P1 | Tạo pod gắn network volume (100 GB đủ cho P5 theo ước lượng; `docs/USAGE_GUIDE.md` mục 1); tải `app/notebooks/runpod.ipynb` lên `/workspace`; chạy ô 1 | Ô 1 báo `=> ĐẠT`; có dòng `✓ python3 có PyYAML` (không có thì cài theo hướng dẫn trong ô) |
 | P2 | Ô 2; thêm khóa công khai vào Deploy keys của `SpatialRoom3D` (không tick write); chạy lại ô 2 | Dòng cuối `✓ GitHub nhận khóa` |
 | P3 | Ô 3 | `Đã clone ... (nhánh main)`; commit in ra trùng commit mới nhất trên GitHub |
 | P4 | Ô 4, theo dõi ở ô 5 (khoảng 80 phút) | Việc `run_all` exit 0: `env_probe`, `setup_inria`, `data_tools`, `setup_gsplat` OK, smoke test PASSED; không có bước train nào |
-| P5 | Bạn tự đưa Deep Blending lên `/workspace/data/benchmarks/deep_blending/` (không cần GPU, làm được song song với P4), chạy ô 6 | Deep Blending OK (drjohnson 263 ảnh, playroom 225 ảnh). Ô 6 chỉ kiểm tra bố cục và số ảnh, không kiểm tra tổng kiểm |
-| P6 | Ô 7, `BENCH = "deep_blending"`, `CHAY = True`: `WHAT = "gsplat"` với `QUICK = True` (chạy thử), rồi `WHAT = "b0"`, rồi `WHAT = "gsplat"` (tổng khoảng 2,4 giờ GPU, **cần duyệt**) | B0 đạt ngưỡng so với số liệu Inria công bố; `default` PASS so với B0 từng cảnh; ghi lại chênh lệch so với lượt 17/10/2026 của repo trước |
+| P5 | Ô 7, `WHAT = "experiment"`, `CHAY = False`: xem kế hoạch; rồi `VOLUME_GB` = dung lượng thật của volume, `CHAY = True` (khoảng 12 giờ GPU, **cần duyệt**; gửi được ngay sau P4, việc tự chờ cài xong). Theo dõi ở ô 5 | Việc `exp_main` exit 0: mọi bước OK trong `experiment_main_*.md`; `fetch_*.json` có SHA-256 (Deep Blending khớp cấu hình); trên Deep Blending, B0 đạt ngưỡng so với số Inria công bố và `default` PASS so với B0 từng cảnh; mỗi cảnh × chế độ đủ 3 seed, mọi mục điều kiện OK, ngân sách EQUAL; ghi chênh lệch `default` / `mcmc` so với lượt 17/10/2026 của repo trước |
+| P6 | Đọc kết quả P5 theo `docs/design/experiments.md` mục 2.5 và `docs/design/training_modes.md` mục 4.3 | Kết luận về `mcmc` ghi đúng như số liệu: cảnh nào tốt hơn, kém hơn, chênh lệch so với độ lệch chuẩn giữa các seed; không cải thiện thì vẫn ghi đủ |
 | P7 | `bash scripts/run_render.sh deep_blending playroom default_s42` (render lại từ checkpoint, cần GPU, vài phút) | `render_meta.json` exit 0; PSNR / SSIM / LPIPS của lần render bằng số của lượt gốc (cùng checkpoint, cùng tập test); có video; PLY ở `outputs/checkpoints/deep_blending/playroom/default_s42.ply` |
 | P8 | Thu một cảnh (≥ 30 ảnh theo `docs/data/capture_protocol.md` mục 8, hoặc video) vào `data/custom_scenes/<cảnh>/`, chạy ô 8, xem ô 9 | `sfm_report.json` không FAIL; có `summary.json` cho cả `default` và `mcmc`; mô hình xem được trên trình xem 3DGS; `coverage` khớp với cách chụp thực tế |
-| P9 | Ô 7: `WHAT = "gsplat"`, `SEEDS = "42 43 44"`, `CHAY = True` (khoảng 2–3 giờ GPU, cần duyệt) | Bảng so sánh có ≥ 3 seed chung, mọi mục điều kiện OK; chỉ khi đó mới nói về cải thiện của `mcmc` |
-| P10 | Mip-NeRF 360, chỉ khi bạn đã đưa dữ liệu lên (khoảng 12 GB) và được duyệt chi phí GPU | Ô 7 với `BENCH = "mipnerf360"`, `WHAT = "check"` OK; chạy `QUICK = True` trước; số liệu đầy đủ đối chiếu được với trung bình công bố khi đủ 9 cảnh |
+| P9 | Mip-NeRF 360 đủ 9 cảnh (tùy chọn, khi được duyệt chi phí GPU): ô 7 `WHAT = "fetch"` với `BENCH = "mipnerf360"`, rồi `b0`, `gsplat` | Số liệu đầy đủ đối chiếu được với trung bình công bố |
 
 **Không cần GPU**
 
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
+| — | Chế độ thứ ba theo Opt3DGS (D13): kế hoạch cài đặt, rồi cài trong sandbox | Bạn duyệt kế hoạch (công thức lấy từ paper, giá trị chọn cho các siêu tham số paper không công bố); test CPU qua; chạy thử ngắn trên pod: loss giảm, không NaN, số Gaussian bằng `cap_max`; sau đó mới thêm vào `modes` của kế hoạch |
 | — | Chọn trình xem 3DGS cho file PLY, rồi viewer web bản thô (`app/web/`, giai đoạn 5) | Mở được mô hình mẫu trên trình duyệt; có số đo thời gian tải; có kiểm thử chuyển đổi định dạng |
 | — | Thu thử 1 cảnh: quay video theo `docs/data/capture_protocol.md` (video chính + đoạn quay kiểm tra), hoặc chụp ≥ 30 ảnh theo mục 8 | Đặt tên và ghi metadata đúng quy ước; ảnh cùng chiều máy, cùng ống kính, dùng file gốc |
 | — | Chọn LICENSE; quyết định chế độ hiển thị của repo cũ | Có file LICENSE; repo cũ private hoặc archive |

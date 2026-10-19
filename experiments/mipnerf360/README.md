@@ -10,7 +10,11 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
 - 9 cảnh: 4 trong nhà (room, counter, kitchen, bonsai), 5 ngoài trời (bicycle, garden, stump, flowers, treehill).
 - Kiểm tra (chỉ đọc): `bash scripts/pod/check_datasets.sh --dataset mipnerf360`; kiểm tra bố cục từng cảnh: `bash scripts/prepare_data.sh mipnerf360`.
 - Dữ liệu nằm chỗ khác hoặc tên khác (vd. `MipNeRF360`): tạo `configs/local.yaml`, hoặc đặt `SR3D_DATA_MIPNERF360=<đường dẫn>` (`docs/design/architecture.md` mục 5). Không cần sao chép dữ liệu.
-- Bạn tự đưa các cảnh lên chỗ trên. `360_v2.zip` của Mip-NeRF 360 có 7 cảnh; flowers và treehill nằm trong gói riêng của trang dự án. Thiếu cảnh hay thiếu `images_N/` thì lệnh dừng trước khi train; chỉ có một phần cảnh thì chạy với `SCENES="..."`.
+- Tải về pod: `bash scripts/pod/fetch_data.sh mipnerf360 [cảnh ...]` (mục `download` của cấu hình; URL lấy từ `examples/datasets/download_dataset.py` của gsplat @6e8c837).
+  - `360_v2.zip` có 7 cảnh; flowers và treehill nằm trong gói riêng `360_extra_scenes.zip` (bố cục bên trong chưa kiểm tra: thiếu thư mục cảnh thì script dừng trước khi giải nén).
+  - Chọn vài cảnh vẫn phải tải cả file zip; script chỉ giải nén `images/`, `images_2/`, `images_4/`, `sparse/` của cảnh được chọn (bỏ `images_8/`, `poses_bounds.npy`) rồi xóa file zip.
+  - Không có SHA-256 công bố: script đo và ghi lại SHA-256 của file đã tải; CRC của từng file được kiểm khi giải nén.
+- Hoặc tự đưa các cảnh lên chỗ trên. Thiếu cảnh hay thiếu `images_N/` thì lệnh dừng trước khi train; chỉ có một phần cảnh thì chạy với `SCENES="..."`.
 
 ## Protocol (đã đối chiếu mã nguồn)
 
@@ -28,6 +32,8 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
   - gsplat thu nhỏ lại từ `images/` (bicubic, PNG).
   Khi so `default` (gsplat) với B0 (Inria), cần ghi rõ điểm khác này.
 - MCMC giữ `opacity_reg` mặc định của preset mcmc trong gsplat (0,01); chỉ Deep Blending dùng 0,001.
+- Chạy một phần cảnh (`SCENES`, vd. 4 cảnh trong nhà): bảng so sánh không đối chiếu với trung bình công bố (ghi SKIPPED), và chỉ đối chiếu B0 khi mọi cảnh được chọn đều có lượt B0.
+- Thực nghiệm chính dùng 4 cảnh trong nhà, không chạy B0 ở đây: `docs/design/experiments.md` mục 2.
 - B0: lần đầu mở một cảnh, `train.py` của Inria tạo `sparse/0/points3D.ply` trong thư mục dữ liệu (bộ này không có sẵn file đó). Đây là hành vi của bản gốc, giữ nguyên để đúng baseline; dấu mô hình COLMAP không đổi vì chỉ tính trên file `.bin`.
 
 **Số liệu đối chiếu:** trung bình Inria công bố cho Mip-NeRF 360: PSNR 27,572, SSIM 0,816, LPIPS 0,215 (biểu đồ `assets/charts/base_*.png` trong `results.md` của Inria @54c035f, cấu hình ORIGINAL, rasterizer mặc định; đọc ngày 18/10/2026). So với trung bình này chỉ có nghĩa khi chạy đủ 9 cảnh.
@@ -36,7 +42,8 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
 
 ```bash
 cd /workspace/SpatialRoom3D
-bash scripts/prepare_data.sh mipnerf360                       # trước tiên: dữ liệu đã đưa lên phải báo OK
+bash scripts/pod/fetch_data.sh mipnerf360 room counter kitchen bonsai   # tải 4 cảnh trong nhà nếu chưa có
+bash scripts/prepare_data.sh mipnerf360                       # trước tiên: dữ liệu phải báo OK (SCENES="..." khi chỉ có một phần)
 QUICK=1 bash scripts/run_train.sh mipnerf360 gsplat           # chạy thử 3.000 vòng
 bash scripts/run_train.sh mipnerf360 b0                       # B0 (9 cảnh; chạy trước gsplat để bảng đối chiếu đủ)
 bash scripts/run_train.sh mipnerf360 gsplat                   # default + mcmc, bảng so sánh
@@ -48,6 +55,7 @@ Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất kho�
 
 ## Đã kiểm tra những gì
 
-- Lệnh sinh ra (hệ số ảnh theo cảnh, không có tham số mcmc riêng, dừng khi thiếu `images_N/`): `tests/unit/test_benchmarks.py`, chạy với stub.
+- Lệnh sinh ra (hệ số ảnh theo cảnh, không có tham số mcmc riêng, dừng khi thiếu `images_N/`, báo cáo khi chỉ có một phần cảnh): `tests/unit/test_benchmarks.py`, chạy với stub.
+- Tải và giải nén (chỉ cảnh và thư mục cần dùng, bỏ file ẩn / symlink, dừng khi đường dẫn không an toàn hoặc thiếu thư mục): `tests/unit/test_fetch.py`, với curl giả và file zip tổng hợp; **chưa tải file thật**.
 - Bản xem dữ liệu, cache PNG dùng chung, cache dở dang hoặc có file lạ bị xóa, hai cảnh không dùng chung cache, cùng cấu hình thì bỏ qua: `tests/unit/test_train_run.py`, với runner giả ghép ảnh đúng như gsplat 6e8c837 (bắt được lỗi dấu `.complete` nằm trong thư mục PNG mà lượt rà soát độc lập ngày 18/10/2026 chỉ ra).
 - **Chưa chạy** với gsplat thật hay dữ liệu thật.

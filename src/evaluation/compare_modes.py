@@ -13,11 +13,16 @@
 - Lượt chạy có sai khác protocol bị loại khỏi bảng (liệt kê riêng), trừ khi --include-deviating.
   Khi đó chúng thành biến thể riêng, không bao giờ trộn với lượt đúng protocol.
 - Baseline (--baseline) là một biến thể; mặc định "default" (chế độ default, không tham số riêng, đúng protocol).
-  Với lượt chạy thử QUICK, baseline là "default{max_steps=3000}".
+  Với lượt chạy thử QUICK, baseline là "default{max_steps=3000}". Tên một chế độ chỉ có một biến thể cũng được
+  (vd. --baseline mcmc --modes mcmc X: so chế độ X với mcmc; khi đó không đưa --reference-config, vì
+  đối chiếu với Inria chỉ dành cho baseline default).
 - Chênh lệch giữa hai biến thể chỉ tính trên các seed chung của hai bên; trung bình trên các cảnh chỉ tính
   trên các seed chung của mọi biến thể trong cảnh đó.
 - Đối chiếu với số liệu Inria (công bố hoặc B0 tự chạy) chỉ thực hiện khi mọi lượt baseline dùng cùng điều kiện
   với Inria (đúng số vòng, LPIPS-VGG, mỗi ảnh thứ 8 làm test, không sai khác protocol); nếu không thì ghi N/A.
+- `--modes`: các chế độ đưa vào bảng; mặc định mọi chế độ có lượt chạy dưới --root.
+- `--scenes`: chỉ các cảnh này (bảng và đối chiếu B0 từng cảnh). Khi đó chỉ là một phần các cảnh của benchmark thì
+  phần đối chiếu với số công bố (trung bình mọi cảnh) không làm được và ghi SKIPPED; --strict không tính mục SKIPPED.
 
 Báo cáo chỉ ghi số liệu, chênh lệch và các mục kiểm tra; không tự kết luận chế độ nào tốt hơn.
 """
@@ -39,6 +44,7 @@ BUDGET_TOLERANCE = 0.01  # chênh lệch tương đối của số Gaussian cu�
 MIN_SEEDS = 3  # docs/PROJECT_PLAN.md mục 4.2
 GOOD_STATUSES = ("OK", "EQUAL")
 INRIA_TEST_EVERY = 8  # Inria: llffhold=8, gán cứng
+STRICT_OK = ("PASS", "SKIPPED")  # --strict: mục bị bỏ qua có chủ đích (chạy một phần cảnh) không tính là lỗi
 
 
 def discover(roots: list[Path]) -> list[RunResult]:
@@ -161,6 +167,19 @@ def fairness(baseline_runs: list[RunResult], runs: list[RunResult]) -> list[dict
     return checks
 
 
+def resolve_baseline(runs: list[RunResult], baseline: str, include_deviating: bool = False) -> str:
+    """`--baseline` là tên một biến thể. Nếu là tên một chế độ mà chế độ đó chỉ có đúng một biến thể (vd. "mcmc" khi
+    mọi lượt mcmc của Deep Blending chạy với opacity_reg 0.001: biến thể "mcmc[opacity-reg=0.001]"), dùng biến thể đó."""
+    variants = {variant_of(run) for run in runs if run.status == "OK" and (include_deviating or not run.deviations)}
+    if baseline in variants or not re.fullmatch(r"[A-Za-z0-9_]+", baseline):
+        return baseline
+    candidates = sorted(variant for variant in variants if mode_of(variant) == baseline)
+    if len(candidates) > 1:
+        print(f"WARN: mode {baseline} has several variants {candidates}; pass one of them as --baseline",
+              file=sys.stderr)
+    return candidates[0] if len(candidates) == 1 else baseline
+
+
 def baseline_runs_of(runs: list[RunResult], baseline: str, scenes: list[str]) -> list[RunResult]:
     """Các lượt OK của biến thể baseline trên các cảnh cho trước."""
     wanted = set(scenes)
@@ -235,11 +254,15 @@ def _scene_keys(runs: list[RunResult]) -> dict[str, str]:
     return keys
 
 
-def build_report(runs: list[RunResult], baseline: str, modes: list[str],
+def build_report(runs: list[RunResult], baseline: str, modes: list[str] | None,
                  reference: dict | None = None, tolerance: dict | None = None,
                  reference_scenes: list[str] | None = None, include_deviating: bool = False,
-                 iteration: int = 30000) -> dict:
+                 iteration: int = 30000, skip_reference: str | None = None) -> dict:
+    """`modes` None: mọi chế độ có lượt chạy. `skip_reference`: lý do không đối chiếu với số công bố (vd. chỉ chạy một
+    phần cảnh của benchmark); khi có, mục đối chiếu ghi SKIPPED."""
     base_mode = mode_of(baseline)
+    if modes is None:
+        modes = sorted({run.mode for run in runs if run.mode and run.mode != base_mode})
     if base_mode not in modes:
         modes = [base_mode, *modes]
     grouped: dict[str, dict[str, list[RunResult]]] = {}
@@ -307,7 +330,10 @@ def build_report(runs: list[RunResult], baseline: str, modes: list[str],
             report["mean_over_scenes"][variant] = {name: statistics.fmean(v[name] for v in values)
                                                    for name in METRICS}
 
-    if reference is not None:
+    if reference is not None and skip_reference:
+        report["reference_check"] = {"mode": baseline, "scenes": reference_scenes or sorted(grouped),
+                                     "verdict": "SKIPPED", "reasons": [skip_reference]}
+    elif reference is not None:
         scenes = reference_scenes or sorted(grouped)
         reasons = inria_comparability(baseline_runs_of(selected, baseline, scenes), iteration)
         if reasons:
@@ -376,7 +402,8 @@ def format_markdown(report: dict) -> str:
         lines += ["", f"Đối chiếu `{ref['mode']}` với số liệu công bố ({', '.join(ref['scenes'])}): "
                       f"**{ref['verdict']}**"]
         if ref.get("reasons"):
-            lines += [f"- không so được: {reason}" for reason in ref["reasons"]]
+            label = "bỏ qua" if ref["verdict"] == "SKIPPED" else "không so được"
+            lines += [f"- {label}: {reason}" for reason in ref["reasons"]]
         elif ref.get("mean"):
             lines.append("- chênh lệch trung bình: " + ", ".join(f"{k} {v:+.3f}" for k, v in ref["delta"].items()))
     if report.get("b0_check"):
@@ -405,8 +432,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", required=True, type=Path, action="append",
                         help="thư mục chứa các lượt chạy (lặp lại được)")
     parser.add_argument("--baseline", default="default",
-                        help="biến thể baseline (mặc định default; lượt chạy thử: 'default{max_steps=3000}')")
-    parser.add_argument("--modes", nargs="+", default=["default", "mcmc"])
+                        help="biến thể baseline (mặc định default; lượt chạy thử: 'default{max_steps=3000}'); tên một "
+                             "chế độ chỉ có một biến thể cũng được, vd. mcmc để so một chế độ khác với mcmc")
+    parser.add_argument("--modes", nargs="+", default=None,
+                        help="các chế độ đưa vào bảng (mặc định: mọi chế độ có lượt chạy dưới --root)")
+    parser.add_argument("--scenes", nargs="+", default=None,
+                        help="chỉ các cảnh này; khi chỉ là một phần các cảnh của benchmark, phần đối chiếu với số "
+                             "công bố (trung bình mọi cảnh) ghi SKIPPED, đối chiếu B0 chỉ trên các cảnh này")
     parser.add_argument("--include-deviating", action="store_true",
                         help="giữ lượt sai khác protocol thành biến thể riêng thay vì loại bỏ")
     parser.add_argument("--reference-config", type=Path,
@@ -426,14 +458,23 @@ def main(argv: list[str] | None = None) -> int:
     scenes = config.get("scenes") if config else None
     iteration = int(config.get("iteration", 30000)) if config else 30000
     runs = discover(args.root)
-    report = build_report(runs, args.baseline, args.modes, reference, tolerance, scenes,
-                          args.include_deviating, iteration)
+    skip_reference = None
+    if args.scenes:
+        wanted = set(args.scenes)
+        runs = [run for run in runs if run.scene in wanted]
+        if scenes and set(scenes) != wanted:
+            skip_reference = (f"chỉ chạy {len(wanted)} cảnh ({', '.join(args.scenes)}), số liệu công bố là trung bình "
+                              f"của {len(scenes)} cảnh ({', '.join(scenes)})")
+        scenes = list(args.scenes)
+    baseline = resolve_baseline(runs, args.baseline, args.include_deviating)
+    report = build_report(runs, baseline, args.modes, reference, tolerance, scenes,
+                          args.include_deviating, iteration, skip_reference)
     if args.b0_root:
         if config is None:
             parser.error("--b0-root needs --reference-config (scenes, method, iteration, tolerance)")
         b0_scenes = scenes or sorted(report["scenes"])
         report["b0_check"] = b0_check(report, args.b0_root, b0_scenes, config.get("method", "ours_30000"),
-                                      iteration, tolerance, baseline_runs_of(runs, args.baseline, b0_scenes))
+                                      iteration, tolerance, baseline_runs_of(runs, baseline, b0_scenes))
     text = format_markdown(report)
     print(text)
     if args.out:
@@ -445,7 +486,7 @@ def main(argv: list[str] | None = None) -> int:
         args.markdown.write_text(text + "\n", encoding="utf-8")
     if args.strict:
         verdicts = [report[key]["verdict"] for key in ("reference_check", "b0_check") if report.get(key)]
-        if any(verdict != "PASS" for verdict in verdicts):
+        if any(verdict not in STRICT_OK for verdict in verdicts):
             return 1
     return 0
 

@@ -223,3 +223,67 @@ def test_strict_exit_code(tmp_path):
     argv = ["--root", str(tmp_path), "--modes", "default", "--reference-config", str(config)]
     assert main(argv) == 0
     assert main([*argv, "--strict"]) == 1  # LPIPS giả lệch 0.012 > 0.01: FAIL
+
+
+def test_modes_default_to_every_mode_found(tmp_path):
+    for mode, psnr in (("default", 30.0), ("mcmc", 30.2), ("mcmc_x", 30.3)):  # mcmc_x: một chế độ tự thêm
+        write_run(tmp_path, "room", mode, 42, psnr, args={"noise-lr": 250000} if mode == "mcmc_x" else None)
+    report = build_report(discover([tmp_path]), "default", None)
+    assert report["modes"] == ["default", "mcmc", "mcmc_x"]
+    assert report["variants"] == ["default", "mcmc", "mcmc_x[noise-lr=250000]"]
+    assert report["deltas"]["room"]["mcmc_x[noise-lr=250000]"]["PSNR"] == pytest.approx(0.3)
+    out = tmp_path / "r.json"
+    assert main(["--root", str(tmp_path), "--out", str(out)]) == 0  # không có --modes: mọi chế độ
+    assert json.loads(out.read_text(encoding="utf-8"))["modes"] == ["default", "mcmc", "mcmc_x"]
+    assert main(["--root", str(tmp_path), "--modes", "default", "mcmc", "--out", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["variants"] == ["default", "mcmc"]
+
+
+def test_part_of_the_scenes_skips_the_published_check_and_strict_ignores_it(tmp_path):
+    runs, b0 = tmp_path / "runs", tmp_path / "b0"
+    for scene in ("room", "counter", "bicycle"):
+        write_run(runs, scene, "default", 42, 30.0)
+        write_run(runs, scene, "mcmc", 42, 30.4)
+    config = tmp_path / "ref.json"
+    config.write_text(json.dumps({"reference": {"metrics": REFERENCE}, "tolerance": TOLERANCE,
+                                  "scenes": ["room", "counter", "kitchen", "bicycle"]}), encoding="utf-8")
+    out, markdown = tmp_path / "r.json", tmp_path / "r.md"
+    argv = ["--root", str(runs), "--reference-config", str(config), "--scenes", "room", "counter",
+            "--out", str(out), "--markdown", str(markdown)]
+    assert main([*argv, "--strict"]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert sorted(report["scenes"]) == ["counter", "room"]  # bicycle không thuộc tập cảnh được chọn
+    ref = report["reference_check"]
+    assert ref["verdict"] == "SKIPPED" and ref["scenes"] == ["room", "counter"]
+    assert "số liệu công bố là trung bình của 4 cảnh" in ref["reasons"][0]
+    assert "**SKIPPED**" in markdown.read_text(encoding="utf-8") and "- bỏ qua: chỉ chạy 2 cảnh" in \
+        markdown.read_text(encoding="utf-8")
+    # B0 chỉ đối chiếu trên các cảnh được chọn; vẫn được tính với --strict
+    write_b0(b0, "room", 30.0, ssim=0.9, lpips=0.25)
+    assert main([*argv, "--b0-root", str(b0), "--strict"]) == 1  # counter thiếu B0: INCOMPLETE
+    assert json.loads(out.read_text(encoding="utf-8"))["b0_check"]["verdict"] == "INCOMPLETE"
+    write_b0(b0, "counter", 30.0, ssim=0.9, lpips=0.25)
+    assert main([*argv, "--b0-root", str(b0), "--strict"]) == 0
+    # đủ mọi cảnh của benchmark: đối chiếu với số công bố như bình thường
+    full = ["--root", str(runs), "--reference-config", str(config), "--scenes", "room", "counter", "bicycle",
+            "kitchen", "--out", str(out)]
+    assert main(full) == 0 and json.loads(out.read_text(encoding="utf-8"))["reference_check"]["verdict"] == \
+        "INCOMPLETE"  # kitchen chưa có lượt nào
+
+
+def test_a_mode_name_with_one_variant_can_be_the_baseline(tmp_path, capsys):
+    for seed in (42, 43, 44):
+        write_run(tmp_path, "playroom", "default", seed, 29.8)
+        write_run(tmp_path, "playroom", "mcmc", seed, 29.9, args={"opacity-reg": 0.001})
+        write_run(tmp_path, "playroom", "mcmc_x", seed, 30.0, args={"noise-lr": 250000, "opacity-reg": 0.001})
+    out = tmp_path / "r.json"
+    assert main(["--root", str(tmp_path), "--baseline", "mcmc", "--modes", "mcmc", "mcmc_x", "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["baseline"] == "mcmc[opacity-reg=0.001]"
+    delta = report["deltas"]["playroom"]["mcmc_x[noise-lr=250000, opacity-reg=0.001]"]
+    assert delta["PSNR"] == pytest.approx(0.1) and delta["seeds"] == [42, 43, 44]
+    assert "default" not in report["scenes"]["playroom"]
+    write_run(tmp_path, "playroom", "mcmc", 42, 29.9, args={"opacity-reg": 0.01}, tag="_or01")  # biến thể thứ hai
+    assert main(["--root", str(tmp_path), "--baseline", "mcmc", "--modes", "mcmc", "--out", str(out)]) == 0
+    assert "has several variants" in capsys.readouterr().err
+    assert json.loads(out.read_text(encoding="utf-8"))["baseline"] == "mcmc"  # không đoán: baseline thiếu

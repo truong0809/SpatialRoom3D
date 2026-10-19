@@ -17,10 +17,10 @@ Hệ thống nhận ảnh hoặc video quay không gian nội thất bằng came
 ```
 
 - Ảnh chụp dùng thẳng (một camera chung); video được chọn frame nét. Trước khi train có bước kiểm tra: số ảnh, tỉ lệ ảnh COLMAP ghép được, tách nhóm, độ phủ góc nhìn.
-- Hai chế độ huấn luyện trên gsplat, so sánh cùng điều kiện: `default` (Default Strategy, baseline) và `mcmc` (3DGS-MCMC, MCMC Strategy, cùng số Gaussian).
+- Hai chế độ huấn luyện trên gsplat, so sánh cùng điều kiện: `default` (Default Strategy, baseline) và `mcmc` (3DGS-MCMC, MCMC Strategy, cùng số Gaussian). Thực nghiệm chính trên 6 cảnh trong nhà của hai benchmark, 3 seed: [design/experiments.md](design/experiments.md) mục 2.
 - B0: 3DGS gốc của Inria, chỉ để đối chiếu số liệu công bố trên benchmark.
 
-Phương pháp và kế hoạch: [PROJECT_PLAN.md](PROJECT_PLAN.md). Thiết kế hai chế độ: [design/training_modes.md](design/training_modes.md). Kiến trúc, bố cục `/workspace`, ba luồng dữ liệu: [design/architecture.md](design/architecture.md).
+Phương pháp và kế hoạch: [PROJECT_PLAN.md](PROJECT_PLAN.md). Thiết kế các chế độ: [design/training_modes.md](design/training_modes.md). Kiến trúc, bố cục `/workspace`, ba luồng dữ liệu: [design/architecture.md](design/architecture.md).
 
 ## Cấu trúc repository
 
@@ -34,17 +34,18 @@ SpatialRoom3D/
 ├── src/                      mã nguồn chính (package `src`)
 │   ├── input/                ảnh / video đầu vào: kiểm tra, chọn frame
 │   ├── reconstruction/       COLMAP (SfM), kiểm tra trước khi train
-│   ├── training/             huấn luyện 3DGS trên gsplat (default / mcmc)
+│   ├── training/             huấn luyện 3DGS trên gsplat (default / mcmc), kế hoạch thực nghiệm
 │   ├── rendering/            render ảnh / video từ checkpoint, xuất PLY
 │   ├── evaluation/           chỉ số, so sánh, xem nhanh kết quả
-│   ├── datasets/             đọc configs/*.yaml, kiểm tra dữ liệu từng luồng
+│   ├── datasets/             đọc configs/*.yaml, kiểm tra dữ liệu từng luồng, tải dữ liệu benchmark
 │   ├── utils/                khóa GPU dùng chung với script bash
 │   └── __init__.py
 ├── configs/                  cấu hình (đổi tham số không cần sửa code)
-│   ├── base.yaml             phần chung: thư mục code, hai chế độ huấn luyện và protocol
+│   ├── base.yaml             phần chung: thư mục code, các chế độ huấn luyện và protocol
 │   ├── custom_scene.yaml     cảnh tự chụp
 │   ├── mipnerf360.yaml       Mip-NeRF 360
 │   ├── deep_blending.yaml    Deep Blending
+│   ├── experiments/          kế hoạch thực nghiệm (main.yaml)
 │   └── environment/          phiên bản ghim của các env conda
 ├── scripts/                  script chạy trên Runpod
 │   ├── prepare_data.sh       chuẩn bị dữ liệu đầu vào
@@ -52,7 +53,7 @@ SpatialRoom3D/
 │   ├── run_render.sh         render ảnh / video, xuất PLY
 │   ├── run_evaluate.sh       đánh giá chất lượng
 │   ├── pipeline/             phần thực thi của các bước trên
-│   ├── pod/                  chạy cả luồng, chạy nền / xếp hàng GPU, xem / đóng gói kết quả
+│   ├── pod/                  chạy cả luồng, thực nghiệm, tải dữ liệu benchmark, chạy nền / xếp hàng GPU, xem / đóng gói kết quả
 │   ├── setup/                cài và kiểm tra môi trường
 │   └── lib/                  hàm bash dùng chung
 ├── tests/
@@ -83,7 +84,7 @@ Dữ liệu và kết quả nằm trên network volume, ngoài repo, không đư
 └── outputs/                  custom_scenes/, benchmarks/, checkpoints/ (PLY đã xuất), logs/, reports/, jobs/
 ```
 
-Ảnh / video tự chụp và dữ liệu benchmark (Deep Blending, Mip-NeRF 360) do bạn tự đưa lên `data/` ([USAGE_GUIDE.md](USAGE_GUIDE.md) mục 2.1); chạy với dữ liệu nào là do bạn chọn.
+Ảnh / video tự chụp do bạn tự đưa lên `data/` ([USAGE_GUIDE.md](USAGE_GUIDE.md) mục 2.1). Dữ liệu benchmark (Deep Blending, Mip-NeRF 360) tải thẳng về pod bằng `scripts/pod/fetch_data.sh`, hoặc tự đưa lên. Chạy với dữ liệu nào là do bạn chọn.
 
 ## Chạy trên pod Runpod
 
@@ -98,8 +99,10 @@ bash scripts/prepare_data.sh custom /workspace/data/custom_scenes/phong1 phong1 
 bash scripts/run_train.sh custom phong1                                                  #             train default, mcmc
 bash scripts/run_render.sh custom phong1 default_s42                                     #             render, xuất PLY
 bash scripts/run_evaluate.sh custom phong1                                               #             so sánh
-bash scripts/prepare_data.sh deep_blending                    # benchmark: kiểm tra dữ liệu bạn đã đưa lên (không dùng GPU)
+bash scripts/pod/fetch_data.sh deep_blending                  # benchmark: tải dữ liệu (không dùng GPU)
+bash scripts/prepare_data.sh deep_blending                    #            kiểm tra dữ liệu (không dùng GPU)
 bash scripts/run_train.sh deep_blending gsplat                #            train (experiments/deep_blending/README.md)
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background         # thực nghiệm chính: một việc nền
 bash scripts/pod/results.sh [cảnh]                            # xem nhanh kết quả
 bash scripts/pod/job.sh stop --all                            # dừng mọi việc chạy nền
 python3 -m app.cli --help                                     # cùng các lệnh trên, qua một giao diện dòng lệnh

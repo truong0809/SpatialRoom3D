@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-# run_train.sh - Huan luyen 3DGS (buoc "Train 3DGS" cua luong chinh). Hai che do trong configs/base.yaml (train_modes):
-# default (DefaultStrategy, baseline) va mcmc (MCMCStrategy, cung so Gaussian cuoi voi default tren cung canh).
+# run_train.sh - Huan luyen 3DGS (buoc "Train 3DGS" cua luong chinh). Cac che do trong configs/base.yaml (train_modes):
+# default (DefaultStrategy, baseline) va mcmc (MCMCStrategy, cung so Gaussian cuoi voi default tren cung canh), cung
+# che do ban tu them vao do.
 #
 #   bash scripts/run_train.sh custom <ten_canh> [che_do ...] [-- tham so them]
 #       canh tu chup da chuan bi (scripts/prepare_data.sh custom); mac dinh "default mcmc", lan luot
 #       (scripts/pipeline/train_scene.sh cho tung che do; tham so sau -- di tiep toi src.training.run)
 #   bash scripts/run_train.sh <benchmark> [gsplat | b0]         deep_blending | mipnerf360:
-#       gsplat (mac dinh): default roi mcmc cho moi canh, bang so sanh   (scripts/pipeline/train_gsplat_modes.sh)
+#       gsplat (mac dinh): default roi cac che do khac (MODES, mac dinh mcmc) cho moi canh, bang so sanh
+#                          (scripts/pipeline/train_gsplat_modes.sh)
 #       b0: 3DGS goc cua Inria, doi chieu so lieu cong bo               (scripts/pipeline/train_inria_b0.sh)
 #
-# Bien tuy chon: SEEDS="42 43 44" (benchmark), SEED=42 (canh tu chup), QUICK=1 (benchmark: 3000 vong), SCENES="..."
-# Can GPU va env da cai (bash scripts/pod/run_all.sh). Benchmark: du lieu phai co san. Luot da co tu bo qua.
+# Bien tuy chon: SEEDS="42 43 44" (benchmark), SEED=42 (canh tu chup), QUICK=1 (benchmark: 3000 vong), SCENES="...",
+#   MODES="default mcmc <che do tu them>" (benchmark)
+# Can GPU va env da cai (bash scripts/pod/run_all.sh). Benchmark: du lieu phai co san (tai: scripts/pod/fetch_data.sh).
+# Luot da co tu bo qua. Thuc nghiem tron ven nhieu benchmark: scripts/pod/run_experiment.sh
 # Chay nen, xep hang GPU: bash scripts/pod/job.sh start <ten> -- bash scripts/run_train.sh ...
 
 set -uo pipefail
 
-usage() { sed -n '2,14p' "$0"; exit 2; }
+usage() { sed -n '2,18p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WHAT="$1"

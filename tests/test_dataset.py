@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from src.datasets.registry import CONFIG_DIR, load_registry, main
+from src.training.experiment import load_experiment
 from src.training.profiles import load_config
 from shell_env import REPO
 
@@ -129,8 +130,12 @@ def test_configs_match_the_scripts():
         for command in entry["commands"].values():
             script, *args = command.split("bash ", 1)[1].split()
             assert (REPO / script).is_file(), script
-            assert args[0] == name, command
-    # repo không tải dữ liệu nào: không còn mục source (đường dẫn tải, SHA-256, auto_download) trong cấu hình
+            if script == "scripts/pod/run_experiment.sh":  # lệnh của một thực nghiệm có chạy trên luồng này
+                plan = load_experiment(args[0], CONFIG_DIR, "$WS")
+                assert name in [b["dataset"] for b in plan["benchmarks"]], command
+            else:
+                assert args[0] == name, command
+    # chỉ tải khi người dùng gọi scripts/pod/fetch_data.sh: nguồn tải chỉ nằm trong mục download, các lệnh train không tải
     assert all("source" not in entry for entry in datasets.values())
     assert not any(entry.get("required") for entry in datasets.values())  # không luồng nào bắt buộc phải có dữ liệu
     lib = (REPO / "scripts" / "lib" / "benchmark.sh").read_text(encoding="utf-8")
@@ -149,7 +154,7 @@ def test_configs_match_the_scripts():
         assert "outputs/custom_scenes" not in text.split("registry_value custom_scene results.gsplat", 1)[1]
     assert 'SCENE_DIR="$OUT_ROOT/$NAME/colmap"' in run_scene
     assert 'SCENE="$OUT_ROOT/$NAME/colmap"' in pipeline["prepare_scene.sh"]
-    # hai chế độ huấn luyện: mục train_modes của configs/base.yaml
+    # các chế độ huấn luyện: mục train_modes của configs/base.yaml
     modes = load_config(CONFIG_DIR / "base.yaml")
     assert modes["baseline_mode"] == "default" and {"default", "mcmc"} <= set(modes["modes"])
 

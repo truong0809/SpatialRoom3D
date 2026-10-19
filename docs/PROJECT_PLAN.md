@@ -118,6 +118,7 @@ Viewer được đưa vào ở dạng thô ngay từ giai đoạn 3 để phát 
   - `mcmc` (`MCMCStrategy`, 3DGS-MCMC) được tích hợp từ notebook demo của nhóm.
   - B0 vẫn là mốc đối chiếu cho `default` trên Deep Blending.
   - Thiết kế và giao thức so sánh: `docs/design/training_modes.md`.
+- **Cập nhật 19/10/2026 (quyết định D12):** thực nghiệm chính so sánh `default` và `mcmc` trên 6 cảnh trong nhà (Deep Blending và 4 cảnh của Mip-NeRF 360), 3 seed: `docs/design/experiments.md` mục 2. Chế độ cải tiến thứ ba theo hướng Opt3DGS (mục 3.4): đã chọn hướng, chưa cài.
 
 ### 3.4 Hướng cải tiến ứng viên
 
@@ -130,6 +131,7 @@ Chọn sau khi phân tích thất bại của baseline ở giai đoạn 4.
 | Video rung, mờ | Chọn frame theo độ nét và độ phủ tốt hơn lấy mẫu đều | Lọc theo độ nét; Seiskari et al., ECCV 2024 | Tỉ lệ ảnh đăng ký SfM, PSNR, thời gian |
 | SfM thất bại ở cảnh khó | Đặc trưng học sâu hoặc mô hình feed-forward cứu được cảnh mà SIFT thất bại | ALIKED + LightGlue (COLMAP 4), VGGT | Tỉ lệ đăng ký, sai số pose, PSNR ở bước sau |
 | Heuristic densification đặt Gaussian kém hiệu quả (floater, vùng trơn) | Thay densification bằng MCMC cho chất lượng tốt hơn **ở cùng số Gaussian** (đã có trong pipeline: chế độ `mcmc`, D5) | 3DGS-MCMC (Kheradmand et al., NeurIPS 2024), `MCMCStrategy` của gsplat | PSNR/SSIM/LPIPS ở cùng số Gaussian, thời gian, VRAM, ≥ 3 seed |
+| Quá trình tối ưu của MCMC (Langevin, Adam) dừng ở cực trị địa phương kém và hội tụ chưa chính xác | Khám phá có trọng số thích nghi rồi khai thác theo độ cong cho chất lượng tốt hơn MCMC **ở cùng số Gaussian** (đã chọn hướng ngày 19/10/2026, chưa cài; cài lại theo mô tả của paper, không phải thuật toán mới) | Opt3DGS (Huang et al., AAAI 2026), xây trên 3DGS-MCMC | PSNR/SSIM/LPIPS so với `mcmc` và `default` ở cùng số Gaussian, ≥ 3 seed, 6 cảnh trong nhà; thời gian, VRAM |
 
 **Ranh giới trung thực:** repo Inria đã có sẵn depth regularization và bù phơi sáng (bản cập nhật 10/2024). Chỉ bật các tùy chọn này thì không phải đóng góp. Đóng góp hợp lệ phải là:
 

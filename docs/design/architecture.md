@@ -24,27 +24,30 @@ SpatialRoom3D/
 │   ├── input/                     sources.py: nguồn là video hay thư mục ảnh, đủ ảnh không
 │   │                              frames.py: frame nét từ video; ảnh chụp → input/ (không chọn frame)
 │   ├── reconstruction/            colmap_runner.py, colmap_model.py, report.py (kiểm tra trước khi train)
-│   ├── training/                  profiles.py, split.py, gsplat_launcher.py, run.py (một lượt train / đánh giá)
+│   ├── training/                  profiles.py, split.py, gsplat_launcher.py, run.py (một lượt train / đánh giá),
+│   │                              experiment.py (kế hoạch thực nghiệm, configs/experiments/)
 │   ├── rendering/                 render.py: render lại từ checkpoint, xuất PLY
 │   ├── evaluation/                gsplat_results.py, compare_modes.py, compare_reference.py, overview.py
-│   ├── datasets/                  registry.py: đọc configs/*.yaml, kiểm tra dữ liệu từng luồng
+│   ├── datasets/                  registry.py: đọc configs/*.yaml, kiểm tra dữ liệu từng luồng; fetch.py: tải benchmark
 │   ├── utils/                     gpu_lock.py: khóa GPU dùng chung với script bash
 │   └── __init__.py
 ├── configs/
 │   ├── base.yaml                  phần chung: code_dir, danh sách luồng, train_modes (protocol + default / mcmc)
 │   ├── custom_scene.yaml          cảnh tự chụp: nguồn, nơi lưu COLMAP và kết quả
-│   ├── mipnerf360.yaml            Mip-NeRF 360: dữ liệu, kết quả, mục benchmark (protocol, số liệu công bố, ngưỡng)
+│   ├── mipnerf360.yaml            Mip-NeRF 360: dữ liệu, nguồn tải, kết quả, mục benchmark (protocol, số liệu công bố, ngưỡng)
 │   ├── deep_blending.yaml         Deep Blending: như trên
+│   ├── experiments/               kế hoạch thực nghiệm (main.yaml: default / mcmc, 3 seed, 6 cảnh)
 │   ├── environment/               phiên bản ghim của 3 env conda (gs-inria, gs-tools, gs-gsplat)
 │   └── local.yaml                 (không vào Git) ghi đè đường dẫn trên một pod, mục 5
 ├── scripts/
 │   ├── prepare_data.sh            chuẩn bị dữ liệu: custom <ảnh|video> <cảnh> | <benchmark>
 │   ├── run_train.sh               huấn luyện: custom <cảnh> [chế độ ...] | <benchmark> [gsplat|b0]
 │   ├── run_render.sh              render ảnh / video, xuất PLY
-│   ├── run_evaluate.sh            bảng so sánh default / mcmc / B0 / số liệu công bố
+│   ├── run_evaluate.sh            bảng so sánh các chế độ / B0 / số liệu công bố
 │   ├── pipeline/                  phần thực thi: prepare_scene, prepare_benchmark, train_scene, train_gsplat_modes, train_inria_b0
-│   ├── pod/                       run_all, run_scene (cả luồng một cảnh), job (chạy nền, xếp hàng GPU), results,
-│   │                              pack_results, check_datasets
+│   ├── pod/                       run_all, run_scene (cả luồng một cảnh), run_experiment (thực nghiệm trọn vẹn),
+│   │                              fetch_data (tải benchmark), job (chạy nền, xếp hàng GPU), results, pack_results,
+│   │                              check_datasets
 │   ├── setup/                     env_probe, setup_3dgs_inria, setup_data_tools, setup_gsplat, smoke_test_*.py
 │   └── lib/                       gpu_lock.sh, config.sh (đọc configs/*.yaml), benchmark.sh
 ├── tests/
@@ -80,11 +83,13 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 ```
 /workspace/
 ├── SpatialRoom3D/                  code (repo Git, clone bằng deploy key: docs/ENVIRONMENT_AUDIT.md mục 2)
-├── data/                           CHỈ dữ liệu gốc, do người dùng tự đưa lên: pipeline không ghi vào (ngoại lệ duy nhất: mục 3)
+├── data/                           CHỈ dữ liệu gốc: bạn tự đưa lên, hoặc (benchmark) bước tải ghi khi bạn gọi; các bước khác
+│   │                               không ghi vào (ngoại lệ duy nhất: mục 3)
 │   ├── custom_scenes/<cảnh>/         ảnh JPG/JPEG/PNG tự chụp (nằm thẳng trong thư mục), hoặc file video
-│   └── benchmarks/
-│       ├── deep_blending/{drjohnson,playroom}/
-│       └── mipnerf360/<cảnh>/
+│   ├── benchmarks/
+│   │   ├── deep_blending/{drjohnson,playroom}/
+│   │   └── mipnerf360/<cảnh>/        (.sr3d_fetch.json: nguồn, SHA-256 của các lần tải)
+│   └── downloads/                    file zip đang tải / giải nén (scripts/pod/fetch_data.sh), xóa sau khi xong
 ├── outputs/                        mọi thứ sinh ra
 │   ├── custom_scenes/<cảnh>/
 │   │   ├── colmap/                   ảnh đã chuẩn hóa (input/), COLMAP (images/, sparse/0/), frames_report.json, sfm_report.json
@@ -103,20 +108,21 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 └── .ssh/                           deploy key chỉ đọc (không bao giờ gửi đi)
 ```
 
-Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipnerf360`): `outputs/reports/modes_db_*.md`, `outputs/reports/baseline_db_summary_*.json`, `outputs/reports/compare_db_*.md`.
+Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipnerf360`): `outputs/reports/modes_db_*.md`, `outputs/reports/baseline_db_summary_*.json`, `outputs/reports/compare_db_*.md`. Thực nghiệm (`scripts/pod/run_experiment.sh`): `outputs/reports/experiment_<tên>_<thời_gian>.*`; tải dữ liệu: `outputs/reports/fetch_<benchmark>_<thời_gian>.json`.
 
 ## 3. Ba luồng dữ liệu, không trộn
 
 | Luồng | Dữ liệu vào | Lệnh | Kết quả | Trạng thái |
 |---|---|---|---|---|
 | Cảnh tự chụp | `data/custom_scenes/<cảnh>/`: một thư mục ảnh, hoặc một video | `bash scripts/pod/run_scene.sh <nguồn> <cảnh> --background`, hoặc từng bước `prepare_data.sh custom` → `run_train.sh custom` → `run_render.sh custom` → `run_evaluate.sh custom` | `outputs/custom_scenes/<cảnh>/` | Đã viết, đã kiểm thử trên CPU; bước chuẩn bị đã chạy với COLMAP thật trên ảnh / video tổng hợp, bước train chỉ chạy với stub; **chưa chạy trên pod** |
-| Deep Blending | `data/benchmarks/deep_blending/{drjohnson,playroom}` | `bash scripts/run_train.sh deep_blending b0`, `... gsplat` | `outputs/benchmarks/deep_blending/` | Repo trước đã chạy trên pod ngày 17/10/2026 (seed 42); **repo này chưa chạy** |
-| Mip-NeRF 360 | `data/benchmarks/mipnerf360/<cảnh>` (đổi được, mục 5) | `bash scripts/run_train.sh mipnerf360 b0`, `... gsplat` | `outputs/benchmarks/mipnerf360/` | **Đã cấu hình, chưa chạy; chưa có dữ liệu trên volume** |
+| Deep Blending | `data/benchmarks/deep_blending/{drjohnson,playroom}` (tải: `scripts/pod/fetch_data.sh deep_blending`) | `bash scripts/run_train.sh deep_blending b0`, `... gsplat`; thực nghiệm chính: `scripts/pod/run_experiment.sh main` | `outputs/benchmarks/deep_blending/` | Repo trước đã chạy trên pod ngày 17/10/2026 (seed 42); **repo này chưa chạy** |
+| Mip-NeRF 360 | `data/benchmarks/mipnerf360/<cảnh>` (đổi được, mục 5; tải: `scripts/pod/fetch_data.sh mipnerf360 [cảnh ...]`) | `bash scripts/run_train.sh mipnerf360 b0`, `... gsplat`; thực nghiệm chính (4 cảnh trong nhà) | `outputs/benchmarks/mipnerf360/` | **Đã cấu hình, chưa chạy; chưa có dữ liệu trên volume** |
 
 **Không trộn dữ liệu:**
 - Code dùng chung cho mọi luồng; mỗi luồng có file cấu hình, thư mục dữ liệu và thư mục kết quả riêng.
 - `run_scene.sh` không chạy benchmark nào và chỉ ghi vào `outputs/custom_scenes/<cảnh>/`. Thư mục ảnh / video gốc không bị sửa; `--redo-colmap` chỉ làm lại `colmap/`.
 - Script benchmark không đọc cảnh tự chụp; mỗi benchmark ghi vào `outputs/benchmarks/<benchmark>/`.
+- Bước tải (`scripts/pod/fetch_data.sh`, chỉ khi bạn gọi) chỉ tạo thư mục cảnh còn thiếu trong thư mục gốc của benchmark (giải nén vào thư mục tạm `.fetch_tmp_<cảnh>` rồi đổi tên) và file zip tạm trong `data/downloads/`. Thư mục cảnh đã có thì không sửa, không ghi đè; có nhưng thiếu phần thì dừng.
 - **Ngoại lệ duy nhất:** B0 chạy `train.py` của Inria đúng như bản gốc. Lần đầu mở một cảnh, `train.py` tạo `sparse/0/points3D.ply` (chuyển từ `points3D.bin`) ngay trong thư mục dữ liệu nếu file này chưa có (`scene/dataset_readers.py` @54c035f). Bộ Mip-NeRF 360 không có sẵn file này. Dấu mô hình COLMAP chỉ tính trên các file `.bin`, nên không đổi. Không đổi cách gọi B0 để giữ đúng baseline đã tái lập.
 - gsplat với Mip-NeRF 360 (`data_factor` 2 / 4) đọc một bản xem dữ liệu gồm các liên kết, ghi ảnh PNG thu nhỏ vào `outputs/benchmarks/mipnerf360/gsplat/<cảnh>/.images_<N>_png_<dấu mô hình>/`, không ghi gì vào `data/`.
 - `run_all.sh` chỉ cài / kiểm tra môi trường: không train, không chạy benchmark, không đọc luồng dữ liệu nào. Chạy luồng nào là do người dùng chọn.
@@ -149,7 +155,7 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
     ```
     Tên luồng không có trong `configs/base.yaml` thì báo lỗi (không bỏ qua lặng lẽ);
   - hoặc đặt biến môi trường `SR3D_DATA_MIPNERF360=/workspace/data/MipNeRF360`. Biến môi trường thắng file cục bộ.
-- Dữ liệu do người dùng tự đưa lên đúng thư mục gốc trong cấu hình (hoặc trỏ cấu hình tới chỗ đã có, như trên). Thiếu thì script benchmark dừng trước khi train, báo `dataset not found` kèm thư mục và các cảnh cần có (`locate_dataset` trong `scripts/lib/benchmark.sh`).
+- Dữ liệu benchmark: tải bằng `scripts/pod/fetch_data.sh` (mục `download` của `configs/<benchmark>.yaml`: URL, SHA-256 khi có, thư mục chứa cảnh trong file zip, các thư mục cần giải nén), hoặc tự đưa lên đúng thư mục gốc trong cấu hình (hoặc trỏ cấu hình tới chỗ đã có, như trên). Lệnh train không tự tải: thiếu thì dừng trước khi train, báo `dataset not found` kèm thư mục, các cảnh cần có và lệnh tải (`locate_dataset` trong `scripts/lib/benchmark.sh`).
 
 ## 6. Pod mới, đổi GPU, chạy lại
 
@@ -159,8 +165,8 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
    - ô 2: khóa deploy chỉ đọc, thêm vào GitHub (một lần cho mỗi volume);
    - ô 3: clone code vào `/workspace/SpatialRoom3D` (lần sau: `git pull --ff-only`);
    - ô 4: `bash scripts/pod/run_all.sh --background` (chỉ cài môi trường);
-   - đưa dữ liệu lên, rồi ô 6: kiểm tra dữ liệu (chỉ đọc);
-   - ô 7 (benchmark) hoặc ô 8 (cảnh tự chụp) với dữ liệu bạn chọn.
+   - đưa dữ liệu của bạn lên, rồi ô 6: kiểm tra dữ liệu (chỉ đọc); dữ liệu benchmark tải được ở ô 7;
+   - ô 7 (thực nghiệm chính, tải dữ liệu, benchmark) hoặc ô 8 (cảnh tự chụp) với dữ liệu bạn chọn.
 3. Pod mới gắn lại cùng volume: chạy lại ô 1, 3 (cập nhật code) và 4 (env đã có thì chỉ kiểm tra lại).
 4. GPU khác loại:
    - `setup_gsplat.sh` tự build lại gsplat và fused-ssim khi compute capability của GPU khác lần build trước (ghi trong dấu build của env);

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # results.sh - Xem nhanh ket qua tren pod (chi doc file, khong sua gi):
-#   lan run_all gan nhat, B0 (Inria goc), gsplat default/mcmc tren Deep Blending, cac canh tu quay, goi ket qua.
+#   lan run_all gan nhat, B0 (Inria goc), cac che do gsplat tren Deep Blending, thuc nghiem gan nhat
+#   (scripts/pod/run_experiment.sh), cac canh tu quay, goi ket qua.
 #
 # Cach chay (tu thu muc goc cua repo tren pod):
 #   bash scripts/pod/results.sh              tat ca

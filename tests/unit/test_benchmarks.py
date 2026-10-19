@@ -6,7 +6,9 @@ Kiểm tra:
   17/10/2026, chỉ khác đường dẫn: cùng tên cảnh, chế độ, seed và tham số;
 - Mip-NeRF 360: quy ước ảnh thu nhỏ (images_2 / images_4) của Inria và gsplat, không có tham số mcmc riêng;
 - B0 bỏ qua cảnh đã có kết quả, `FORCE=1` giữ lại lượt cũ;
-- dữ liệu nằm ở chỗ configs/<benchmark>.yaml ghi; thiếu thì dừng trước khi train, không tải gì;
+- dữ liệu nằm ở chỗ configs/<benchmark>.yaml ghi; thiếu thì dừng trước khi train, lệnh train không tải gì;
+- MODES: default luôn chạy trước, mọi chế độ khác cùng ngân sách Gaussian và cùng quy ước mcmc của benchmark;
+- chạy một phần cảnh: báo cáo không đối chiếu trung bình công bố, chỉ đối chiếu B0 khi có đủ cảnh;
 - cấu hình benchmark đã dùng được chụp thành JSON trong outputs/reports/configs/;
 - scripts/run_evaluate.sh chọn đúng thư mục kết quả.
 """
@@ -16,6 +18,7 @@ import os
 import subprocess
 
 import pytest
+import yaml
 
 from shell_env import ShellEnv, calls, make_fake_repo
 
@@ -161,6 +164,60 @@ def test_mipnerf360_uses_downscaled_images_and_no_mcmc_override(sh):
     assert f"--out {out_dir(sh, 'mipnerf360', 'gsplat') / 'room' / 'default_s42'} " in lines[0]
 
 
+def add_mode(sh, name, entry):
+    """Thêm một chế độ vào configs/base.yaml của repo giả (như người dùng tự thêm chế độ của mình)."""
+    path = sh.repo / "configs" / "base.yaml"
+    base = yaml.safe_load(path.read_text(encoding="utf-8"))
+    base["train_modes"]["modes"][name] = entry
+    path.write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def test_extra_modes_share_the_default_budget_and_the_mcmc_convention(sh):
+    db = sh.ws.joinpath(*DB)
+    for scene in ("drjohnson", "playroom"):
+        make_scene(db, scene)
+    add_mode(sh, "mcmc_x", {"description": "mcmc, noise_lr khác", "preset": "mcmc", "args": {"noise_lr": 250000},
+                            "cap_max": {"policy": "match_baseline"}})
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", MODES="mcmc_x default mcmc", SEEDS="42 43")
+    assert out.returncode == 0, out.stdout + out.stderr
+    root = out_dir(sh, "deep_blending", "gsplat")
+    lines = training_calls(sh)
+    assert [line.split()[1] for line in lines] == ["default", "mcmc_x", "mcmc"] * 4  # default luôn trước
+    for line in lines:
+        mode, scene, seed = line.split()[1], line.split("--scene-name ")[1].split()[0], line.split("--seed ")[1][:2]
+        assert f"--out {root / scene / f'{mode}_s{seed}'} " in line
+        if mode != "default":  # cùng ngân sách Gaussian với default, cùng quy ước mcmc của Deep Blending
+            assert line.endswith(f"--cap-max-from {root / scene / f'default_s{seed}'} --set opacity_reg=0.001")
+    compare = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line]
+    assert "--modes default mcmc_x mcmc " in compare[0] and "--scenes drjohnson playroom " in compare[0]
+
+
+def test_unknown_modes_or_no_baseline_stop_before_training(sh):
+    for scene in ("drjohnson", "playroom"):
+        make_scene(sh.ws.joinpath(*DB), scene)
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", MODES="mcmc")
+    assert out.returncode == 1 and "MODES must include default" in out.stdout
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", MODES="default mcmc_dept")
+    assert out.returncode == 1 and "unknown mode(s) ['mcmc_dept']" in out.stdout + out.stderr
+    assert run(sh, "run_gsplat_modes.sh", "deep_blending", SEEDS="42 x").returncode == 1
+    assert training_calls(sh) == []
+
+
+def test_part_of_the_scenes_is_checked_without_the_published_mean(sh):
+    root = sh.ws.joinpath(*M360)
+    make_scene(root, "room", factors=(2, 4))
+    out = run(sh, "run_gsplat_modes.sh", "mipnerf360", SCENES="room")
+    assert out.returncode == 0, out.stdout + out.stderr
+    (compare,) = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line]
+    assert "--scenes room " in compare and "--b0-root" not in compare and "no B0 check" in out.stdout
+    b0 = out_dir(sh, "mipnerf360", "inria_b0") / "room"
+    b0.mkdir(parents=True)
+    (b0 / "results.json").write_text('{"ours_30000": {"SSIM": 0.9, "PSNR": 31.0, "LPIPS": 0.2}}')
+    assert run(sh, "run_gsplat_modes.sh", "mipnerf360", SCENES="room").returncode == 0
+    compare = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line][-1]
+    assert f"--b0-root {out_dir(sh, 'mipnerf360', 'inria_b0')} " in compare  # có B0 cho mọi cảnh được chọn
+
+
 def test_mipnerf360_missing_downscaled_folder_stops_before_training(sh):
     make_scene(sh.ws.joinpath(*M360), "room")  # thiếu images_2
     out = run(sh, "run_gsplat_modes.sh", "mipnerf360", SCENES="room")
@@ -211,13 +268,14 @@ def test_b0_force_reruns_and_keeps_the_previous_run(sh):
 
 
 def test_missing_dataset_stops_before_training_and_nothing_is_downloaded(sh):
-    """Repo không tải dữ liệu: thiếu thì dừng trước khi train, chỉ chỗ cần đặt dữ liệu."""
-    for script, bench, env in (("run_gsplat_modes.sh", "deep_blending", {}),
-                               ("run_inria_b0.sh", "deep_blending", {}),
-                               ("run_inria_b0.sh", "mipnerf360", {"SCENES": "room"})):
+    """Lệnh train không tải dữ liệu: thiếu thì dừng trước khi train, chỉ chỗ cần đặt dữ liệu và lệnh tải riêng."""
+    for script, bench, env, scenes in (("run_gsplat_modes.sh", "deep_blending", {}, "drjohnson playroom"),
+                                       ("run_inria_b0.sh", "deep_blending", {}, "drjohnson playroom"),
+                                       ("run_inria_b0.sh", "mipnerf360", {"SCENES": "room"}, "room")):
         out = run(sh, script, bench, **env)
         assert out.returncode == 1, (script, bench, out.stdout + out.stderr)
         assert "dataset not found" in out.stdout and "Upload the scenes there yourself" in out.stdout
+        assert f"download them with bash scripts/pod/fetch_data.sh {bench} {scenes}, or" in out.stdout
         assert "DOWNLOAD" not in out.stdout
     assert training_calls(sh) == [] and not [line for line in calls(sh.root) if line.startswith("python train.py")]
     assert not (sh.ws / "data" / "downloads").exists()
@@ -233,6 +291,11 @@ def test_evaluate_picks_the_result_folder(sh):
     assert "no own Inria B0 run" in out.stdout and sorted(reports.glob("compare_db_*.md"))
     snapshot = sorted((reports / "configs").glob("deep_blending_*.json"))  # cấu hình đã dùng cho bảng
     assert len(snapshot) == 1 and json.loads(snapshot[0].read_text())["tag"] == "db"
+    out = evaluate(sh, "deep_blending", BASELINE="mcmc", MODES="mcmc mcmc_x", REPORT=reports / "vs_mcmc")
+    assert out.returncode == 0 and "no check against Inria" in out.stdout and (reports / "vs_mcmc.md").is_file()
+    assert json.loads((reports / "vs_mcmc.json").read_text())["modes"] == ["mcmc", "mcmc_x"]
+    assert evaluate(sh, "deep_blending", BASELINE="mcmc", QUICK=1).returncode == 2
+    assert evaluate(sh, "deep_blending", BASELINE="a b").returncode == 2
     compare = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line]
     assert not compare  # run_evaluate.sh dùng python3 của máy, không qua python của env (stub)
     for what in ("custom", "custom_scene", "app"):

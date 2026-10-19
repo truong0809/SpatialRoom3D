@@ -6,7 +6,8 @@
 #   bash scripts/pod/check_datasets.sh                          # moi luong
 #   bash scripts/pod/check_datasets.sh --dataset deep_blending
 #   WS=/duong/dan/khac bash scripts/pod/check_datasets.sh       # volume gan o cho khac
-# Ma thoat: 0 = du cac luong bat buoc (deep_blending); 1 = thieu; 2 = loi cau hinh.
+# Ma thoat: 0 = du moi luong co required: true (hien khong luong nao bat buoc); 1 = thieu; 2 = loi cau hinh.
+# Tai du lieu benchmark (rieng, khi ban goi): bash scripts/pod/fetch_data.sh <benchmark> [canh ...]
 
 set -uo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

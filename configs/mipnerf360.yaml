@@ -3,12 +3,27 @@
 
 kind: benchmark
 required: false
-# Dữ liệu do bạn tự đưa lên: <root>/<cảnh>/ có images/, images_2/, images_4/, sparse/0/.
-# 360_v2.zip của Mip-NeRF 360 có 7 cảnh; flowers và treehill nằm trong gói riêng. Chạy một phần cảnh: SCENES="room counter".
+# Dữ liệu: <root>/<cảnh>/ có images/, images_2/, images_4/, sparse/0/. Tải về trên pod (chọn cảnh được):
+# bash scripts/pod/fetch_data.sh mipnerf360 room counter kitchen bonsai (mục download), hoặc tự đưa lên.
+# 360_v2.zip có 7 cảnh; flowers và treehill nằm trong gói riêng. Chạy một phần cảnh: SCENES="room counter".
 root: ${WS}/data/benchmarks/mipnerf360
 scenes: [room, counter, kitchen, bonsai, bicycle, garden, stump, flowers, treehill]
 indoor_scenes: [room, counter, kitchen, bonsai]
 layout: [images, images_2, images_4, sparse/0]
+
+# Nguồn tải, chỉ dùng khi bạn gọi scripts/pod/fetch_data.sh (src/datasets/fetch.py); các lệnh train không tải gì.
+# Không có SHA-256 công bố: script đo và ghi lại SHA-256 của file đã tải; CRC của từng file trong zip được kiểm khi giải nén.
+download:
+  - url: https://storage.googleapis.com/gresearch/refraw360/360_v2.zip
+    source: "gsplat examples/datasets/download_dataset.py @6e8c837 (bộ mipnerf360)"
+    folder: ""                 # các cảnh nằm ngay gốc file zip
+    scenes: [bicycle, bonsai, counter, garden, kitchen, room, stump]
+    keep: [images, images_2, images_4, sparse]   # bỏ images_8/ và poses_bounds.npy (không dùng)
+  - url: https://storage.googleapis.com/gresearch/refraw360/360_extra_scenes.zip
+    source: "gsplat examples/datasets/download_dataset.py @6e8c837 (bộ mipnerf360_extra); bố cục trong zip chưa kiểm tra: thiếu thư mục cảnh thì script dừng trước khi giải nén"
+    folder: ""
+    scenes: [flowers, treehill]
+    keep: [images, images_2, images_4, sparse]
 
 protocol:
   split: "cứ 8 ảnh lấy 1 làm test"
@@ -24,10 +39,12 @@ results_layout:
   gsplat_quick: "<cảnh>/<chế_độ>_s<seed>/"
 
 commands:
+  fetch_indoor: bash scripts/pod/fetch_data.sh mipnerf360 room counter kitchen bonsai
   prepare: bash scripts/prepare_data.sh mipnerf360
   inria_b0: bash scripts/run_train.sh mipnerf360 b0
   gsplat_default_and_mcmc: bash scripts/run_train.sh mipnerf360 gsplat
   gsplat_quick_check: QUICK=1 bash scripts/run_train.sh mipnerf360 gsplat
+  main_experiment: bash scripts/pod/run_experiment.sh main --background   # 4 cảnh trong nhà, configs/experiments/main.yaml
   evaluate: bash scripts/run_evaluate.sh mipnerf360
 
 status: "đã cấu hình, chưa chạy; chưa xác minh dữ liệu trên pod"
@@ -35,7 +52,7 @@ status: "đã cấu hình, chưa chạy; chưa xác minh dữ liệu trên pod"
 # Quy ước benchmark chính chủ của mỗi bên: Inria đọc images_<N>/, gsplat dùng data_factor N.
 benchmark:
   name: baseline_inria_mipnerf360
-  description: "Mip-NeRF 360 (4 cảnh trong nhà, 5 cảnh ngoài trời): B0 = 3DGS gốc của Inria (54c035f) theo full_eval.py; gsplat default / mcmc theo examples/benchmarks/basic.sh (6e8c837). ĐÃ CẤU HÌNH, CHƯA CHẠY"
+  description: "Mip-NeRF 360 (4 cảnh trong nhà, 5 cảnh ngoài trời): B0 = 3DGS gốc của Inria (54c035f) theo full_eval.py; các chế độ gsplat theo examples/benchmarks/basic.sh (6e8c837). ĐÃ CẤU HÌNH, CHƯA CHẠY"
   tag: mipnerf360
   image_factor: {room: 2, counter: 2, kitchen: 2, bonsai: 2, bicycle: 4, garden: 4, stump: 4, flowers: 4, treehill: 4}
   image_factor_source: "Inria full_eval.py @54c035f: -i images_2 cho room, counter, kitchen, bonsai; -i images_4 cho bicycle, flowers, garden, stump, treehill. gsplat examples/benchmarks/basic.sh @6e8c837: data_factor 2 / 4 cho cùng các nhóm cảnh"

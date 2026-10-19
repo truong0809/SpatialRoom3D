@@ -14,9 +14,10 @@ Bố cục (chi tiết và ba luồng dữ liệu: `docs/design/architecture.md`
 ├── code/gaussian-splatting/  # repo 3DGS của Inria, ghim theo commit
 ├── code/gsplat/              # repo gsplat, ghim theo commit (hai chế độ huấn luyện Default / MCMC)
 ├── miniforge3/               # conda (Miniforge) + env gs-inria (3DGS) + env gs-tools (COLMAP, ffmpeg) + env gs-gsplat
-├── data/                     # chỉ dữ liệu gốc, pipeline không ghi vào (ngoại lệ: docs/design/architecture.md mục 3)
+├── data/                     # chỉ dữ liệu gốc; ngoài bước tải benchmark, pipeline không ghi vào (ngoại lệ: docs/design/architecture.md mục 3)
 │   ├── custom_scenes/<cảnh>/ # ảnh / video tự chụp
-│   └── benchmarks/           # deep_blending/, mipnerf360/ (bạn tự đưa lên)
+│   ├── benchmarks/           # deep_blending/, mipnerf360/ (scripts/pod/fetch_data.sh tải về, hoặc bạn tự đưa lên)
+│   └── downloads/            # file zip tạm của bước tải, xóa sau khi giải nén
 ├── outputs/                  # mọi thứ sinh ra
 │   ├── custom_scenes/<cảnh>/ # colmap/ (ảnh đã chuẩn hóa, COLMAP, báo cáo) + <chế_độ>_s<seed>/ (các lượt train)
 │   ├── benchmarks/<benchmark>/   # inria_b0/, gsplat/, gsplat_quick/
@@ -154,14 +155,16 @@ bash scripts/prepare_data.sh custom <video.mp4 | thư_mục_ảnh> <tên_cảnh>
 bash scripts/run_train.sh custom <tên_cảnh> [default] [mcmc]               # baseline rồi mcmc trên cảnh tự chụp
 bash scripts/run_render.sh custom <tên_cảnh> [<lượt>]                      # render lại, xuất PLY
 bash scripts/run_evaluate.sh custom <tên_cảnh>                             # bảng so sánh
-bash scripts/prepare_data.sh deep_blending                                 # kiểm tra dữ liệu Deep Blending bạn đã đưa lên
+bash scripts/pod/fetch_data.sh deep_blending                               # tải Deep Blending (không dùng GPU)
+bash scripts/prepare_data.sh deep_blending                                 # kiểm tra dữ liệu Deep Blending
 bash scripts/run_train.sh deep_blending b0                                 # tái lập B0 trên Deep Blending
-bash scripts/run_train.sh deep_blending gsplat                             # hai chế độ gsplat trên Deep Blending
+bash scripts/run_train.sh deep_blending gsplat                             # default, mcmc trên Deep Blending
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background         # thực nghiệm chính, một việc nền
 ```
 
 Benchmark, protocol và nơi lưu kết quả: `docs/design/experiments.md`.
 
-### 4.3 Env `gs-gsplat` (hai chế độ huấn luyện Default / MCMC)
+### 4.3 Env `gs-gsplat` (các chế độ huấn luyện trên gsplat)
 
 Thiết kế và giao thức so sánh: `docs/design/training_modes.md`. Env tách riêng khỏi `gs-inria`. Lý do: hai bên cần hai commit fused-ssim khác nhau (cùng tên gói `fused_ssim`), và `examples/` của gsplat yêu cầu `numpy<2`.
 
@@ -182,11 +185,11 @@ ALLOW_PROVISIONAL=1 bash scripts/setup/setup_gsplat.sh   # 9 bước như setup_
 
 **Tạo pod** (cấu hình đã chạy được ngày 17/10/2026, mục 7)
 
-- Secure Cloud, gắn network volume ≥ 100 GB cùng data center (mount tại `/workspace`).
+- Secure Cloud, gắn network volume ≥ 100 GB cùng data center (mount tại `/workspace`). Thực nghiệm chính giữ mọi file kết quả: khoảng 56 GB cộng môi trường (`docs/design/experiments.md` mục 2.4).
 - GPU có compute capability 8.0 / 8.6 / 8.9 / 9.0: RTX 4090, RTX A6000, A40, L40S, A100, H100.
 - Image `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` (bản **devel**, có `nvcc` 12.4 và gcc 11). Driver phải hỗ trợ CUDA ≥ 12.8 (12.6 với `TORCH_CUDA_OVERRIDE=cu126`).
 
-**Các bước:** tải `app/notebooks/runpod.ipynb` lên `/workspace` trong Jupyter, chạy ô 1 → 2 → 3 → 4, đưa dữ liệu lên rồi chạy ô 6 (chi tiết: `docs/USAGE_GUIDE.md` mục 2). Tương đương bằng lệnh:
+**Các bước:** tải `app/notebooks/runpod.ipynb` lên `/workspace` trong Jupyter, chạy ô 1 → 2 → 3 → 4, rồi ô 7 (thực nghiệm chính, tải dữ liệu, benchmark) hoặc đưa ảnh của bạn lên và chạy ô 6, ô 8 (chi tiết: `docs/USAGE_GUIDE.md` mục 2). Tương đương bằng lệnh:
 
 ```bash
 # ô 2: khóa deploy (mục 2), thêm khóa công khai vào GitHub; ô 3: clone
@@ -194,11 +197,12 @@ GIT_SSH_COMMAND="$SSH_CMD" git clone -b main git@github.com:truong0809/SpatialRo
 cd /workspace/SpatialRoom3D
 bash scripts/pod/run_all.sh --background                # ô 4: chỉ cài môi trường (không train)
 bash scripts/pod/job.sh status                          # ô 5: theo dõi; log: bash scripts/pod/job.sh log run_all
-bash scripts/pod/check_datasets.sh                      # ô 6: kiểm tra dữ liệu bạn đã đưa lên (không cần GPU)
+bash scripts/pod/check_datasets.sh                      # ô 6: kiểm tra dữ liệu (không cần GPU)
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background         # ô 7: thực nghiệm chính (xếp hàng sau run_all)
 bash scripts/pod/results.sh                             # kết quả; gói tải về: /workspace/ket_qua_*.tar.gz
 ```
 
-Sau đó chạy với dữ liệu bạn chọn: cảnh tự chụp ở ô 8 (`docs/USAGE_GUIDE.md` mục 3), benchmark ở ô 7 (mục 5 của hướng dẫn).
+Sau đó chạy với dữ liệu bạn chọn: cảnh tự chụp ở ô 8 (`docs/USAGE_GUIDE.md` mục 3), benchmark và thực nghiệm chính ở ô 7 (mục 5 của hướng dẫn).
 
 Thời gian đo được ngày 17/10/2026 trên RTX 4090 (repo trước, cùng script cài đặt và cùng tham số): cài `gs-inria` 29 phút, cài `gs-gsplat` 32 phút (lượt đầu) và 7 phút (lượt thứ hai), cài `gs-tools` 18 phút, B0 49,5 phút, gsplat chạy thử 3.000 vòng 17 phút, gsplat đầy đủ (2 cảnh × `default` + `mcmc`, seed 42) 74 phút (mục 7). Pod vẫn tính tiền khi việc chạy nền; xong thì Terminate (hoặc `AUTO_STOP=1`, chưa thử). Mọi thứ trong `/workspace` vẫn còn.
 

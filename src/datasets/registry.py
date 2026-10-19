@@ -11,7 +11,8 @@ file trong Git (theo thứ tự ưu tiên tăng dần):
 Kiểm tra (mặc định): với mỗi benchmark: thư mục gốc, từng cảnh (số ảnh trong `images/`, các thư mục ảnh thu nhỏ khi bộ
 dữ liệu có, mô hình COLMAP `sparse/0`). Với cảnh tự chụp: từng cảnh có nguồn gốc (ảnh / video trong
 `data/custom_scenes/<cảnh>/`), đã chuẩn bị chưa (`outputs/custom_scenes/<cảnh>/colmap/`), kết luận COLMAP. Với mọi
-luồng: thư mục kết quả có bao nhiêu lượt chạy. Không tải, không sửa, không dời gì.
+luồng: thư mục kết quả có bao nhiêu lượt chạy. Không tải, không sửa, không dời gì (tải dữ liệu benchmark là bước riêng:
+`src/datasets/fetch.py`, theo mục `download` của `configs/<luồng>.yaml`).
 Mã thoát: 0 khi mọi luồng có `required: true` đều đủ; 1 nếu thiếu; 2 khi cấu hình không đọc được.
 
 `--get <luồng> <khóa>` in một trường (vd. `root`, `benchmark.tag`) cho script bash (scripts/lib/config.sh).

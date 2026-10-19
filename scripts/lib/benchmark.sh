@@ -53,11 +53,13 @@ registry_results() {  # registry_results <khoa>: thu muc ket qua cua benchmark (
 }
 
 locate_dataset() {  # dat DATA_ROOT = thu muc goc cua benchmark trong configs/<benchmark>.yaml
-  # du lieu do nguoi dung tu dua len (moi canh mot thu muc co images/ va sparse/0/)
+  # du lieu da co san (moi canh mot thu muc co images/ va sparse/0/): lenh train khong tai gi
   local root
   root="$(registry_get root)" || die "cannot get the data folder of $(read_cfg dataset) from the registry (see the error above)"
   has_scenes "$root" || die "dataset not found: $root (no ${SCENES[0]}/ inside). Upload the scenes there yourself" \
-    "(${SCENES[*]}; each with images/ and sparse/0/), or point configs/local.yaml / SR3D_DATA_* to where they are"
+    "(${SCENES[*]}; each with images/ and sparse/0/), download them with" \
+    "bash scripts/pod/fetch_data.sh $(read_cfg dataset) ${SCENES[*]}, or point configs/local.yaml / SR3D_DATA_* to" \
+    "where they are"
   DATA_ROOT="$root"
 }
 
