@@ -119,9 +119,10 @@ def test_existing_model_is_reused(sh):
 
 def test_modes_seed_and_leftover_tags(sh):
     make_model(sh)
-    out = run_scene(sh, "-", "video8", MODES="default mcmc_demo", SEED=7, TAG="thu", BASELINE_TAG="x")
+    # mcmc_or001: chế độ người dùng tự thêm vào configs/base.yaml (train_scene.sh ở đây là stub)
+    out = run_scene(sh, "-", "video8", MODES="default mcmc_or001", SEED=7, TAG="thu", BASELINE_TAG="x")
     assert out.returncode == 0, out.stdout + out.stderr
-    assert calls(sh.root) == [train_call(sh, "default", seed=7), train_call(sh, "mcmc_demo", seed=7)]
+    assert calls(sh.root) == [train_call(sh, "default", seed=7), train_call(sh, "mcmc_or001", seed=7)]
     assert "default_s7" in out.stdout  # tóm tắt cuối đọc đúng thư mục kết quả
 
 

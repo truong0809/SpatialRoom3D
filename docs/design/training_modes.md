@@ -25,8 +25,7 @@ _09/10/2026, cập nhật 19/10/2026 · Trạng thái: **đã chạy trên GPU**
   B0: Inria train.py/render.py/metrics.py            gsplat simple_trainer.py @ 6e8c837
       (đối chiếu số liệu công bố)                    qua src.training.run + gsplat_launcher
                                                        ├─ default    baseline
-                                                       ├─ mcmc       cùng protocol, cùng số Gaussian cuối với default
-                                                       └─ mcmc_demo  đúng tham số notebook demo (khác protocol)
+                                                       └─ mcmc       cùng protocol, cùng số Gaussian cuối với default
                                                                    │  summary.json mỗi lượt chạy
                                                                    ▼
                                                      src.evaluation.compare_modes → bảng + kiểm tra điều kiện
@@ -41,10 +40,15 @@ Giá trị dưới đây đọc từ cấu hình mà `simple_trainer.py` thật 
 | Chế độ | Preset gsplat | Tham số chính | Số Gaussian | Dùng cho |
 |---|---|---|---|---|
 | `default` | `default` | `DefaultStrategy`: densify mỗi 100 vòng, từ vòng 600 đến 14.900; ngưỡng gradient 0,0002; reset opacity ở các vòng 3.000, 6.000, 9.000, 12.000; opacity khởi tạo 0,1 | Do heuristic quyết định | Baseline |
-| `mcmc` | `mcmc` | `MCMCStrategy`: relocate và thêm Gaussian mỗi 100 vòng, từ vòng 600 đến 24.900 (mỗi lần thêm 5% cho tới `cap_max`); `noise_lr` 5e5; ngưỡng "chết" opacity 0,005. Opacity khởi tạo 0,5; hệ số scale khởi tạo 0,1 (nhân với căn trung bình bình phương khoảng cách tới 3 điểm SfM gần nhất); `opacity_reg` = `scale_reg` = 0,01 | `cap_max` = số Gaussian cuối của lượt `default` cùng cảnh, cùng seed, cùng protocol, cùng tập test | So sánh công bằng với baseline |
-| `mcmc_demo` | `mcmc` | Như `mcmc`, cộng thêm `max_steps` 40.000, `refine_stop_iter` 35.000, antialiased | `cap_max` = 3.500.000 (cố định) | Tái hiện cấu hình demo; **không** vào bảng so sánh công bằng |
+| `mcmc` | `mcmc` | `MCMCStrategy`: relocate và thêm Gaussian mỗi 100 vòng, từ vòng 600 đến 24.900 (mỗi lần thêm 5% cho tới `cap_max`); `noise_lr` 5e5; ngưỡng "chết" opacity 0,005. Opacity khởi tạo 0,5; hệ số scale khởi tạo 0,1 (nhân với căn trung bình bình phương khoảng cách tới 3 điểm SfM gần nhất); `opacity_reg` = `scale_reg` = 0,01 | `cap_max` = số Gaussian cuối của lượt `default` cùng cảnh, cùng seed, cùng protocol, cùng tập test. Không có số cố định: chưa có lượt `default` thì `mcmc` không chạy (giá trị mặc định 1.000.000 của `MCMCStrategy` không bao giờ được dùng) | So sánh công bằng với baseline |
 
-Tham số riêng của chế độ được đổi qua `--set`, ví dụ `--set opacity_reg=0.001` (giá trị paper dùng cho Deep Blending). Thay đổi này được ghi vào `run_meta.json`.
+**Đổi tham số** (mọi thay đổi được ghi vào `run_meta.json`):
+- Cho một lượt, không sửa cấu hình, luôn kèm `TAG` để có thư mục riêng `<chế_độ>_<TAG>_s<seed>`:
+  - `--set khóa=giá_trị`: tham số riêng của chế độ, ví dụ `--set opacity_reg=0.001` (giá trị paper dùng cho Deep Blending). Không phải sai khác protocol, nên `mcmc` vẫn so được với `default` chuẩn, thành một biến thể riêng (`mcmc[opacity-reg=0.001]`);
+  - `--protocol khóa=giá_trị`: đổi protocol (`max_steps`, `antialiased`...). Bị ghi là sai khác; muốn so thì chạy cả `default` và `mcmc` với cùng `TAG` và cùng protocol (`mcmc` lấy ngân sách từ `default_<TAG>`);
+  - `--cap-max N`: đặt tay số Gaussian cho `mcmc`.
+- Dùng lại nhiều lần: thêm một chế độ có tên vào `train_modes.modes` (mẫu ghi trong chú thích của `configs/base.yaml`): `preset`, `args`, tùy chọn `protocol`, và `cap_max` theo `match_baseline` hoặc `fixed`. Sửa trong repo rồi commit, không sửa trên pod (ô 3 của notebook sẽ không cập nhật được code).
+- Cấu hình của notebook demo (40.000 vòng, antialiased, `refine_stop_iter` 35.000, `cap_max` 3.500.000) không còn là chế độ riêng (chế độ `mcmc_demo` bỏ ngày 19/10/2026, D11). Cần đối chiếu với demo thì chạy lại bằng các cách trên.
 
 ## 4. Giao thức so sánh
 
@@ -111,7 +115,7 @@ Kết quả không cải thiện vẫn được báo cáo đầy đủ (`docs/PR
 
 | File | Vai trò |
 |---|---|
-| `configs/base.yaml` (mục `train_modes`) | Protocol chung, ba chế độ, commit gsplat mong đợi, seed mặc định |
+| `configs/base.yaml` (mục `train_modes`) | Protocol chung, hai chế độ (kèm mẫu thêm chế độ riêng), commit gsplat mong đợi, seed mặc định |
 | `src/training/profiles.py` | Đọc cấu hình, ghép protocol và tham số; chặn tham số do wrapper quản lý; sinh dòng lệnh cho `simple_trainer.py` (huấn luyện và đánh giá); chính sách `cap_max` |
 | `src/training/split.py` | Chia train/test theo đúng quy tắc của Inria và gsplat, hoặc theo danh sách; ghi `split.json` kèm SHA-256 |
 | `src/training/gsplat_launcher.py` | Chạy `simple_trainer.py` **không sửa file nào của gsplat**: đổi seed, áp tập test cho trước, ghi tập ảnh thực sự dùng và cấu hình đã phân giải; `--resolve-only` để kiểm tra tham số không cần GPU |
@@ -133,14 +137,14 @@ bash scripts/setup/setup_gsplat.sh                         # một lần: env gs
 bash scripts/run_train.sh deep_blending gsplat             # kiểm chứng trên Deep Blending, dữ liệu tự đưa lên (SEEDS="42 43 44" để chạy lặp)
 bash scripts/run_train.sh custom phong01 default           # cảnh tự chụp, đã qua scripts/prepare_data.sh custom
 bash scripts/run_train.sh custom phong01 mcmc              # cap_max = số Gaussian cuối của default_s42
-bash scripts/run_train.sh custom phong01 mcmc_demo         # cấu hình của notebook demo
+TAG=or001 BASELINE_TAG= bash scripts/run_train.sh custom phong01 mcmc -- --set opacity_reg=0.001   # đổi tham số mcmc
 TAG=thu bash scripts/run_train.sh custom phong01 default -- --protocol max_steps=3000   # chạy thử, thư mục riêng
 . /workspace/miniforge3/etc/profile.d/conda.sh && conda activate gs-gsplat
 python -m src.evaluation.compare_modes --root /workspace/outputs/custom_scenes \
-    --modes default mcmc mcmc_demo --include-deviating --markdown /workspace/outputs/reports/modes_scenes.md
+    --modes default mcmc --include-deviating --markdown /workspace/outputs/reports/modes_scenes.md
 ```
 
-`mcmc_demo` khác protocol nên chỉ hiện trong bảng khi có `--include-deviating`, và luôn là biến thể riêng.
+Lượt đổi protocol (vd. `TAG=thu ... --protocol max_steps=3000`) chỉ hiện trong bảng khi có `--include-deviating`, và luôn là biến thể riêng.
 
 Mỗi lượt chạy ghi vào `$OUT_ROOT/<cảnh>/<chế_độ>[_<TAG>]_s<seed>/`:
 
@@ -172,9 +176,9 @@ Các dòng ghi ngày 09/10/2026 là kiểm tra của repo trước, trên cùng 
 
 | Hạng mục | Trạng thái | Bằng chứng |
 |---|---|---|
-| Logic cấu hình, split, điều phối, tổng hợp, so sánh | Đã kiểm thử (CPU) | Repo trước, 09/10/2026: 41 test mới (tổng 66). Repo này, 19/10/2026: `tests/unit/test_train_*.py`, `test_gsplat_launcher.py`, `test_gsplat_results.py`, `test_compare_modes.py` trong bộ 251 test. Dùng gsplat giả lập và runner giả |
+| Logic cấu hình, split, điều phối, tổng hợp, so sánh | Đã kiểm thử (CPU) | Repo trước, 09/10/2026: 41 test mới (tổng 66). Repo này, 19/10/2026: `tests/unit/test_train_*.py`, `test_gsplat_launcher.py`, `test_gsplat_results.py`, `test_compare_modes.py` (số test và kết quả lượt chạy gần nhất: `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox"). Dùng gsplat giả lập và runner giả |
 | File khóa phụ thuộc | Đã chạy (CPU), repo trước | Trong sandbox ngày 09/10/2026: cài vào Python 3.10 cùng torch 2.7.1 (PyPI). `examples/simple_trainer.py` của gsplat `6e8c837` import được |
-| Tham số sinh ra so với `simple_trainer.py` thật | Đã chạy (CPU), repo trước, 09/10/2026 | Launcher `--resolve-only` cho `default`, `mcmc`, `mcmc_demo` (huấn luyện và đánh giá). Strategy, `cap_max`, `max_steps`, `eval_steps [-1]`, `lpips_net`, antialiased ra đúng như mục 3 |
+| Tham số sinh ra so với `simple_trainer.py` thật | Đã chạy (CPU), repo trước, 09/10/2026 | Launcher `--resolve-only` cho `default`, `mcmc`, `mcmc_demo` (huấn luyện và đánh giá; `mcmc_demo` đã bỏ ngày 19/10/2026). Strategy, `cap_max`, `max_steps`, `eval_steps [-1]`, `lpips_net`, antialiased ra đúng như mục 3 |
 | Áp tập test và seed lên `Parser`/`Dataset` thật | Đã chạy (CPU), repo trước, 09/10/2026 | Cảnh COLMAP tổng hợp 17 ảnh, đọc bằng fork pycolmap thật. Quy tắc mỗi ảnh thứ 8 và danh sách cho trước đều cho đúng tập ảnh; seed 42 → 7 đúng. Bản dữ liệu đã lọc điểm (`data/`) đọc được: 185/272 điểm |
 | Gói gsplat đang cài trùng mã nguồn checkout | Đã chạy (CPU), repo trước, 09/10/2026 | Launcher so SHA-256 của `strategy/{default,mcmc,ops}.py` và `rendering.py`; bản cài từ checkout `6e8c837` khớp. Test giả lập cho trường hợp lệch |
 | Rà soát độc lập | Đã làm (repo trước, 09/10/2026) | Một lượt rà soát riêng (không tham gia viết code) đã chỉ ra 4 vấn đề lớn: bỏ qua lượt chạy khác cấu hình; trộn các biến thể khi so sánh; điểm SfM chỉ có nhờ ảnh test; đối chiếu với số công bố thay vì với B0 tự chạy. Cả 4 vấn đề đã được sửa, kèm test; các góp ý nhỏ đã được sửa hoặc ghi thành quy tắc ở mục 4 |

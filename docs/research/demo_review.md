@@ -88,7 +88,7 @@ Demo chạy MCMC nên không bị lỗi này ảnh hưởng. Nhưng chế độ 
 
 | Thành phần của demo | Quyết định | Thay bằng / cách dùng |
 |---|---|---|
-| Chiến lược MCMC và bộ tham số (`mcmc` preset, `cap_max`, `refine_stop_iter`, regularization) | **Dùng lại** | Chế độ `mcmc`: protocol chung, ngân sách bằng baseline. Chế độ `mcmc_demo`: giữ đúng tham số của notebook |
+| Chiến lược MCMC và bộ tham số (`mcmc` preset, `cap_max`, `refine_stop_iter`, regularization) | **Dùng lại** | Chế độ `mcmc`: protocol chung, ngân sách bằng baseline. Bộ tham số riêng của notebook (40.000 vòng, antialiased, `cap_max` 3.500.000, `refine_stop_iter` 35.000) từng là chế độ `mcmc_demo`; bỏ ngày 19/10/2026 (D11), cần đối chiếu thì chạy lại bằng `--protocol` / `--set` / `--cap-max` (`docs/design/training_modes.md` mục 3) |
 | `simple_trainer.py` của gsplat | **Dùng lại**, không sửa file | Ghim `6e8c837`; mở rộng nhỏ (seed, tập test, ghi cấu hình) qua `gsplat_launcher.py` |
 | Cách cài gsplat (trộn phiên bản, `sed`, `pycolmap` không ghim) | **Bỏ** | `scripts/setup/setup_gsplat.sh`, `configs/environment/gs-gsplat.conf`, `configs/environment/gs-gsplat.lock.txt` |
 | Trích frame, lọc mờ theo phân vị | **Bỏ** | `src/input/frames.py` |
@@ -109,4 +109,4 @@ Demo chưa đủ làm bằng chứng MCMC tốt hơn baseline, vì bốn lý do:
 - chỉ có một lần chạy, không có Default trên cùng dữ liệu;
 - số vòng lặp, ngân sách Gaussian và antialiased khác giao thức của paper.
 
-Pipeline giữ nguyên chiến lược MCMC và bộ tham số của demo (chế độ `mcmc_demo`). Bên cạnh đó, pipeline thêm chế độ `mcmc` chạy cùng điều kiện với Default, trên môi trường ghim phiên bản và cùng một đầu vào.
+Pipeline giữ chiến lược MCMC của demo trong chế độ `mcmc`, chạy cùng điều kiện với Default, trên môi trường ghim phiên bản và cùng một đầu vào. Bộ tham số riêng của demo không còn là chế độ riêng (D11); nó vẫn chạy lại được bằng tham số dòng lệnh khi cần đối chiếu.

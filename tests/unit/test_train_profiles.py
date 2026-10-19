@@ -37,9 +37,24 @@ def baseline_summary(config, count=2_500_000, mode="default", status="OK", seed=
             "split_sha256": "abc", "protocol": protocol or dict(config["protocol"]), "deviations": deviations or {}}
 
 
+CUSTOM_MODE = {  # một chế độ người dùng tự thêm vào configs/base.yaml: protocol riêng, số Gaussian cố định
+    "description": "mcmc 40k vòng, antialiased, cap cố định",
+    "preset": "mcmc",
+    "protocol": {"max_steps": 40000, "antialiased": True},
+    "args": {"strategy.refine_stop_iter": 35000},
+    "cap_max": {"policy": "fixed", "value": 3_500_000},
+}
+
+
+def with_mode(config, name, entry):
+    return {**config, "modes": {**config["modes"], name: entry}}
+
+
 def test_real_config_defines_both_modes(config):
     assert config["baseline_mode"] == "default"
-    assert {"default", "mcmc"} <= set(config["modes"])
+    assert set(config["modes"]) == {"default", "mcmc"}
+    # mcmc không có số Gaussian cố định: luôn lấy đúng số Gaussian cuối của lượt default tương ứng
+    assert config["modes"]["mcmc"]["cap_max"] == {"policy": "match_baseline"}
     assert config["protocol"]["lpips_net"] == "vgg"  # cùng mạng LPIPS với Inria
     assert len(config["trainer"]["commit"]) == 40
 
@@ -92,17 +107,27 @@ def test_mcmc_needs_baseline_budget(config):
     assert cap == 1_000_000 and source == {"policy": "cli", "value": 1_000_000}
 
 
-def test_mcmc_demo_reproduces_notebook_and_is_marked(config):
-    spec = resolve_mode(config, "mcmc_demo")
+def test_custom_mode_with_its_own_protocol_and_fixed_budget(config):
+    """Chế độ tự thêm: protocol riêng bị ghi là sai khác (nguồn "mode"); cap_max cố định không cần lượt default."""
+    custom = with_mode(config, "mcmc_custom", CUSTOM_MODE)
+    spec = resolve_mode(custom, "mcmc_custom")
     assert set(spec.deviations) == {"max_steps", "antialiased"}
+    assert all(deviation["source"] == "mode" for deviation in spec.deviations.values())
     cap, source = resolve_cap_max(spec)
-    assert cap == 3_500_000 and source["policy"] == "fixed"
+    assert cap == 3_500_000 and source == {"policy": "fixed", "value": 3_500_000}
     argv = trainer_args(spec, Path("/s"), Path("/o"), cap)
     assert flag_value(argv, "--max-steps") == "40000"
     assert flag_value(argv, "--strategy.refine-stop-iter") == "35000"
-    assert flag_value(argv, "--opacity-reg") == "0.01" and flag_value(argv, "--scale-reg") == "0.01"
+    assert flag_value(argv, "--strategy.cap-max") == "3500000"
     assert "--antialiased" in argv and flag_value(argv, "--save-steps") == "40000"
     assert checkpoint_path(spec, Path("/o")) == Path("/o/ckpts/ckpt_39999_rank0.pt")
+    same = resolve_mode(custom, "mcmc_custom", protocol_overrides={"max_steps": 30000})
+    assert set(same.deviations) == {"antialiased"}  # đặt lại đúng giá trị gốc thì không còn là sai khác
+    for cap_max, message in (({"policy": "fixed"}, "must be an integer"), ({"policy": "auto"}, "must be one of")):
+        with pytest.raises(ValueError, match=message):
+            resolve_mode(with_mode(config, "bad", {**CUSTOM_MODE, "cap_max": cap_max}), "bad")
+    with pytest.raises(ValueError, match="only applies to the mcmc preset"):
+        resolve_mode(with_mode(config, "bad", {**CUSTOM_MODE, "preset": "default"}), "bad")
 
 
 def test_eval_arguments_reuse_training_configuration(config):
@@ -121,8 +146,6 @@ def test_reserved_flags_and_protocol_overrides(config):
                         protocol_overrides={"max_steps": 3000})
     assert spec.args == {"opacity-reg": 0.001}
     assert spec.deviations == {"max_steps": {"base": 30000, "used": 3000, "source": "cli"}}
-    same = resolve_mode(config, "mcmc_demo", protocol_overrides={"max_steps": 30000})
-    assert set(same.deviations) == {"antialiased"}  # đặt lại đúng giá trị gốc thì không còn là sai khác
     with pytest.raises(ValueError, match="unknown protocol key"):
         resolve_mode(config, "default", protocol_overrides={"steps": 1})
     with pytest.raises(ValueError, match="integer"):

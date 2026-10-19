@@ -3,12 +3,13 @@
 conda, GPU và src.training.run được thay bằng stub (src.training.run giả chỉ ghi summary.json vào --out). Kiểm tra:
 - mỗi chế độ gọi src.training.run với đúng tham số như repo trước (8037a66), chỉ khác tên module và đường dẫn;
 - mcmc lấy ngân sách Gaussian từ lượt default cùng seed (chính sách match_baseline trong configs/base.yaml);
-- mcmc chưa có lượt default thì dừng trước khi train; mcmc_demo (cap_max cố định) không cần lượt default.
+- mcmc chưa có lượt default thì dừng trước khi train; chế độ tự thêm có cap_max cố định không cần lượt default.
 """
 
 import os
 
 import pytest
+import yaml
 
 from shell_env import ShellEnv, calls, make_fake_repo
 
@@ -77,10 +78,16 @@ def test_mcmc_needs_a_finished_default_run(sh):
     assert training_calls(sh) == []
 
 
-def test_demo_mode_has_a_fixed_budget_and_extra_options_pass_through(sh):
-    out = sh.run(str(sh.repo / "scripts" / "run_train.sh"), "custom", "phong1", "mcmc_demo", "--", "--dry-run",
+def test_fixed_budget_mode_needs_no_default_run_and_extra_options_pass_through(sh):
+    """Chế độ tự thêm vào configs/base.yaml với cap_max cố định: không cần lượt default, không --cap-max-from."""
+    path = sh.repo / "configs" / "base.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data["train_modes"]["modes"]["mcmc_fixed"] = {"description": "test", "preset": "mcmc",
+                                                  "cap_max": {"policy": "fixed", "value": 2_000_000}}
+    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    out = sh.run(str(sh.repo / "scripts" / "run_train.sh"), "custom", "phong1", "mcmc_fixed", "--", "--dry-run",
                  env={"SEED": "7"})
     assert out.returncode == 0, out.stdout + out.stderr
     (line,) = training_calls(sh)
-    assert line.startswith("--mode mcmc_demo ") and "--cap-max-from" not in line
+    assert line.startswith("--mode mcmc_fixed ") and "--cap-max-from" not in line
     assert " --seed 7 " in line and line.endswith("--rerun-incomplete --dry-run")

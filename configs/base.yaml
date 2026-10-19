@@ -48,17 +48,13 @@ train_modes:
       preset: mcmc
       args: {}
       cap_max:
-        policy: match_baseline
-    mcmc_demo:
-      description: "Đúng tham số huấn luyện của notebook demo của nhóm (40k vòng, cap 3.5M, refine dừng ở 35k, antialiased). Chỉ để đối chiếu với demo; khác protocol nên không vào bảng so sánh công bằng"
-      preset: mcmc
-      protocol:
-        max_steps: 40000
-        antialiased: true
-      args:
-        strategy.refine_stop_iter: 35000
-        opacity_reg: 0.01
-        scale_reg: 0.01
-      cap_max:
-        policy: fixed
-        value: 3500000
+        policy: match_baseline  # = số Gaussian cuối của lượt default cùng cảnh, cùng seed, cùng protocol (không có số cố định)
+    # Chế độ của riêng bạn: thêm vào đây rồi gọi bash scripts/run_train.sh custom <cảnh> <tên>, ví dụ
+    #   mcmc_or001:
+    #     description: "mcmc, opacity_reg 0.001"
+    #     preset: mcmc                        # default | mcmc
+    #     args: {opacity_reg: 0.001}          # tham số của simple_trainer.py (khóa protocol không đặt ở đây)
+    #     cap_max: {policy: match_baseline}   # hoặc {policy: fixed, value: 2000000}
+    # Thêm protocol: {max_steps: 40000} để đổi protocol (bị ghi là sai khác; match_baseline khi đó cần lượt default
+    # cùng protocol). Đổi cho một lượt thì không cần sửa file này: --set / --protocol / --cap-max kèm TAG
+    # (docs/design/training_modes.md mục 3).

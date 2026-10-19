@@ -12,7 +12,7 @@ _Cập nhật: 19/10/2026_
    - cảnh tự chụp (thư mục ảnh hoặc video) qua ô 8 của notebook;
    - benchmark qua ô 7, ví dụ chạy lại Deep Blending bằng repo này: B0 Inria rồi gsplat `default` / `mcmc`, seed 42. Cả chạy thử, B0 và gsplat khoảng 2,4 giờ GPU trên RTX 4090: **chỉ chạy khi đã duyệt chi phí**.
 
-**Repo này:** lịch sử bắt đầu ngày 19/10/2026 bằng một commit chứa toàn bộ cấu trúc mới (D7–D9); D10 là thay đổi sau commit đó. **Chưa chạy trên pod nào.** Mọi số liệu GPU dưới đây là của repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`), chạy ngày 17/10/2026 trên volume cũ.
+**Repo này:** lịch sử bắt đầu ngày 19/10/2026 bằng một commit chứa toàn bộ cấu trúc mới (D7–D9); D10, D11 là các thay đổi sau commit đó. **Chưa chạy trên pod nào.** Mọi số liệu GPU dưới đây là của repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`), chạy ngày 17/10/2026 trên volume cũ.
 
 ## Quy ước trạng thái
 
@@ -33,6 +33,7 @@ Chỉ mức cuối cùng mới được tính là hoàn thành.
 | D8 | 19/10/2026 | Bố cục `/workspace`: code ở `SpatialRoom3D/`; `data/` chỉ chứa dữ liệu gốc (`custom_scenes/<cảnh>/`, `benchmarks/{deep_blending,mipnerf360}/`; `downloads/` bỏ theo D10); `outputs/` chứa mọi thứ sinh ra (`custom_scenes/<cảnh>/{colmap,<chế_độ>_s<seed>}/`, `benchmarks/<benchmark>/{inria_b0,gsplat,gsplat_quick}/`, `checkpoints/`, `logs/`, `reports/`, `jobs/`) | Theo sơ đồ của bạn. `docs/design/architecture.md` mục 2 |
 | D9 | 19/10/2026 | Repo GitHub mới `truong0809/SpatialRoom3D` (private), lịch sử bắt đầu bằng một commit; repo cũ giữ làm lưu trữ, không sửa. Pod mới + volume mới: cài lại từ đầu, đưa lại dữ liệu (D10: bạn tự đưa lên), chạy lại B0 + gsplat bằng code mới khi được duyệt GPU. Bỏ phần dời dữ liệu của volume cũ và mọi phần tương thích bố cục cũ | Theo ba lựa chọn của bạn ngày 19/10/2026 |
 | D10 | 19/10/2026 | Repo không tải dữ liệu nào: bỏ hẳn bước tải, kiểm tra SHA-256 gói tải về, giải nén và dời dữ liệu (cả mục `source` trong `configs/*.yaml` và thư mục `data/downloads/`). `scripts/pod/run_all.sh` (ô 4) chỉ cài / kiểm tra môi trường, không train. Chạy với dữ liệu nào (cảnh tự chụp, Deep Blending, Mip-NeRF 360) do người dùng chọn (ô 7, ô 8); thiếu dữ liệu thì dừng trước khi train và báo chỗ cần đặt. Không luồng nào còn `required: true` (trước đây Deep Blending là bắt buộc): ô 6 chỉ báo "chưa có". `env_probe.sh` không còn thử kết nối tới máy chủ dữ liệu của Inria | Theo yêu cầu của bạn ngày 19/10/2026 ("base cài set up môi trường thôi, còn chạy với data nào để t tự quyết"). Bỏ lệnh `baseline` của CLI và ô "Baseline Deep Blending" của notebook. Repo không còn kiểm tra tổng kiểm dữ liệu benchmark: ô 6 chỉ kiểm tra bố cục và số ảnh |
+| D11 | 19/10/2026 | Chỉ còn hai chế độ huấn luyện `default` và `mcmc`: bỏ chế độ `mcmc_demo` (tham số notebook demo: 40.000 vòng, antialiased, `cap_max` cố định 3.500.000). `mcmc` không có số Gaussian cố định: `cap_max` luôn bằng số Gaussian cuối của lượt `default` tương ứng. Đổi tham số khi cần: `--set` / `--protocol` / `--cap-max` kèm `TAG`, hoặc tự thêm chế độ có tên vào `configs/base.yaml` (giữ cơ chế `cap_max` cố định cho trường hợp này) | Theo yêu cầu của bạn ngày 19/10/2026. `mcmc_demo` không luồng nào tự chạy, khác protocol nên không vào bảng so sánh công bằng, và `cap_max` 3,5 triệu chưa có cơ sở. Không đổi `default`, `mcmc`, protocol hay kết quả đã có. Cách đổi tham số: `docs/design/training_modes.md` mục 3, `docs/USAGE_GUIDE.md` mục 3.7 |
 
 ## Đề xuất chờ xác nhận
 
@@ -93,7 +94,7 @@ Các lượt dưới đây chạy bằng repo trước, trên volume cũ, với 
 
 ### Kiểm thử trong sandbox (không GPU)
 
-**Repo này, 19/10/2026 (lượt cuối: sau thay đổi D10):**
+**Repo này, 19/10/2026** (pytest, shellcheck, pyflakes: lượt cuối sau D11; mô phỏng notebook: lượt sau D10, D11 không đổi notebook hay script chạy trên pod ngoài một dòng chú thích của `train_scene.sh`):
 - **pytest:** 245 test đều qua trên bốn môi trường: Python 3.13.16 với numpy 2.5.4 / opencv 4.11.0.86; Python 3.13.16 và 3.10.20 cài đúng `requirements.txt` (numpy 2.2.6, opencv 5.0.0.93 như env `gs-inria`); Python 3.10.20 với numpy 1.26.4 / opencv 4.11.0.86 như env `gs-gsplat`. Không test nào bị bỏ qua (máy có `colmap`, `ffmpeg`). Commit đầu `f5b1216` có 251 test; D10 bỏ các test của phần tải / giải nén và của các bước benchmark trong `run_all.sh`, thêm test "thiếu dữ liệu thì dừng trước khi train, không tải gì".
 - **shellcheck** 0.11.0 (`scripts/*.sh scripts/*/*.sh`) và **pyflakes** (`src app tests scripts/setup/*.py`): sạch.
 - **Notebook** (`app/notebooks/runpod.ipynb`) trên `/workspace` giả, pod mới, volume trống. GitHub được thay bằng một bare repo cục bộ, `ssh` và `curl` là stub (không kết nối mạng; mọi lần gọi `curl` được ghi lại), không GPU, không conda. **54/54 kiểm tra đạt**:
@@ -172,7 +173,6 @@ Số điểm 3D lệch nhẹ giữa các lượt vì COLMAP chạy nhiều luồ
 - Chưa đăng ký quyền truy cập ScanNet++.
 - Đoạn quay kiểm tra riêng: `src.training.run --test-list` đã hỗ trợ cho gsplat. Còn thiếu bước đưa frame của đoạn kiểm tra vào cùng model COLMAP với video chính (`scripts/pipeline/prepare_scene.sh`, mốc M4).
 - `opacity_reg` của MCMC trên Deep Blending: paper dùng 0,001, config chính chủ chỉ đặt cho `drjohnson`. Benchmark Deep Blending dùng 0,001 cho cả hai cảnh (`benchmark.gsplat.mcmc_set` trong `configs/deep_blending.yaml`); cần ghi rõ khi báo cáo.
-- `cap_max` của chế độ `mcmc_demo` (3,5 triệu) chưa có cơ sở; chỉ dùng để đối chiếu với demo.
 - COLMAP: chưa đo thời gian với video hay ảnh thật trên pod. Matcher mặc định là `exhaustive` như `convert.py` của Inria (250 frame ≈ 31.000 cặp ảnh); nếu quá chậm trên CPU thì thử `COLMAP_ARGS="--matcher sequential --loop-detection"` và so sánh tỉ lệ đăng ký.
 - `configs/environment/*.conf` vẫn để `provisional` (`run_all.sh` đặt `ALLOW_PROVISIONAL=1`). Điều kiện để chốt (B0 đạt, smoke test của `gs-gsplat` PASSED trên pod) đã có từ 17/10/2026 với repo trước; chưa sửa file.
 

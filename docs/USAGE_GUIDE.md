@@ -171,6 +171,23 @@ Bị từ chối, kèm hướng dẫn chụp thêm. Pipeline 3DGS nhiều góc n
 - Với video, frame test nằm xen giữa các frame train nên điểm số lạc quan (`docs/PROJECT_PLAN.md` mục 4.2).
 - Với ảnh chụp, các ảnh cách nhau xa hơn, nhưng vẫn là ảnh của cùng lượt chụp.
 
+### 3.7 Đổi tham số train
+
+Ô 8 và `run_scene.sh` (mặc định) chạy hai lượt chuẩn: `default`, rồi `mcmc` với `cap_max` bằng số Gaussian cuối của `default` (không có số cố định). Muốn thử tham số khác, sau khi cảnh đã có COLMAP, chạy trong terminal của Jupyter. `TAG` cho mỗi lượt một thư mục riêng `<chế_độ>_<TAG>_s<seed>`, lượt chuẩn không bị ghi đè:
+
+```bash
+cd /workspace/SpatialRoom3D
+TAG=or001 BASELINE_TAG= bash scripts/run_train.sh custom phong1 mcmc -- --set opacity_reg=0.001       # chỉ đổi mcmc
+TAG=40k bash scripts/run_train.sh custom phong1 default mcmc -- --protocol max_steps=40000            # đổi protocol cho cả hai
+TAG=cap2m bash scripts/run_train.sh custom phong1 mcmc -- --cap-max 2000000                          # tự đặt số Gaussian
+```
+
+- `--set`: tham số của chế độ (vd. `opacity_reg`, `strategy.refine_stop_iter`). `--protocol`: `max_steps`, `antialiased`... (bị ghi là sai khác protocol). Mọi thay đổi được ghi vào `run_meta.json`.
+- Chạy nền: thêm `bash scripts/pod/job.sh start <tên_việc> --` trước `bash scripts/run_train.sh ...`.
+- Bảng `bash scripts/run_evaluate.sh custom phong1` có cả biến thể `--set` (vd. `mcmc[opacity-reg=0.001]`); lượt đổi protocol chỉ hiện khi lập bảng với `--include-deviating` (`docs/design/training_modes.md` mục 6).
+- Dùng lại nhiều lần: thêm một chế độ có tên vào `configs/base.yaml` (mẫu trong chú thích của file), sửa trong repo rồi commit, không sửa trên pod.
+- Không chọn tham số theo điểm trên ảnh test (`docs/design/training_modes.md` mục 4.2).
+
 ## 4. Mô hình 3D: xuất PLY, render lại
 
 Mỗi lượt train đã có sẵn ảnh test, video quỹ đạo (`videos/traj_<bước>.mp4`) và file PLY (`ply/point_cloud_<bước>.ply`, định dạng PLY của gsplat cho 3DGS) do bước đánh giá của gsplat ghi ra.

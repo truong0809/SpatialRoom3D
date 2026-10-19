@@ -58,19 +58,20 @@ def test_unfair_runs_are_flagged(tmp_path):
     write_run(tmp_path, "room", "mcmc", 42, 30.5, split="other", gpu="RTX 4090")
     write_run(tmp_path, "room", "mcmc", 43, 30.4)
     deviation = {"max_steps": {"base": 30000, "used": 40000, "source": "mode"}}
-    write_run(tmp_path, "room", "mcmc_demo", 42, 31.0, count=3_500_000, deviations=deviation,
+    # chế độ tự thêm có protocol riêng (40.000 vòng) và số Gaussian cố định
+    write_run(tmp_path, "room", "mcmc_40k", 42, 31.0, count=3_500_000, deviations=deviation,
               protocol={**PROTOCOL, "max_steps": 40000})
-    report = build_report(discover([tmp_path]), "default", ["default", "mcmc", "mcmc_demo"])
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc", "mcmc_40k"])
     mcmc = checks(report, "room", "mcmc")
     assert mcmc["split"] == "DIFF" and mcmc["gpu"] == "DIFF" and mcmc["protocol"] == "OK"
     assert mcmc["seeds"] == "DIFF"  # baseline [42], mcmc [42, 43]
     assert "chưa đủ điều kiện: split=DIFF, gpu=DIFF, seeds=DIFF" in format_markdown(report)
     # lượt sai khác protocol bị loại mặc định, không trộn vào bảng
-    assert report["excluded"][0]["variant"] == "mcmc_demo{max_steps=40000}"
-    assert "mcmc_demo" not in json.dumps(report["scenes"])
-    report = build_report(discover([tmp_path]), "default", ["default", "mcmc_demo"], include_deviating=True)
-    demo = checks(report, "room", "mcmc_demo{max_steps=40000}")
-    assert demo["protocol"] == "DIFF" and demo["gaussian_budget"] == "UNEQUAL"
+    assert report["excluded"][0]["variant"] == "mcmc_40k{max_steps=40000}"
+    assert "mcmc_40k" not in json.dumps(report["scenes"])
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc_40k"], include_deviating=True)
+    custom = checks(report, "room", "mcmc_40k{max_steps=40000}")
+    assert custom["protocol"] == "DIFF" and custom["gaussian_budget"] == "UNEQUAL"
 
 
 def test_mode_arguments_make_separate_variants(tmp_path):

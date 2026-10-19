@@ -8,7 +8,7 @@
 # Vi du:
 #   bash scripts/pipeline/train_scene.sh phong01 default      # baseline
 #   bash scripts/pipeline/train_scene.sh phong01 mcmc         # tu lay so Gaussian cuoi cua lan chay default cung canh
-#   bash scripts/pipeline/train_scene.sh phong01 mcmc_demo    # tham so cua notebook demo (khong vao so sanh cong bang)
+#   TAG=or001 BASELINE_TAG= bash scripts/pipeline/train_scene.sh phong01 mcmc --set opacity_reg=0.001   # doi tham so mcmc
 #   TAG=thu bash scripts/pipeline/train_scene.sh phong01 default --protocol max_steps=3000   # chay thu nhanh
 #
 # Bien tuy chon:

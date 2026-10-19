@@ -31,7 +31,7 @@ SpatialRoom3D/
 │   ├── utils/                     gpu_lock.py: khóa GPU dùng chung với script bash
 │   └── __init__.py
 ├── configs/
-│   ├── base.yaml                  phần chung: code_dir, danh sách luồng, train_modes (protocol + default / mcmc / mcmc_demo)
+│   ├── base.yaml                  phần chung: code_dir, danh sách luồng, train_modes (protocol + default / mcmc)
 │   ├── custom_scene.yaml          cảnh tự chụp: nguồn, nơi lưu COLMAP và kết quả
 │   ├── mipnerf360.yaml            Mip-NeRF 360: dữ liệu, kết quả, mục benchmark (protocol, số liệu công bố, ngưỡng)
 │   ├── deep_blending.yaml         Deep Blending: như trên
