@@ -80,7 +80,7 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 ```
 /workspace/
 ├── SpatialRoom3D/                  code (repo Git, clone bằng deploy key: docs/ENVIRONMENT_AUDIT.md mục 2)
-├── data/                           CHỈ dữ liệu gốc, do người dùng tự đưa lên: pipeline không tải, không ghi vào (ngoại lệ duy nhất: mục 3)
+├── data/                           CHỈ dữ liệu gốc, do người dùng tự đưa lên: pipeline không ghi vào (ngoại lệ duy nhất: mục 3)
 │   ├── custom_scenes/<cảnh>/         ảnh JPG/JPEG/PNG tự chụp (nằm thẳng trong thư mục), hoặc file video
 │   └── benchmarks/
 │       ├── deep_blending/{drjohnson,playroom}/
@@ -149,7 +149,7 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
     ```
     Tên luồng không có trong `configs/base.yaml` thì báo lỗi (không bỏ qua lặng lẽ);
   - hoặc đặt biến môi trường `SR3D_DATA_MIPNERF360=/workspace/data/MipNeRF360`. Biến môi trường thắng file cục bộ.
-- Không tải dữ liệu: repo không có bước tải, giải nén hay dời dữ liệu nào. Người dùng tự đưa dữ liệu lên đúng thư mục gốc trong cấu hình (hoặc trỏ cấu hình tới chỗ đã có, như trên). Thiếu thì script benchmark dừng trước khi train, báo `dataset not found` kèm thư mục và các cảnh cần có (`locate_dataset` trong `scripts/lib/benchmark.sh`).
+- Dữ liệu do người dùng tự đưa lên đúng thư mục gốc trong cấu hình (hoặc trỏ cấu hình tới chỗ đã có, như trên). Thiếu thì script benchmark dừng trước khi train, báo `dataset not found` kèm thư mục và các cảnh cần có (`locate_dataset` trong `scripts/lib/benchmark.sh`).
 
 ## 6. Pod mới, đổi GPU, chạy lại
 

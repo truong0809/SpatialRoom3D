@@ -3,7 +3,7 @@
 
 kind: benchmark
 required: false
-# Dữ liệu do bạn tự đưa lên (repo không tải gì): <root>/<cảnh>/ có images/, images_2/, images_4/, sparse/0/.
+# Dữ liệu do bạn tự đưa lên: <root>/<cảnh>/ có images/, images_2/, images_4/, sparse/0/.
 # 360_v2.zip của Mip-NeRF 360 có 7 cảnh; flowers và treehill nằm trong gói riêng. Chạy một phần cảnh: SCENES="room counter".
 root: ${WS}/data/benchmarks/mipnerf360
 scenes: [room, counter, kitchen, bonsai, bicycle, garden, stump, flowers, treehill]

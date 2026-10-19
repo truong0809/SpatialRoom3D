@@ -48,7 +48,6 @@ Giá trị dưới đây đọc từ cấu hình mà `simple_trainer.py` thật 
   - `--protocol khóa=giá_trị`: đổi protocol (`max_steps`, `antialiased`...). Bị ghi là sai khác; muốn so thì chạy cả `default` và `mcmc` với cùng `TAG` và cùng protocol (`mcmc` lấy ngân sách từ `default_<TAG>`);
   - `--cap-max N`: đặt tay số Gaussian cho `mcmc`.
 - Dùng lại nhiều lần: thêm một chế độ có tên vào `train_modes.modes` (mẫu ghi trong chú thích của `configs/base.yaml`): `preset`, `args`, tùy chọn `protocol`, và `cap_max` theo `match_baseline` hoặc `fixed`. Sửa trong repo rồi commit, không sửa trên pod (ô 3 của notebook sẽ không cập nhật được code).
-- Cấu hình của notebook demo (40.000 vòng, antialiased, `refine_stop_iter` 35.000, `cap_max` 3.500.000) không còn là chế độ riêng (chế độ `mcmc_demo` bỏ ngày 19/10/2026, D11). Cần đối chiếu với demo thì chạy lại bằng các cách trên.
 
 ## 4. Giao thức so sánh
 
@@ -178,7 +177,7 @@ Các dòng ghi ngày 09/10/2026 là kiểm tra của repo trước, trên cùng 
 |---|---|---|
 | Logic cấu hình, split, điều phối, tổng hợp, so sánh | Đã kiểm thử (CPU) | Repo trước, 09/10/2026: 41 test mới (tổng 66). Repo này, 19/10/2026: `tests/unit/test_train_*.py`, `test_gsplat_launcher.py`, `test_gsplat_results.py`, `test_compare_modes.py` (số test và kết quả lượt chạy gần nhất: `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox"). Dùng gsplat giả lập và runner giả |
 | File khóa phụ thuộc | Đã chạy (CPU), repo trước | Trong sandbox ngày 09/10/2026: cài vào Python 3.10 cùng torch 2.7.1 (PyPI). `examples/simple_trainer.py` của gsplat `6e8c837` import được |
-| Tham số sinh ra so với `simple_trainer.py` thật | Đã chạy (CPU), repo trước, 09/10/2026 | Launcher `--resolve-only` cho `default`, `mcmc`, `mcmc_demo` (huấn luyện và đánh giá; `mcmc_demo` đã bỏ ngày 19/10/2026). Strategy, `cap_max`, `max_steps`, `eval_steps [-1]`, `lpips_net`, antialiased ra đúng như mục 3 |
+| Tham số sinh ra so với `simple_trainer.py` thật | Đã chạy (CPU), repo trước, 09/10/2026 | Launcher `--resolve-only` cho các chế độ (huấn luyện và đánh giá). Strategy, `cap_max`, `max_steps`, `eval_steps [-1]`, `lpips_net`, antialiased ra đúng như mục 3 |
 | Áp tập test và seed lên `Parser`/`Dataset` thật | Đã chạy (CPU), repo trước, 09/10/2026 | Cảnh COLMAP tổng hợp 17 ảnh, đọc bằng fork pycolmap thật. Quy tắc mỗi ảnh thứ 8 và danh sách cho trước đều cho đúng tập ảnh; seed 42 → 7 đúng. Bản dữ liệu đã lọc điểm (`data/`) đọc được: 185/272 điểm |
 | Gói gsplat đang cài trùng mã nguồn checkout | Đã chạy (CPU), repo trước, 09/10/2026 | Launcher so SHA-256 của `strategy/{default,mcmc,ops}.py` và `rendering.py`; bản cài từ checkout `6e8c837` khớp. Test giả lập cho trường hợp lệch |
 | Rà soát độc lập | Đã làm (repo trước, 09/10/2026) | Một lượt rà soát riêng (không tham gia viết code) đã chỉ ra 4 vấn đề lớn: bỏ qua lượt chạy khác cấu hình; trộn các biến thể khi so sánh; điểm SfM chỉ có nhờ ảnh test; đối chiếu với số công bố thay vì với B0 tự chạy. Cả 4 vấn đề đã được sửa, kèm test; các góp ý nhỏ đã được sửa hoặc ghi thành quy tắc ở mục 4 |

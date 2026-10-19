@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# prepare_benchmark.sh - Kiem tra du lieu mot benchmark (deep_blending | mipnerf360) da dua len, KHONG dung GPU,
-# KHONG tai hay giai nen gi (du lieu do nguoi dung tu dua len):
+# prepare_benchmark.sh - Kiem tra du lieu mot benchmark (deep_blending | mipnerf360) do nguoi dung da dua len,
+# KHONG dung GPU:
 #   1. du lieu phai nam o cho configs/<benchmark>.yaml ghi (root, ghi de duoc bang configs/local.yaml / SR3D_DATA_*);
 #   2. kiem tra bo cuc tung canh: images/, sparse/0/ va images_<N>/ khi benchmark dung anh thu nho.
 # Thuong goi qua: bash scripts/prepare_data.sh <benchmark>

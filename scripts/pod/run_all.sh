@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_all.sh - Cai / kiem tra MOI TRUONG tren pod Runpod (khong train, khong chay benchmark, khong tai du lieu nao):
+# run_all.sh - Cai / kiem tra MOI TRUONG tren pod Runpod (khong train, khong chay benchmark):
 #              kiem tra may -> env gs-inria (3DGS goc) -> env gs-tools (COLMAP, ffmpeg) -> env gs-gsplat -> dong goi log.
 #              Chay voi du lieu nao (canh tu chup, Deep Blending, Mip-NeRF 360) do nguoi dung tu quyet sau do:
 #              scripts/run_train.sh, scripts/pod/run_scene.sh (docs/USAGE_GUIDE.md).

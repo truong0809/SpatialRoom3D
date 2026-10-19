@@ -3,7 +3,7 @@
 
 kind: benchmark
 required: false  # không luồng nào bắt buộc: chạy với dữ liệu nào do bạn chọn, chưa đưa lên thì bước kiểm tra chỉ báo "chưa có"
-# Dữ liệu do bạn tự đưa lên (repo không tải gì): <root>/drjohnson/, <root>/playroom/, mỗi cảnh có images/ và sparse/0/
+# Dữ liệu do bạn tự đưa lên: <root>/drjohnson/, <root>/playroom/, mỗi cảnh có images/ và sparse/0/
 # (thư mục db/ trong tandt_db.zip của Inria). Để chỗ khác thì ghi đè root bằng configs/local.yaml hoặc SR3D_DATA_DEEP_BLENDING.
 root: ${WS}/data/benchmarks/deep_blending
 scenes: [drjohnson, playroom]

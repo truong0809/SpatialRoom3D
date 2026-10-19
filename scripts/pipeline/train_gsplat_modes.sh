@@ -16,7 +16,7 @@
 #   SEEDS="42"     vd. SEEDS="42 43 44" de chay lap (docs/PROJECT_PLAN.md muc 4.2)
 #   SCENES="..."   chi chay cac canh nay (mac dinh: moi canh trong configs/<benchmark>.yaml)
 #   MCMC_SET=...   tham so them cho mcmc, mac dinh benchmark.gsplat.mcmc_set (Deep Blending: opacity_reg=0.001)
-#   WS=/workspace  ENV_NAME=gs-gsplat  CONFIG=<file JSON>   (du lieu phai co san, khong tai gi)
+#   WS=/workspace  ENV_NAME=gs-gsplat  CONFIG=<file JSON>   (du lieu phai co san)
 #   OUT_ROOT, B0_ROOT   mac dinh lay tu configs/<benchmark>.yaml (results.gsplat | gsplat_quick, results.inria_b0):
 #                       $WS/outputs/benchmarks/<benchmark>/{gsplat,gsplat_quick,inria_b0}
 # Ket qua: $OUT_ROOT/<canh>/<che_do>_s<seed>/; log va bao cao: $WS/outputs/logs, $WS/outputs/reports/modes_<tag>[_quick]_<thoi gian>.*

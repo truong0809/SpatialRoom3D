@@ -11,7 +11,7 @@
 
 set -u
 
-SCRIPT_VERSION="4"  # 4: bo kiem tra host du lieu cua Inria (repo khong tai du lieu nao)
+SCRIPT_VERSION="4"
 OUT_DIR="${OUT_DIR:-${WS:-/workspace}/outputs/reports}"
 mkdir -p "$OUT_DIR" || { echo "Cannot create $OUT_DIR" >&2; exit 1; }
 OUT="$OUT_DIR/env_$(date +%Y%m%d_%H%M%S).txt"
@@ -141,7 +141,7 @@ PYEOF
   awk '$2=="/workspace" {print $2, $3}' /proc/mounts 2>/dev/null | grep . \
     || echo "(no separate mount for /workspace)"
 
-  section "Internet access (needed for code and packages; the repo downloads no datasets)"
+  section "Internet access (needed for code and packages)"
   # github / gitlab.inria.fr: source code; pypi / pytorch / conda: packages.
   net_bad=""
   if command -v curl >/dev/null 2>&1; then

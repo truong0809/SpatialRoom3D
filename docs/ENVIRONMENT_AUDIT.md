@@ -16,7 +16,7 @@ Bố cục (chi tiết và ba luồng dữ liệu: `docs/design/architecture.md`
 ├── miniforge3/               # conda (Miniforge) + env gs-inria (3DGS) + env gs-tools (COLMAP, ffmpeg) + env gs-gsplat
 ├── data/                     # chỉ dữ liệu gốc, pipeline không ghi vào (ngoại lệ: docs/design/architecture.md mục 3)
 │   ├── custom_scenes/<cảnh>/ # ảnh / video tự chụp
-│   └── benchmarks/           # deep_blending/, mipnerf360/ (bạn tự đưa lên; repo không tải dữ liệu nào)
+│   └── benchmarks/           # deep_blending/, mipnerf360/ (bạn tự đưa lên)
 ├── outputs/                  # mọi thứ sinh ra
 │   ├── custom_scenes/<cảnh>/ # colmap/ (ảnh đã chuẩn hóa, COLMAP, báo cáo) + <chế_độ>_s<seed>/ (các lượt train)
 │   ├── benchmarks/<benchmark>/   # inria_b0/, gsplat/, gsplat_quick/
@@ -90,7 +90,7 @@ Biến thể tạm chọn `cu128` cần driver hỗ trợ CUDA ≥ 12.8 (dòng d
 
 ## 4. Cài đặt và kiểm tra
 
-Cách gọn nhất là `bash scripts/pod/run_all.sh --background` (ô 4 của notebook, mục 4.2): chỉ cài / kiểm tra môi trường, không train, không tải dữ liệu. Từng script riêng:
+Cách gọn nhất là `bash scripts/pod/run_all.sh --background` (ô 4 của notebook, mục 4.2): chỉ cài / kiểm tra môi trường, không train. Từng script riêng:
 
 ```bash
 cd /workspace/SpatialRoom3D
@@ -143,7 +143,7 @@ bash scripts/pod/pack_results.sh                                    # gói kết
 bash scripts/pod/check_datasets.sh                                  # dữ liệu Deep Blending / Mip-NeRF 360 / cảnh (chỉ đọc)
 ```
 
-Thứ tự bước của `run_all.sh`: `env_probe` → `setup_inria` → `data_tools` → `setup_gsplat` → `pack`. Nó không train, không chạy benchmark và không tải dữ liệu: chạy với dữ liệu nào (cảnh tự chụp, Deep Blending, Mip-NeRF 360) do người dùng quyết định sau đó, bằng `scripts/pod/run_scene.sh` hoặc `scripts/run_train.sh` (`docs/USAGE_GUIDE.md` mục 3 và 5). `env_probe` có `[FAIL]` thì dừng cả lượt, không cài gì; một bước cài đặt lỗi không chặn các bước còn lại. Tóm tắt từng bước ghi vào `outputs/reports/run_all_<thời gian>.tsv`. Các biến tùy chọn (`TORCH_CUDA_OVERRIDE`, `MAX_JOBS`, `COLMAP_BUILD_OVERRIDE`, `SKIP`, `AUTO_STOP`) ghi ở đầu script. Tham số `--setup-only` của notebook cũ vẫn được nhận và không đổi gì.
+Thứ tự bước của `run_all.sh`: `env_probe` → `setup_inria` → `data_tools` → `setup_gsplat` → `pack`. Nó không train, không chạy benchmark: chạy với dữ liệu nào (cảnh tự chụp, Deep Blending, Mip-NeRF 360) do người dùng quyết định sau đó, bằng `scripts/pod/run_scene.sh` hoặc `scripts/run_train.sh` (`docs/USAGE_GUIDE.md` mục 3 và 5). `env_probe` có `[FAIL]` thì dừng cả lượt, không cài gì; một bước cài đặt lỗi không chặn các bước còn lại. Tóm tắt từng bước ghi vào `outputs/reports/run_all_<thời gian>.tsv`. Các biến tùy chọn (`TORCH_CUDA_OVERRIDE`, `MAX_JOBS`, `COLMAP_BUILD_OVERRIDE`, `SKIP`, `AUTO_STOP`) ghi ở đầu script.
 
 `run_scene.sh` dùng lại mô hình COLMAP đã có của cảnh (không đọc lại video hay ảnh); `--redo-colmap` làm lại bước ảnh đầu vào và COLMAP. Đầu vào là ảnh thì không chọn frame; các kiểm tra và gợi ý trước khi train: `docs/USAGE_GUIDE.md` mục 3.4. COLMAP ghi `FAIL` thì không train. Lượt train OK cũ được train lại khi nó làm từ dữ liệu cũ (`src.training.run --replace-stale`): mô hình COLMAP của cảnh đã đổi (dấu SHA-256 của `sparse/0`), hoặc với `mcmc`, chỉ ngân sách Gaussian khác vì lượt `default` đã train lại. Việc so sánh dựa trên `run_meta.json`, nên vẫn đúng khi lượt trước bị dừng giữa chừng. Lượt cũ khác ở cấu hình do người chạy chọn (seed, protocol, tham số chế độ, `--test-list`, `--cap-max`) thì báo lỗi; `run_scene.sh --retrain` train lại mọi chế độ. Thư mục cũ được đổi tên `<thư_mục>.prev_<thời gian>`, không xóa. `scripts/pipeline/train_gsplat_modes.sh` dùng cùng cơ chế cho `mcmc`.
 
@@ -192,7 +192,7 @@ ALLOW_PROVISIONAL=1 bash scripts/setup/setup_gsplat.sh   # 9 bước như setup_
 # ô 2: khóa deploy (mục 2), thêm khóa công khai vào GitHub; ô 3: clone
 GIT_SSH_COMMAND="$SSH_CMD" git clone -b main git@github.com:truong0809/SpatialRoom3D.git /workspace/SpatialRoom3D
 cd /workspace/SpatialRoom3D
-bash scripts/pod/run_all.sh --background                # ô 4: chỉ cài môi trường (không train, không tải dữ liệu)
+bash scripts/pod/run_all.sh --background                # ô 4: chỉ cài môi trường (không train)
 bash scripts/pod/job.sh status                          # ô 5: theo dõi; log: bash scripts/pod/job.sh log run_all
 bash scripts/pod/check_datasets.sh                      # ô 6: kiểm tra dữ liệu bạn đã đưa lên (không cần GPU)
 bash scripts/pod/results.sh                             # kết quả; gói tải về: /workspace/ket_qua_*.tar.gz
@@ -216,7 +216,7 @@ Thời gian đo được ngày 17/10/2026 trên RTX 4090 (repo trước, cùng s
 
 ## 5. Mốc đối chiếu cho Bước 4
 
-Bước 4 tái lập kết quả trên **Deep Blending**: 2 cảnh trong nhà (playroom, drjohnson), Inria cung cấp sẵn dữ liệu COLMAP trong `tandt_db.zip` (thư mục `db/`). Repo không tải gói này: bạn tự đưa hai cảnh lên volume (`docs/USAGE_GUIDE.md` mục 2.1).
+Bước 4 tái lập kết quả trên **Deep Blending**: 2 cảnh trong nhà (playroom, drjohnson), Inria cung cấp sẵn dữ liệu COLMAP trong `tandt_db.zip` (thư mục `db/`). Bạn tự đưa hai cảnh lên volume (`docs/USAGE_GUIDE.md` mục 2.1).
 
 Số liệu Inria công bố cho code hiện hành (`results.md`, rasterizer mặc định, cấu hình gốc), trung bình 2 cảnh:
 
@@ -285,7 +285,7 @@ Nguồn: gói kết quả lúc 17:42 (`reports/run_all_20261017_154255.tsv`, `en
 | Mục | Giá trị |
 |---|---|
 | Pod | 1 × RTX 4090 24 GB (cc 8.9), cùng image; driver 580.126.20, hỗ trợ CUDA 13.0 (pod khác lượt đầu) |
-| `run_all.sh` | Cả 7 bước OK, tổng khoảng 2 giờ (bản `run_all.sh` của repo trước, gồm cả các bước benchmark) |
+| `run_all.sh` | Cả 7 bước OK, tổng khoảng 2 giờ |
 | Env `gs-inria` | Đã có, chỉ kiểm tra lại (3 phút) |
 | Env `gs-tools` | COLMAP 4.2.1 bản CUDA (`cuda_129`, vì driver ≥ 12.9), ffmpeg 9.0.2; 18 phút |
 | Env `gs-gsplat` | Smoke test **PASSED**; 7 phút |

@@ -10,7 +10,7 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
 - 9 cảnh: 4 trong nhà (room, counter, kitchen, bonsai), 5 ngoài trời (bicycle, garden, stump, flowers, treehill).
 - Kiểm tra (chỉ đọc): `bash scripts/pod/check_datasets.sh --dataset mipnerf360`; kiểm tra bố cục từng cảnh: `bash scripts/prepare_data.sh mipnerf360`.
 - Dữ liệu nằm chỗ khác hoặc tên khác (vd. `MipNeRF360`): tạo `configs/local.yaml`, hoặc đặt `SR3D_DATA_MIPNERF360=<đường dẫn>` (`docs/design/architecture.md` mục 5). Không cần sao chép dữ liệu.
-- **Repo không tải dữ liệu:** bạn tự đưa các cảnh lên chỗ trên. `360_v2.zip` của Mip-NeRF 360 có 7 cảnh; flowers và treehill nằm trong gói riêng của trang dự án. Thiếu cảnh hay thiếu `images_N/` thì lệnh dừng trước khi train; chỉ có một phần cảnh thì chạy với `SCENES="..."`.
+- Bạn tự đưa các cảnh lên chỗ trên. `360_v2.zip` của Mip-NeRF 360 có 7 cảnh; flowers và treehill nằm trong gói riêng của trang dự án. Thiếu cảnh hay thiếu `images_N/` thì lệnh dừng trước khi train; chỉ có một phần cảnh thì chạy với `SCENES="..."`.
 
 ## Protocol (đã đối chiếu mã nguồn)
 
@@ -36,7 +36,7 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
 
 ```bash
 cd /workspace/SpatialRoom3D
-bash scripts/prepare_data.sh mipnerf360                       # trước tiên: dữ liệu đã đưa lên phải báo OK (không tải gì)
+bash scripts/prepare_data.sh mipnerf360                       # trước tiên: dữ liệu đã đưa lên phải báo OK
 QUICK=1 bash scripts/run_train.sh mipnerf360 gsplat           # chạy thử 3.000 vòng
 bash scripts/run_train.sh mipnerf360 b0                       # B0 (9 cảnh; chạy trước gsplat để bảng đối chiếu đủ)
 bash scripts/run_train.sh mipnerf360 gsplat                   # default + mcmc, bảng so sánh

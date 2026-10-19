@@ -11,5 +11,5 @@
 Notebook này **không** thuộc pipeline và không được chạy trong repo. Nó được lưu để đối chiếu.
 
 - Kết quả kiểm tra và phân loại tái sử dụng / sửa / bỏ: [docs/research/demo_review.md](../../demo_review.md).
-- Phần huấn luyện MCMC của demo được tích hợp thành chế độ `mcmc` (cùng protocol, cùng số Gaussian với Default); bộ tham số riêng của demo chạy lại được bằng tham số dòng lệnh: [docs/design/training_modes.md](../../../design/training_modes.md).
+- Phần huấn luyện MCMC của demo được tích hợp thành chế độ `mcmc` (cùng protocol, cùng số Gaussian với Default): [docs/design/training_modes.md](../../../design/training_modes.md).
 - Chỉ số trong output của notebook (PSNR 39,97 dB, SSIM 0,982, LPIPS 0,037) **không** được dùng làm kết quả của đồ án: LPIPS tính bằng AlexNet, ảnh test xen kẽ trong cùng video và chỉ có một lần chạy, không có baseline trên cùng dữ liệu.

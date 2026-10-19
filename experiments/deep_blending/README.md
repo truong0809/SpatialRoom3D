@@ -3,7 +3,7 @@
 Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết quả nằm trên volume, không đưa lên Git (`.gitignore` chặn mọi file khác trong `experiments/<benchmark>/`).
 
 - **Cấu hình:** `configs/deep_blending.yaml` (dữ liệu, nơi lưu kết quả, mục `benchmark`: protocol, số liệu công bố, ngưỡng).
-- **Dữ liệu:** `$WS/data/benchmarks/deep_blending/{drjohnson,playroom}` (263 và 225 ảnh), mỗi cảnh có `images/` và `sparse/0/`: thư mục `db/` trong `tandt_db.zip` mà Inria cung cấp. **Repo không tải dữ liệu:** bạn tự đưa hai cảnh lên chỗ trên, hoặc trỏ cấu hình tới chỗ đã có (`configs/local.yaml` hoặc `SR3D_DATA_DEEP_BLENDING`, `docs/design/architecture.md` mục 5). Thiếu thì lệnh dừng trước khi train, báo `dataset not found`.
+- **Dữ liệu:** `$WS/data/benchmarks/deep_blending/{drjohnson,playroom}` (263 và 225 ảnh), mỗi cảnh có `images/` và `sparse/0/`: thư mục `db/` trong `tandt_db.zip` mà Inria cung cấp. Bạn tự đưa hai cảnh lên chỗ trên, hoặc trỏ cấu hình tới chỗ đã có (`configs/local.yaml` hoặc `SR3D_DATA_DEEP_BLENDING`, `docs/design/architecture.md` mục 5). Thiếu thì lệnh dừng trước khi train, báo `dataset not found`.
 - **Kết quả:** `$WS/outputs/benchmarks/deep_blending/{inria_b0,gsplat,gsplat_quick}/`; báo cáo `$WS/outputs/reports/{baseline_db_summary,modes_db,compare_db}_<thời_gian>.*`.
 - **Protocol:**
   - tập test cứ 8 ảnh lấy 1 (`--eval` của Inria = `test_every 8` của gsplat, cùng một tập; đã đối chiếu mã nguồn);
@@ -14,7 +14,7 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
 
 ```bash
 cd /workspace/SpatialRoom3D
-bash scripts/prepare_data.sh deep_blending                       # kiểm tra dữ liệu đã đưa lên (không tải, không dùng GPU)
+bash scripts/prepare_data.sh deep_blending                       # kiểm tra dữ liệu đã đưa lên (không dùng GPU)
 QUICK=1 bash scripts/run_train.sh deep_blending gsplat           # chạy thử 3.000 vòng
 bash scripts/run_train.sh deep_blending b0                       # B0 (chạy trước gsplat để bảng đối chiếu đủ)
 bash scripts/run_train.sh deep_blending gsplat                   # default + mcmc, bảng so sánh

@@ -52,7 +52,7 @@ registry_results() {  # registry_results <khoa>: thu muc ket qua cua benchmark (
     || { echo "ERROR: the registry has no results.$1 for $(read_cfg dataset) (see the error above)" >&2; exit 1; }
 }
 
-locate_dataset() {  # dat DATA_ROOT = thu muc goc cua benchmark trong configs/<benchmark>.yaml. KHONG tai, khong giai nen:
+locate_dataset() {  # dat DATA_ROOT = thu muc goc cua benchmark trong configs/<benchmark>.yaml
   # du lieu do nguoi dung tu dua len (moi canh mot thu muc co images/ va sparse/0/)
   local root
   root="$(registry_get root)" || die "cannot get the data folder of $(read_cfg dataset) from the registry (see the error above)"

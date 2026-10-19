@@ -83,14 +83,14 @@ Dữ liệu và kết quả nằm trên network volume, ngoài repo, không đư
 └── outputs/                  custom_scenes/, benchmarks/, checkpoints/ (PLY đã xuất), logs/, reports/, jobs/
 ```
 
-Repo không tải dữ liệu nào: ảnh / video tự chụp và dữ liệu benchmark (Deep Blending, Mip-NeRF 360) do bạn tự đưa lên `data/`. Chạy với dữ liệu nào là do bạn chọn.
+Ảnh / video tự chụp và dữ liệu benchmark (Deep Blending, Mip-NeRF 360) do bạn tự đưa lên `data/` ([USAGE_GUIDE.md](USAGE_GUIDE.md) mục 2.1); chạy với dữ liệu nào là do bạn chọn.
 
 ## Chạy trên pod Runpod
 
 Cách dễ nhất: notebook `app/notebooks/runpod.ipynb`, các bước trong [USAGE_GUIDE.md](USAGE_GUIDE.md). Bằng lệnh, từ `/workspace/SpatialRoom3D`:
 
 ```bash
-bash scripts/pod/run_all.sh --background                      # pod mới: chỉ cài / kiểm tra môi trường (không train, không tải dữ liệu)
+bash scripts/pod/run_all.sh --background                      # pod mới: chỉ cài / kiểm tra môi trường (không train)
 bash scripts/pod/job.sh status                                # theo dõi việc chạy nền (log: bash scripts/pod/job.sh log <tên>)
 bash scripts/pod/check_datasets.sh                            # dữ liệu và kết quả của mọi luồng (chỉ đọc)
 bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong1 phong1 --background   # cả luồng cho một cảnh tự chụp
