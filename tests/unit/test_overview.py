@@ -28,7 +28,7 @@ def make_ws(tmp_path):
     reports = ws / "outputs" / "reports"
     write(reports / "run_all_20261017_100000.tsv",
           "# run_all 20261017_100000 | repo abc1234\n# step\tstatus\texit\tseconds\tnote\n"
-          "env_probe\tOK\t0\t5\t\nsetup_gsplat\tFAIL\t1\t70\t\nquick_test\tSKIP\t\t\tcần setup_gsplat thành công\n")
+          "env_probe\tFAIL\t1\t5\t\nsetup_inria\tSKIP\t\t\tcần env_probe thành công\n")
     write(reports / "baseline_db_summary_20261017_042824.json", {
         "scenes": [{"scene": "drjohnson", "status": "OK", "metrics": {"PSNR": 29.37, "SSIM": 0.905, "LPIPS": 0.236},
                     "train_seconds": 1405, "num_gaussians": 3105559},
@@ -72,7 +72,7 @@ def test_overview_shows_every_section(tmp_path):
     ws = make_ws(tmp_path)
     text = "\n".join(build(ws, None))
     assert "run_all (run_all_20261017_100000.tsv)" in text and "repo abc1234" in text
-    assert "setup_gsplat  LỖI (exit 1)" in text and "cần setup_gsplat thành công" in text
+    assert "env_probe     LỖI (exit 1)" in text and "cần env_probe thành công" in text
     assert "drjohnson" in text and "29.370" in text and "THIẾU KẾT QUẢ" in text and "INCOMPLETE" in text
     assert "Chạy thử gsplat 3000 vòng (modes_db_quick_20261017_110000.json): 2 lượt OK | OK" in text
     assert "| drjohnson | default |" in text

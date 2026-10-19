@@ -4,10 +4,12 @@ _Cập nhật: 19/10/2026_
 
 Mỗi benchmark có một file cấu hình `configs/<benchmark>.yaml` (dữ liệu, nơi lưu kết quả, mục `benchmark`: protocol, số liệu công bố, ngưỡng) và một thư mục `experiments/<benchmark>/` chỉ chứa `README.md` (protocol, lệnh, kết quả đã ghi nhận). Dữ liệu và kết quả nằm trên volume, không nằm trong `experiments/`.
 
+Repo không tải dữ liệu benchmark: bạn tự đưa các cảnh lên thư mục gốc trong cấu hình (`docs/USAGE_GUIDE.md` mục 2.1). Thiếu thì mọi lệnh dưới đây dừng trước khi train. Chạy benchmark nào, lúc nào là do bạn chọn.
+
 Các lệnh dùng chung cho mọi benchmark, từ thư mục gốc của repo:
 
 ```bash
-bash scripts/prepare_data.sh <benchmark>          # tìm / tải dữ liệu, kiểm tra bố cục từng cảnh (không dùng GPU)
+bash scripts/prepare_data.sh <benchmark>          # kiểm tra dữ liệu đã đưa lên: bố cục từng cảnh (không tải, không dùng GPU)
 bash scripts/run_train.sh <benchmark> b0          # B0: 3DGS gốc của Inria (commit 54c035f), như full_eval.py
 bash scripts/run_train.sh <benchmark> gsplat      # gsplat 6e8c837: default, rồi mcmc cùng số Gaussian; bảng so sánh
 bash scripts/run_evaluate.sh <benchmark>          # chỉ lập lại bảng so sánh từ kết quả đã có (không dùng GPU)
@@ -20,9 +22,8 @@ bash scripts/run_evaluate.sh <benchmark>          # chỉ lập lại bảng so 
 - `QUICK=1`: chạy thử 3.000 vòng, kết quả vào thư mục `gsplat_quick` riêng, không bao giờ trộn với lượt chuẩn.
 - `SCENES="room counter"`: chỉ chạy các cảnh này.
 - `MCMC_SET=...`: thay tham số riêng của mcmc (mặc định lấy `benchmark.gsplat.mcmc_set` trong `configs/<benchmark>.yaml`).
-- `DOWNLOAD=1`: cho phép tải dữ liệu khi cấu hình ghi không tự tải (Mip-NeRF 360).
 
-Chạy trên pod, sau khi môi trường đã sẵn sàng (`bash scripts/pod/run_all.sh --background --setup-only`). Chạy nền: `bash scripts/pod/job.sh start <tên> -- bash scripts/run_train.sh <benchmark> gsplat`, hoặc ô 11 của `app/notebooks/runpod.ipynb`. Mỗi lúc chỉ một việc dùng GPU.
+Chạy trên pod, sau khi môi trường đã sẵn sàng (`bash scripts/pod/run_all.sh --background`, chỉ cài môi trường). Chạy nền: `bash scripts/pod/job.sh start <tên> -- bash scripts/run_train.sh <benchmark> gsplat`, hoặc ô 7 của `app/notebooks/runpod.ipynb`. Mỗi lúc chỉ một việc dùng GPU. Chạy `b0` trước `gsplat`: bước so sánh cuối của `gsplat` (30.000 vòng) đối chiếu `default` với B0 từng cảnh, chưa có B0 thì phần đó là INCOMPLETE và việc kết thúc với exit 1 (các lượt train vẫn được giữ).
 
 Mỗi lần chạy, phần `benchmark` của `configs/<benchmark>.yaml` được ghi ra một bản JSON trong `$WS/outputs/reports/configs/` và script đọc bản đó (env `gs-inria` không có PyYAML). Bản JSON ở lại để đối chiếu sau này.
 

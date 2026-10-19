@@ -3,18 +3,12 @@
 
 kind: benchmark
 required: false
+# Dữ liệu do bạn tự đưa lên (repo không tải gì): <root>/<cảnh>/ có images/, images_2/, images_4/, sparse/0/.
+# 360_v2.zip của Mip-NeRF 360 có 7 cảnh; flowers và treehill nằm trong gói riêng. Chạy một phần cảnh: SCENES="room counter".
 root: ${WS}/data/benchmarks/mipnerf360
 scenes: [room, counter, kitchen, bonsai, bicycle, garden, stump, flowers, treehill]
 indoor_scenes: [room, counter, kitchen, bonsai]
 layout: [images, images_2, images_4, sparse/0]
-
-source:
-  urls:
-    - https://storage.googleapis.com/gresearch/refraw360/360_v2.zip
-  download_dir: ${WS}/data/downloads
-  extract_to: ${WS}/data/downloads/360_v2_extracted
-  auto_download: false
-  note: "360_v2.zip có 7 cảnh; flowers và treehill nằm trong gói riêng của trang dự án Mip-NeRF 360 (chưa xác minh đường dẫn). Không tự tải: đặt DOWNLOAD=1 khi thật sự cần"
 
 protocol:
   split: "cứ 8 ảnh lấy 1 làm test"

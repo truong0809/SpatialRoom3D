@@ -11,7 +11,7 @@
 
 set -u
 
-SCRIPT_VERSION="3"
+SCRIPT_VERSION="4"  # 4: bo kiem tra host du lieu cua Inria (repo khong tai du lieu nao)
 OUT_DIR="${OUT_DIR:-${WS:-/workspace}/outputs/reports}"
 mkdir -p "$OUT_DIR" || { echo "Cannot create $OUT_DIR" >&2; exit 1; }
 OUT="$OUT_DIR/env_$(date +%Y%m%d_%H%M%S).txt"
@@ -141,14 +141,12 @@ PYEOF
   awk '$2=="/workspace" {print $2, $3}' /proc/mounts 2>/dev/null | grep . \
     || echo "(no separate mount for /workspace)"
 
-  section "Internet access (needed for code, packages and datasets)"
-  # github / gitlab.inria.fr: source code; pypi / pytorch / conda: packages;
-  # repo-sam.inria.fr: Inria datasets and reference data.
+  section "Internet access (needed for code and packages; the repo downloads no datasets)"
+  # github / gitlab.inria.fr: source code; pypi / pytorch / conda: packages.
   net_bad=""
   if command -v curl >/dev/null 2>&1; then
     for url in https://github.com https://gitlab.inria.fr/bkerbl/simple-knn https://pypi.org/simple/ \
-               https://download.pytorch.org/whl/ https://conda.anaconda.org/conda-forge/ \
-               https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/; do
+               https://download.pytorch.org/whl/ https://conda.anaconda.org/conda-forge/; do
       code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null)" || code="fail"
       echo "$url -> $code"
       case "$code" in

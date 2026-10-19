@@ -10,7 +10,7 @@
 #       b0: 3DGS goc cua Inria, doi chieu so lieu cong bo               (scripts/pipeline/train_inria_b0.sh)
 #
 # Bien tuy chon: SEEDS="42 43 44" (benchmark), SEED=42 (canh tu chup), QUICK=1 (benchmark: 3000 vong), SCENES="..."
-# Can GPU va env da cai (bash scripts/pod/run_all.sh --setup-only). Luot da co cung cau hinh tu bo qua.
+# Can GPU va env da cai (bash scripts/pod/run_all.sh). Benchmark: du lieu phai co san, khong tai gi. Luot da co tu bo qua.
 # Chay nen, xep hang GPU: bash scripts/pod/job.sh start <ten> -- bash scripts/run_train.sh ...
 
 set -uo pipefail

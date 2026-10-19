@@ -1,7 +1,7 @@
 # Phụ thuộc Python để chạy kiểm thử và các lệnh không cần GPU trên một máy thường (Linux, Python 3.10–3.13):
 #   python -m pip install -r requirements.txt && python -m pytest
 #
-# Môi trường GPU trên pod KHÔNG cài từ file này: scripts/setup/*.sh (gọi qua scripts/pod/run_all.sh --setup-only)
+# Môi trường GPU trên pod KHÔNG cài từ file này: scripts/setup/*.sh (gọi qua scripts/pod/run_all.sh)
 # cài 3 env conda theo phiên bản ghim trong configs/environment/ (gs-inria, gs-tools, gs-gsplat).
 # numpy và opencv dưới đây giống bản ghim của env gs-inria (configs/environment/gs-inria.lock.txt), nơi
 # src/input/frames.py chạy trên pod; PyYAML giống bản trong env gs-gsplat.

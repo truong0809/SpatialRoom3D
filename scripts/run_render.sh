@@ -64,7 +64,7 @@ LOG="$WS/outputs/logs/render_${SCENE}_${RUN_NAME}_$(date +%Y%m%d_%H%M%S).log"
 exec > >(tee -a "$LOG") 2>&1
 echo "run: $RUN | trajectory: ${TRAJ:-interp} | log: $LOG"
 command -v nvidia-smi > /dev/null 2>&1 || die "nvidia-smi not found (no GPU visible)"
-[ -f "$WS/miniforge3/etc/profile.d/conda.sh" ] || die "Miniforge not found in $WS/miniforge3 - run bash scripts/pod/run_all.sh --setup-only"
+[ -f "$WS/miniforge3/etc/profile.d/conda.sh" ] || die "Miniforge not found in $WS/miniforge3 - run bash scripts/pod/run_all.sh"
 # shellcheck source=/dev/null
 . "$WS/miniforge3/etc/profile.d/conda.sh"
 set +u

@@ -80,12 +80,11 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 ```
 /workspace/
 ├── SpatialRoom3D/                  code (repo Git, clone bằng deploy key: docs/ENVIRONMENT_AUDIT.md mục 2)
-├── data/                           CHỈ dữ liệu gốc: pipeline không ghi vào (ngoại lệ duy nhất: mục 3)
+├── data/                           CHỈ dữ liệu gốc, do người dùng tự đưa lên: pipeline không tải, không ghi vào (ngoại lệ duy nhất: mục 3)
 │   ├── custom_scenes/<cảnh>/         ảnh JPG/JPEG/PNG tự chụp (nằm thẳng trong thư mục), hoặc file video
-│   ├── benchmarks/
-│   │   ├── deep_blending/{drjohnson,playroom}/
-│   │   └── mipnerf360/<cảnh>/
-│   └── downloads/                    file nén tải về (tandt_db.zip, ...)
+│   └── benchmarks/
+│       ├── deep_blending/{drjohnson,playroom}/
+│       └── mipnerf360/<cảnh>/
 ├── outputs/                        mọi thứ sinh ra
 │   ├── custom_scenes/<cảnh>/
 │   │   ├── colmap/                   ảnh đã chuẩn hóa (input/), COLMAP (images/, sparse/0/), frames_report.json, sfm_report.json
@@ -120,7 +119,7 @@ Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipne
 - Script benchmark không đọc cảnh tự chụp; mỗi benchmark ghi vào `outputs/benchmarks/<benchmark>/`.
 - **Ngoại lệ duy nhất:** B0 chạy `train.py` của Inria đúng như bản gốc. Lần đầu mở một cảnh, `train.py` tạo `sparse/0/points3D.ply` (chuyển từ `points3D.bin`) ngay trong thư mục dữ liệu nếu file này chưa có (`scene/dataset_readers.py` @54c035f). Bộ Mip-NeRF 360 không có sẵn file này. Dấu mô hình COLMAP chỉ tính trên các file `.bin`, nên không đổi. Không đổi cách gọi B0 để giữ đúng baseline đã tái lập.
 - gsplat với Mip-NeRF 360 (`data_factor` 2 / 4) đọc một bản xem dữ liệu gồm các liên kết, ghi ảnh PNG thu nhỏ vào `outputs/benchmarks/mipnerf360/gsplat/<cảnh>/.images_<N>_png_<dấu mô hình>/`, không ghi gì vào `data/`.
-- `run_all.sh` chỉ chạy Deep Blending. Với `--setup-only` nó không chạy benchmark nào.
+- `run_all.sh` chỉ cài / kiểm tra môi trường: không train, không chạy benchmark, không đọc luồng dữ liệu nào. Chạy luồng nào là do người dùng chọn.
 - Mỗi lượt train có thư mục riêng `<cảnh>/<chế_độ>_s<seed>`. Lượt cũ khác cấu hình không bị ghi đè: báo lỗi, hoặc đổi tên thành `.prev_<thời_gian>` khi được phép thay. Riêng B0: cảnh đã có `results.json` thì bỏ qua (không so cấu hình); `FORCE=1` chạy lại, lượt cũ được đổi tên `<cảnh>.prev_<thời_gian>`.
 - Render lại (`run_render.sh`) thêm một thư mục mới `render_<quỹ_đạo>_<thời_gian>/` trong lượt đó, không sửa file nào của lượt; dừng nếu mô hình COLMAP của cảnh đã đổi sau khi train. Xuất PLY không ghi đè: tên đã là một PLY khác thì xuất thành `<lượt>_<thời điểm train xong>.ply`; lượt chạy thử của benchmark xuất vào `checkpoints/<benchmark>_quick/`.
 
@@ -150,7 +149,7 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
     ```
     Tên luồng không có trong `configs/base.yaml` thì báo lỗi (không bỏ qua lặng lẽ);
   - hoặc đặt biến môi trường `SR3D_DATA_MIPNERF360=/workspace/data/MipNeRF360`. Biến môi trường thắng file cục bộ.
-- Tải dữ liệu: Deep Blending tự tải khi thiếu (`source.auto_download`, có kiểm tra SHA-256), giải nén vào `data/downloads/`, rồi thư mục chứa các cảnh được dời tới `data/benchmarks/deep_blending`. Mip-NeRF 360 không tự tải (khoảng 12 GB); chỉ tải khi đặt `DOWNLOAD=1`.
+- Không tải dữ liệu: repo không có bước tải, giải nén hay dời dữ liệu nào. Người dùng tự đưa dữ liệu lên đúng thư mục gốc trong cấu hình (hoặc trỏ cấu hình tới chỗ đã có, như trên). Thiếu thì script benchmark dừng trước khi train, báo `dataset not found` kèm thư mục và các cảnh cần có (`locate_dataset` trong `scripts/lib/benchmark.sh`).
 
 ## 6. Pod mới, đổi GPU, chạy lại
 
@@ -159,8 +158,9 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
    - ô 1: kiểm tra máy;
    - ô 2: khóa deploy chỉ đọc, thêm vào GitHub (một lần cho mỗi volume);
    - ô 3: clone code vào `/workspace/SpatialRoom3D` (lần sau: `git pull --ff-only`);
-   - ô 4: `bash scripts/pod/run_all.sh --background --setup-only`;
-   - ô 6: kiểm tra dữ liệu, tải Deep Blending.
+   - ô 4: `bash scripts/pod/run_all.sh --background` (chỉ cài môi trường);
+   - đưa dữ liệu lên, rồi ô 6: kiểm tra dữ liệu (chỉ đọc);
+   - ô 7 (benchmark) hoặc ô 8 (cảnh tự chụp) với dữ liệu bạn chọn.
 3. Pod mới gắn lại cùng volume: chạy lại ô 1, 3 (cập nhật code) và 4 (env đã có thì chỉ kiểm tra lại).
 4. GPU khác loại:
    - `setup_gsplat.sh` tự build lại gsplat và fused-ssim khi compute capability của GPU khác lần build trước (ghi trong dấu build của env);

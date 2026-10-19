@@ -5,17 +5,15 @@ Kiểm tra:
 - lệnh huấn luyện gsplat trên Deep Blending giữ đúng như lệnh của repo trước (8037a66) đã chạy trên pod ngày
   17/10/2026, chỉ khác đường dẫn: cùng tên cảnh, chế độ, seed và tham số;
 - Mip-NeRF 360: quy ước ảnh thu nhỏ (images_2 / images_4) của Inria và gsplat, không có tham số mcmc riêng;
-- B0 bỏ qua cảnh đã có kết quả;
-- tìm dữ liệu theo configs/<benchmark>.yaml: không tự tải khi không được phép, tải + kiểm tra SHA-256 khi được phép;
+- B0 bỏ qua cảnh đã có kết quả, `FORCE=1` giữ lại lượt cũ;
+- dữ liệu nằm ở chỗ configs/<benchmark>.yaml ghi; thiếu thì dừng trước khi train, không tải gì;
 - cấu hình benchmark đã dùng được chụp thành JSON trong outputs/reports/configs/;
 - scripts/run_evaluate.sh chọn đúng thư mục kết quả.
 """
 
-import hashlib
 import json
 import os
 import subprocess
-import zipfile
 
 import pytest
 
@@ -212,69 +210,17 @@ def test_b0_force_reruns_and_keeps_the_previous_run(sh):
     assert f"previous run kept as {previous}" in out.stdout
 
 
-def test_missing_dataset_is_not_downloaded_unless_allowed(sh):
-    out = run(sh, "run_inria_b0.sh", "mipnerf360", SCENES="room")
-    assert out.returncode == 1
-    assert "dataset not found" in out.stdout and "DOWNLOAD=1" in out.stdout
-    assert not (sh.ws / "data" / "downloads").exists() or not any((sh.ws / "data" / "downloads").iterdir())
-
-
-def test_dataset_left_in_the_extract_folder_is_used_with_a_warning(sh):
-    """Lần trước giải nén xong (có dấu .extracted) nhưng bị ngắt trước khi dời tới chỗ cấu hình ghi."""
-    staged = sh.ws / "data" / "downloads" / "tandt_db_extracted" / "nested" / "db"
-    make_scene(staged, "drjohnson")
-    make_scene(staged, "playroom")
-    (sh.ws / "data" / "downloads" / "tandt_db_extracted" / ".extracted").write_text("")
-    out = run(sh, "run_gsplat_modes.sh", "deep_blending")
-    assert out.returncode == 0, out.stdout + out.stderr
-    assert "not at the registry root" in out.stdout
-    assert f"--scene {staged / 'drjohnson'} " in training_calls(sh)[0]
-
-
-def test_unfinished_extraction_is_extracted_again(sh):
-    """Lần giải nén trước bị ngắt giữa chừng (không có dấu .extracted): không dùng dữ liệu dở, giải nén lại."""
-    downloads = sh.ws / "data" / "downloads"
-    make_scene(downloads / "tandt_db_extracted" / "db", "drjohnson")  # dở: chưa có playroom
-    downloads.mkdir(parents=True, exist_ok=True)
-    digest = write_zip(downloads / "tandt_db.zip", ["drjohnson", "playroom"])  # file nén đã tải đủ
-    local = {"datasets": {"deep_blending": {"source": {"sha256": {"tandt_db.zip": digest}}}}}
-    (sh.repo / "configs" / "local.yaml").write_text(json.dumps(local))
-    out = run(sh, "run_gsplat_modes.sh", "deep_blending")
-    assert out.returncode == 0, out.stdout + out.stderr
-    assert "not at the registry root" not in out.stdout
-    assert sh.ws.joinpath(*DB, "playroom", "sparse", "0", "points3D.bin").is_file()
-    assert f"--scene {sh.ws.joinpath(*DB, 'drjohnson')} " in training_calls(sh)[0]
-
-
-def write_zip(path, scenes):
-    with zipfile.ZipFile(path, "w") as archive:
-        for scene in scenes:
-            archive.writestr(f"db/{scene}/images/IMG_0.JPG", b"x")
-            for model in ("cameras", "images", "points3D"):
-                archive.writestr(f"db/{scene}/sparse/0/{model}.bin", b"x")
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def test_auto_download_checks_sha256_then_extracts(sh, tmp_path):
-    archive = tmp_path / "tandt_db.zip"
-    digest = write_zip(archive, ["drjohnson", "playroom"])
-    local = {"datasets": {"deep_blending": {"source": {"urls": [f"file://{archive}"],
-                                                       "sha256": {"tandt_db.zip": "0" * 64}}}}}
-    (sh.repo / "configs" / "local.yaml").write_text(json.dumps(local))  # JSON cũng là YAML hợp lệ
-    out = run(sh, "run_gsplat_modes.sh", "deep_blending")
-    assert out.returncode == 1 and "registry expects" in out.stdout
-    assert not sh.ws.joinpath(*DB).exists()
-
-    local["datasets"]["deep_blending"]["source"]["sha256"]["tandt_db.zip"] = digest
-    (sh.repo / "configs" / "local.yaml").write_text(json.dumps(local))
-    out = run(sh, "run_gsplat_modes.sh", "deep_blending")
-    assert out.returncode == 0, out.stdout + out.stderr
-    # thư mục db/ trong file nén được dời tới đúng chỗ registry ghi
-    assert sh.ws.joinpath(*DB, "playroom", "sparse", "0", "points3D.bin").is_file()
-    assert "not at the registry root" not in out.stdout
-    assert f"--scene {sh.ws.joinpath(*DB, 'drjohnson')} " in training_calls(sh)[0]
-    assert (sh.ws / "data" / "downloads" / "tandt_db.zip").is_file()
-    assert (sh.ws / "outputs" / "reports" / "tandt_db.zip.sha256").read_text().startswith(digest)
+def test_missing_dataset_stops_before_training_and_nothing_is_downloaded(sh):
+    """Repo không tải dữ liệu: thiếu thì dừng trước khi train, chỉ chỗ cần đặt dữ liệu."""
+    for script, bench, env in (("run_gsplat_modes.sh", "deep_blending", {}),
+                               ("run_inria_b0.sh", "deep_blending", {}),
+                               ("run_inria_b0.sh", "mipnerf360", {"SCENES": "room"})):
+        out = run(sh, script, bench, **env)
+        assert out.returncode == 1, (script, bench, out.stdout + out.stderr)
+        assert "dataset not found" in out.stdout and "Upload the scenes there yourself" in out.stdout
+        assert "DOWNLOAD" not in out.stdout
+    assert training_calls(sh) == [] and not [line for line in calls(sh.root) if line.startswith("python train.py")]
+    assert not (sh.ws / "data" / "downloads").exists()
 
 
 def test_evaluate_picks_the_result_folder(sh):
@@ -302,7 +248,7 @@ def test_evaluate_picks_the_result_folder(sh):
 
 def test_prepare_data_checks_a_benchmark_without_gpu(sh):
     out = sh.run(str(sh.repo / "scripts" / "prepare_data.sh"), "mipnerf360", timeout=120)
-    assert out.returncode == 1 and "dataset not found" in out.stdout and "DOWNLOAD=1" in out.stdout
+    assert out.returncode == 1 and "dataset not found" in out.stdout and "DOWNLOAD" not in out.stdout
     for scene in ("drjohnson", "playroom"):
         make_scene(sh.ws.joinpath(*DB), scene)
     out = sh.run(str(sh.repo / "scripts" / "prepare_data.sh"), "deep_blending", timeout=120)

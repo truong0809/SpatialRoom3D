@@ -1,6 +1,7 @@
-"""Test luồng scripts/pod/run_all.sh với các script cài đặt / huấn luyện được thay bằng stub.
+"""Test luồng scripts/pod/run_all.sh (chỉ cài / kiểm tra môi trường) với các script cài đặt được thay bằng stub.
 
-Kiểm tra thứ tự bước, điều kiện phụ thuộc, bảng tóm tắt, mã thoát, khóa GPU và chạy nền qua job.sh.
+Kiểm tra thứ tự bước, điều kiện phụ thuộc, bảng tóm tắt, mã thoát, khóa GPU, chạy nền qua job.sh, và việc run_all
+không train hay chạy benchmark nào (chạy với dữ liệu nào do người dùng tự chọn).
 """
 
 import os
@@ -12,7 +13,7 @@ from shell_env import HoldLock, ShellEnv, calls, make_fake_repo, write_stub
 
 pytestmark = pytest.mark.skipif(not os.path.isdir("/proc/self"), reason="needs Linux /proc")
 
-RECORD = ('echo "$(basename "$0") ARGS=$* QUICK=${QUICK:-} SEEDS=${SEEDS:-} ALLOW=${ALLOW_PROVISIONAL:-} '
+RECORD = ('echo "$(basename "$0") ARGS=$* ALLOW=${ALLOW_PROVISIONAL:-} '
           'MPL=${MPLBACKEND:-} HELD=${SR3D_GPU_LOCK_HELD:-}" >> "$CALLS"\n')
 STUBS = {
     "scripts/setup/env_probe.sh": "PROBE",
@@ -20,17 +21,7 @@ STUBS = {
     "scripts/setup/setup_data_tools.sh": "TOOLS",
     "scripts/setup/setup_gsplat.sh": "GSPLAT",
 }
-B0, MODES = "run_inria_b0.sh", "run_gsplat_modes.sh"  # tên ghi lại cho run_train.sh <benchmark> b0 | gsplat
-# scripts/run_train.sh <benchmark> b0 | gsplat: ghi lại như hai bước riêng (B0, gsplat)
-RUN_TRAIN = r'''step="run_gsplat_modes.sh"
-[ "${2:-}" != b0 ] || step="run_inria_b0.sh"
-echo "$step ARGS=$1 QUICK=${QUICK:-} SEEDS=${SEEDS:-} ALLOW=${ALLOW_PROVISIONAL:-} MPL=${MPLBACKEND:-} HELD=${SR3D_GPU_LOCK_HELD:-}" >> "$CALLS"
-if [ "$step" = run_inria_b0.sh ]; then
-  mkdir -p "$WS/outputs/reports"; echo B0 > "$WS/outputs/reports/B0.txt"; exit "${STUB_RC_B0:-0}"
-fi
-if [ "${QUICK:-0}" = 1 ]; then exit "${STUB_RC_QUICK:-0}"; fi
-exit "${STUB_RC_MODES:-0}"
-'''
+SETUP = ["env_probe.sh", "setup_3dgs_inria.sh", "setup_data_tools.sh", "setup_gsplat.sh"]
 
 
 @pytest.fixture
@@ -39,7 +30,9 @@ def sh(tmp_path):
     for name, key in STUBS.items():
         write_stub(repo, name, RECORD + f'mkdir -p "$WS/outputs/reports"; echo {key} > "$WS/outputs/reports/{key}.txt"\n'
                                         f'exit "${{STUB_RC_{key}:-0}}"\n')
-    write_stub(repo, "scripts/run_train.sh", RUN_TRAIN)
+    # run_all không được gọi bước huấn luyện nào: nếu gọi thì stub này ghi lại
+    for name in ("scripts/run_train.sh", "scripts/pod/run_scene.sh"):
+        write_stub(repo, name, RECORD + "exit 0\n")
     env = ShellEnv(tmp_path, repo=repo)
     env.env["CALLS"] = str(tmp_path / "calls.txt")
     yield env
@@ -47,9 +40,9 @@ def sh(tmp_path):
     env.cleanup()
 
 
-def run_all(sh, **env):
-    return sh.run(str(sh.repo / "scripts" / "pod" / "run_all.sh"), env={k: str(v) for k, v in env.items()},
-                  timeout=120)
+def run_all(sh, *args, **env):
+    return sh.run(str(sh.repo / "scripts" / "pod" / "run_all.sh"), *args,
+                  env={k: str(v) for k, v in env.items()}, timeout=120)
 
 
 def steps_called(sh):
@@ -63,44 +56,33 @@ def summary(sh):
     return {row[0]: row for row in rows}
 
 
-def test_all_steps_run_in_order_and_succeed(sh):
+def test_setup_steps_run_in_order_and_nothing_is_trained(sh):
     out = run_all(sh)
     assert out.returncode == 0, out.stdout + out.stderr
-    assert steps_called(sh) == ["env_probe.sh", "setup_3dgs_inria.sh", "setup_data_tools.sh", "setup_gsplat.sh",
-                                MODES, B0, MODES]
+    assert steps_called(sh) == SETUP  # không có bước train / benchmark nào
     lines = calls(sh.root)
-    assert "QUICK=1 SEEDS=42" in lines[4] and "QUICK= " in lines[6]
-    assert all("ARGS=deep_blending " in lines[index] for index in (4, 5, 6))  # benchmark chạy trong run_all
     assert all("ALLOW=1" in line and "MPL=Agg" in line and "HELD=1" in line for line in lines)
     rows = summary(sh)
-    assert [rows[name][1] for name in ("env_probe", "setup_inria", "data_tools", "setup_gsplat", "quick_test",
-                                       "b0_inria", "modes_full")] == ["OK"] * 7
-    assert "TÓM TẮT run_all" in out.stdout and "Gói kết quả:" in out.stdout
+    assert list(rows) == ["env_probe", "setup_inria", "data_tools", "setup_gsplat"]
+    assert all(row[1] == "OK" for row in rows.values())
+    assert "TÓM TẮT run_all" in out.stdout and "Gói log / báo cáo:" in out.stdout
+    assert "Môi trường sẵn sàng" in out.stdout
     package = sorted(sh.ws.glob("ket_qua_*.tar.gz"))
     assert len(package) == 1
     with tarfile.open(package[0]) as tar:
         names = tar.getnames()
     assert "outputs/reports/INRIA.txt" in names and any(name.startswith("outputs/reports/run_all_") for name in names)
     assert sorted((sh.ws / "outputs" / "logs").glob("run_all_*.log"))  # chạy trực tiếp: có log riêng
+    assert not (sh.ws / "outputs" / "benchmarks").exists() and not (sh.ws / "data").exists()
 
 
-def test_failed_gsplat_setup_skips_only_dependent_steps(sh):
+def test_failed_step_is_reported_and_the_others_still_run(sh):
     out = run_all(sh, STUB_RC_GSPLAT=1)
     assert out.returncode == 1
-    assert steps_called(sh) == ["env_probe.sh", "setup_3dgs_inria.sh", "setup_data_tools.sh", "setup_gsplat.sh", B0]
+    assert steps_called(sh) == SETUP
     rows = summary(sh)
-    assert rows["setup_gsplat"][1:3] == ["FAIL", "1"]
-    assert rows["quick_test"][1] == "SKIP" and "setup_gsplat" in rows["quick_test"][4]
-    assert rows["modes_full"][1] == "SKIP"
-    assert rows["b0_inria"][1] == "OK"
-    assert "LỖI (exit 1)" in out.stdout and "BỎ QUA (cần setup_gsplat thành công)" in out.stdout
-
-
-def test_failed_quick_test_skips_full_modes(sh):
-    out = run_all(sh, STUB_RC_QUICK=1)
-    assert out.returncode == 1
-    rows = summary(sh)
-    assert rows["quick_test"][1] == "FAIL" and rows["modes_full"][1] == "SKIP" and rows["b0_inria"][1] == "OK"
+    assert rows["setup_gsplat"][1:3] == ["FAIL", "1"] and rows["setup_inria"][1] == "OK"
+    assert "LỖI (exit 1)" in out.stdout and "Môi trường sẵn sàng" not in out.stdout
 
 
 def test_env_probe_failure_stops_before_installing(sh):
@@ -109,44 +91,28 @@ def test_env_probe_failure_stops_before_installing(sh):
     assert steps_called(sh) == ["env_probe.sh"]
     rows = summary(sh)
     assert rows["env_probe"][1] == "FAIL"
-    assert all(rows[name][1] == "SKIP" for name in ("setup_inria", "setup_gsplat", "modes_full"))
+    assert all(rows[name][1] == "SKIP" for name in ("setup_inria", "data_tools", "setup_gsplat"))
     assert sorted(sh.ws.glob("ket_qua_*.tar.gz"))  # vẫn đóng gói log để gửi về
 
 
 def test_user_skip_counts_as_satisfied(sh):
-    out = run_all(sh, SKIP="quick_test setup_gsplat")
+    out = run_all(sh, SKIP="setup_inria")
     assert out.returncode == 0, out.stdout
-    called = steps_called(sh)
-    assert "setup_gsplat.sh" not in called
-    assert called.count(MODES) == 1  # chỉ lượt đầy đủ
+    assert "setup_3dgs_inria.sh" not in steps_called(sh)
     rows = summary(sh)
-    assert rows["quick_test"][1] == "SKIP" and rows["quick_test"][4] == "SKIP"
-    assert rows["modes_full"][1] == "OK"
+    assert rows["setup_inria"][1] == "SKIP" and rows["setup_inria"][4] == "SKIP"
 
 
-def test_setup_only_runs_no_benchmark(sh):
-    """Pod mới gắn volume cũ: chỉ cài / kiểm tra môi trường, không chạy Deep Blending."""
-    out = sh.run(str(sh.repo / "scripts" / "pod" / "run_all.sh"), "--setup-only", timeout=120)
+def test_old_setup_only_flag_is_accepted(sh):
+    """Notebook cũ gọi run_all.sh --background --setup-only: nay run_all luôn chỉ cài đặt, tham số này không đổi gì."""
+    out = run_all(sh, "--setup-only")
     assert out.returncode == 0, out.stdout + out.stderr
-    assert steps_called(sh) == ["env_probe.sh", "setup_3dgs_inria.sh", "setup_data_tools.sh", "setup_gsplat.sh"]
-    rows = summary(sh)
-    assert all(rows[name][1] == "SKIP" and rows[name][4] == "SKIP" for name in ("quick_test", "b0_inria", "modes_full"))
-
-
-def test_setup_only_in_background(sh):
-    out = sh.run(str(sh.repo / "scripts" / "pod" / "run_all.sh"), "--background", "--setup-only")
-    assert out.returncode == 0, out.stdout + out.stderr
+    assert steps_called(sh) == SETUP
+    out = run_all(sh, "--background", "--setup-only")
+    assert out.returncode == 0 and "Đã chạy nền 'run_all'" in out.stdout, out.stdout + out.stderr
     state = sh.wait_state("run_all", "DONE", "FAILED", timeout=60)
     assert state["state"] == "DONE", sh.log("run_all")
-    assert "--setup-only" in state["cmd"]
-    assert MODES not in steps_called(sh) and B0 not in steps_called(sh)
-
-
-def test_quick_test_uses_first_seed_only(sh):
-    run_all(sh, SEEDS="7 8 9")
-    lines = calls(sh.root)
-    assert "QUICK=1 SEEDS=7 " in lines[4]
-    assert "SEEDS=7 8 9" in lines[6]
+    assert steps_called(sh) == SETUP * 2
 
 
 def test_refuses_to_start_while_gpu_lock_is_held(sh):
@@ -159,12 +125,12 @@ def test_refuses_to_start_while_gpu_lock_is_held(sh):
 
 
 def test_background_runs_as_job(sh):
-    out = sh.run(str(sh.repo / "scripts" / "pod" / "run_all.sh"), "--background")
+    out = run_all(sh, "--background")
     assert out.returncode == 0, out.stdout + out.stderr
     assert "Đã chạy nền 'run_all'" in out.stdout
     state = sh.wait_state("run_all", "DONE", "FAILED", timeout=60)
     assert state["state"] == "DONE", sh.log("run_all")
-    assert "TÓM TẮT run_all" in sh.log("run_all")
+    assert "TÓM TẮT run_all" in sh.log("run_all") and steps_called(sh) == SETUP
     assert not sorted((sh.ws / "outputs" / "logs").glob("run_all_*.log"))  # log nằm trong logs/jobs/run_all.log
-    again = sh.run(str(sh.repo / "scripts" / "pod" / "run_all.sh"), "--background", "extra")
+    again = run_all(sh, "--background", "extra")
     assert again.returncode == 2

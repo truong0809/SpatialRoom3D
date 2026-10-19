@@ -129,8 +129,8 @@ Kết quả không cải thiện vẫn được báo cáo đầy đủ (`docs/PR
 
 ```bash
 cd /workspace/SpatialRoom3D
-bash scripts/setup/setup_gsplat.sh                         # một lần: env gs-gsplat (run_all.sh --setup-only đã gồm bước này)
-bash scripts/run_train.sh deep_blending gsplat             # kiểm chứng trên Deep Blending (SEEDS="42 43 44" để chạy lặp)
+bash scripts/setup/setup_gsplat.sh                         # một lần: env gs-gsplat (scripts/pod/run_all.sh đã gồm bước này)
+bash scripts/run_train.sh deep_blending gsplat             # kiểm chứng trên Deep Blending, dữ liệu tự đưa lên (SEEDS="42 43 44" để chạy lặp)
 bash scripts/run_train.sh custom phong01 default           # cảnh tự chụp, đã qua scripts/prepare_data.sh custom
 bash scripts/run_train.sh custom phong01 mcmc              # cap_max = số Gaussian cuối của default_s42
 bash scripts/run_train.sh custom phong01 mcmc_demo         # cấu hình của notebook demo

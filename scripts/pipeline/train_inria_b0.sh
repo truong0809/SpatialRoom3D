@@ -14,7 +14,7 @@
 #                               ($WS/outputs/benchmarks/<benchmark>/inria_b0); moi canh mot thu muc <canh>/
 #   CONFIG=<file JSON>          mac dinh: muc benchmark cua configs/<benchmark>.yaml, chup vao $WS/outputs/reports/configs/
 #   SCENES="..."                chi chay cac canh nay (mac dinh: moi canh cua benchmark)
-#   DOWNLOAD=1                  tai du lieu khi chua co (cau hinh co duong dan tai nhung khong tu tai)
+# Du lieu phai co san o cho configs/<benchmark>.yaml ghi (khong tai gi): thieu thi dung truoc khi train.
 
 set -euo pipefail
 

@@ -2,20 +2,12 @@
 # Dữ liệu và kết quả nằm trên volume, không đưa lên Git. Chạy và protocol: experiments/deep_blending/README.md.
 
 kind: benchmark
-required: true
+required: false  # không luồng nào bắt buộc: chạy với dữ liệu nào do bạn chọn, chưa đưa lên thì bước kiểm tra chỉ báo "chưa có"
+# Dữ liệu do bạn tự đưa lên (repo không tải gì): <root>/drjohnson/, <root>/playroom/, mỗi cảnh có images/ và sparse/0/
+# (thư mục db/ trong tandt_db.zip của Inria). Để chỗ khác thì ghi đè root bằng configs/local.yaml hoặc SR3D_DATA_DEEP_BLENDING.
 root: ${WS}/data/benchmarks/deep_blending
 scenes: [drjohnson, playroom]
 layout: [images, sparse/0]
-
-source:
-  urls:
-    - https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip
-  download_dir: ${WS}/data/downloads
-  extract_to: ${WS}/data/downloads/tandt_db_extracted
-  sha256:
-    tandt_db.zip: 816e62f22a161abbfe841d2a6b10cdf036e297c9fa289b3bfeee9c6ec526d7e1
-  auto_download: true
-  note: "tandt_db.zip có db/ (Deep Blending) và tandt/ (Tanks&Temples): giải nén vào extract_to, rồi thư mục chứa các cảnh (db/) được dời tới root"
 
 protocol:
   split: "cứ 8 ảnh lấy 1 làm test (Inria --eval, gsplat test_every 8: cùng tập test)"

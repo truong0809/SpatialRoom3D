@@ -17,8 +17,8 @@ def test_every_command_points_to_an_existing_script():
 def test_arguments_pass_through_unchanged():
     assert command_for("train", ["custom", "phong1", "mcmc", "--", "--set", "opacity_reg=0.001"]) == [
         "bash", str(REPO / "scripts" / "run_train.sh"), "custom", "phong1", "mcmc", "--", "--set", "opacity_reg=0.001"]
-    assert command_for("setup", []) == ["bash", str(REPO / "scripts" / "pod" / "run_all.sh"), "--background",
-                                        "--setup-only"]
+    assert command_for("setup", []) == ["bash", str(REPO / "scripts" / "pod" / "run_all.sh"), "--background"]
+    assert "baseline" not in COMMANDS  # base chỉ cài môi trường; chạy với dữ liệu nào do người dùng chọn
     assert command_for("stop", ["--all"])[-2:] == ["stop", "--all"]
 
 

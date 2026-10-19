@@ -9,7 +9,7 @@ file trong Git (theo thứ tự ưu tiên tăng dần):
   * biến môi trường `SR3D_DATA_<TÊN>` cho thư mục gốc, vd. SR3D_DATA_MIPNERF360=/workspace/data/m360.
 
 Kiểm tra (mặc định): với mỗi benchmark: thư mục gốc, từng cảnh (số ảnh trong `images/`, các thư mục ảnh thu nhỏ khi bộ
-dữ liệu có, mô hình COLMAP `sparse/0`), file nén gốc nếu có. Với cảnh tự chụp: từng cảnh có nguồn gốc (ảnh / video trong
+dữ liệu có, mô hình COLMAP `sparse/0`). Với cảnh tự chụp: từng cảnh có nguồn gốc (ảnh / video trong
 `data/custom_scenes/<cảnh>/`), đã chuẩn bị chưa (`outputs/custom_scenes/<cảnh>/colmap/`), kết luận COLMAP. Với mọi
 luồng: thư mục kết quả có bao nhiêu lượt chạy. Không tải, không sửa, không dời gì.
 Mã thoát: 0 khi mọi luồng có `required: true` đều đủ; 1 nếu thiếu; 2 khi cấu hình không đọc được.
@@ -216,7 +216,7 @@ def sfm_verdict(scene_dir: Path) -> str | None:
         return None
 
 
-def check_dataset(name: str, entry: dict, ws: str) -> dict:
+def check_dataset(name: str, entry: dict) -> dict:
     root = Path(entry["root"])
     result = {"dataset": name, "kind": entry.get("kind"), "required": bool(entry.get("required")),
               "root": str(root), "root_exists": root.is_dir(), "root_from_env": entry.get("root_from_env"),
@@ -240,10 +240,6 @@ def check_dataset(name: str, entry: dict, ws: str) -> dict:
         result["ok"] = True  # cảnh tự chụp có thể chưa có: không phải lỗi
         return result
     result["scenes"] = [check_scene(root / scene, entry.get("layout", [])) for scene in entry.get("scenes", [])]
-    source = entry.get("source") or {}
-    download_dir = Path(source.get("download_dir") or Path(ws) / "data" / "downloads")
-    archives = [download_dir / url.rstrip("/").rsplit("/", 1)[-1] for url in source.get("urls") or []]
-    result["archives"] = [{"path": str(path), "exists": path.is_file()} for path in archives]
     result["ok"] = result["root_exists"] and all(scene["status"] == "OK" for scene in result["scenes"])
     return result
 
@@ -269,8 +265,6 @@ def format_result(result: dict) -> list[str]:
         lines.append(f"   {scene['scene']:<12} {scene['status']:<13} {' | '.join(parts)}")
     if result["kind"] == "custom" and not result["scenes"]:
         lines.append("   (chưa có cảnh nào)")
-    for archive in result.get("archives") or []:
-        lines.append(f"   file gốc: {archive['path']}" + ("" if archive["exists"] else "  (không có)"))
     for key, info in result["results"].items():
         lines.append(f"   kết quả {key}: {info['root']} " + (f"({info['runs']} lượt)" if info["exists"] else "(chưa có)"))
     return lines
@@ -324,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         print(f"ERROR: unknown dataset(s) {unknown}; known: {sorted(datasets)}", file=sys.stderr)
         return 2
-    results = [check_dataset(name, datasets[name], ws) for name in names]
+    results = [check_dataset(name, datasets[name]) for name in names]
     if args.json:
         print(json.dumps(results, indent=2, ensure_ascii=False))
     else:

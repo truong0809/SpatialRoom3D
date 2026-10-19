@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# prepare_benchmark.sh - Chuan bi du lieu mot benchmark (deep_blending | mipnerf360), KHONG dung GPU:
-#   1. tim du lieu o cho configs/<benchmark>.yaml ghi (root); chua co thi tai, kiem tra SHA-256 va giai nen khi cau
-#      hinh cho phep (source.auto_download: Deep Blending) hoac khi dat DOWNLOAD=1;
+# prepare_benchmark.sh - Kiem tra du lieu mot benchmark (deep_blending | mipnerf360) da dua len, KHONG dung GPU,
+# KHONG tai hay giai nen gi (du lieu do nguoi dung tu dua len):
+#   1. du lieu phai nam o cho configs/<benchmark>.yaml ghi (root, ghi de duoc bang configs/local.yaml / SR3D_DATA_*);
 #   2. kiem tra bo cuc tung canh: images/, sparse/0/ va images_<N>/ khi benchmark dung anh thu nho.
 # Thuong goi qua: bash scripts/prepare_data.sh <benchmark>
-# Bien tuy chon: WS=/workspace  DOWNLOAD=1  SCENES="..." (chi kiem tra cac canh nay)
+# Bien tuy chon: WS=/workspace  SCENES="..." (chi kiem tra cac canh nay)
 
 set -euo pipefail
 

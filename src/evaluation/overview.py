@@ -1,5 +1,5 @@
-"""Tổng hợp nhanh kết quả trên pod: lượt run_all gần nhất, B0 (3DGS gốc của Inria) và hai chế độ gsplat
-trên Deep Blending, các cảnh tự chụp / tự quay (ảnh đầu vào, COLMAP, các lượt train, file PLY để xem 3D).
+"""Tổng hợp nhanh kết quả trên pod: lượt cài môi trường (run_all) gần nhất, B0 (3DGS gốc của Inria) và hai chế độ
+gsplat trên Deep Blending, các cảnh tự chụp / tự quay (ảnh đầu vào, COLMAP, các lượt train, file PLY để xem 3D).
 
 Thư viện chuẩn + PyYAML (đọc configs/*.yaml), không cần env conda; chỉ đọc file. Chạy từ thư mục gốc của repo:
     python3 -m src.evaluation.overview [--ws /workspace] [--out-root DIR] [--scene phong1 ...]
@@ -82,7 +82,7 @@ def b0_section(ws: Path) -> list[str]:
     path = latest(ws / "outputs" / "reports", "baseline_db_summary_*.json")
     data = read_json_or_none(path) if path else None
     if not data:
-        return ["== B0 (3DGS gốc của Inria, Deep Blending): chưa có (bước b0_inria chưa chạy xong)"]
+        return ["== B0 (3DGS gốc của Inria, Deep Blending): chưa có (khi cần: bash scripts/run_train.sh deep_blending b0)"]
     lines = [f"== B0 (3DGS gốc của Inria, Deep Blending) - {path.name}",
              f"   {'cảnh':<14} {'PSNR':>7} {'SSIM':>7} {'LPIPS':>7} {'train(ph)':>9} {'Gaussian':>11}"]
     for scene in data.get("scenes") or []:
@@ -114,7 +114,7 @@ def modes_section(ws: Path) -> list[str]:
     quick = latest(reports, "modes_db_quick_*.json")
     data = read_json_or_none(quick) if quick else None
     if data is None:
-        lines.append("== Chạy thử gsplat 3000 vòng: chưa có")
+        lines.append("== Chạy thử gsplat 3000 vòng: chưa có (khi cần: QUICK=1 bash scripts/run_train.sh deep_blending gsplat)")
     else:
         runs = sum(agg.get("n", 0) for by_variant in (data.get("scenes") or {}).values()
                    for agg in by_variant.values())
@@ -124,7 +124,8 @@ def modes_section(ws: Path) -> list[str]:
         lines.append("   (chỉ kiểm tra luồng chạy; số liệu 3000 vòng không dùng để so sánh)")
     full = latest(reports, "modes_db_2*.md")
     if full is None:
-        lines.append("== gsplat default / mcmc đầy đủ trên Deep Blending: chưa có (bước modes_full chưa chạy xong)")
+        lines.append("== gsplat default / mcmc đầy đủ trên Deep Blending: chưa có "
+                     "(khi cần: bash scripts/run_train.sh deep_blending gsplat)")
     else:
         lines.append(f"== gsplat default / mcmc đầy đủ trên Deep Blending ({full.name}):")
         lines += ["   " + row for row in full.read_text(encoding="utf-8", errors="replace").splitlines()]

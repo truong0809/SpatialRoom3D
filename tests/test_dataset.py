@@ -34,8 +34,6 @@ def fake_ws(tmp_path):
     db = ws / "data" / "benchmarks" / "deep_blending"
     scene(db, "drjohnson")
     scene(db, "playroom")
-    (ws / "data" / "downloads").mkdir(parents=True)
-    (ws / "data" / "downloads" / "tandt_db.zip").write_bytes(b"zip")
     gsplat = ws / "outputs" / "benchmarks" / "deep_blending" / "gsplat" / "drjohnson"
     for mode in ("default_s42", "mcmc_s42"):
         (gsplat / mode).mkdir(parents=True)
@@ -71,7 +69,7 @@ def test_check_reports_deep_blending_ok_and_missing_mipnerf_is_not_an_error(tmp_
     before = snapshot(ws)
     assert main(["--ws", str(ws)]) == 0
     out = capsys.readouterr().out
-    assert "== deep_blending (benchmark, bắt buộc): OK" in out
+    assert "== deep_blending (benchmark): OK" in out
     assert "drjohnson    OK" in out and "playroom     OK" in out
     assert "kết quả gsplat: " in out and "(2 lượt)" in out  # .prev_* không tính
     assert "== mipnerf360 (benchmark): chưa có" in out and "room         MISSING" in out
@@ -81,11 +79,20 @@ def test_check_reports_deep_blending_ok_and_missing_mipnerf_is_not_an_error(tmp_
 
 
 def test_missing_required_scene_fails(tmp_path, capsys):
+    """Luồng có `required: true` mà thiếu thì mã thoát 1. Cấu hình của repo không có luồng bắt buộc nào (chạy với
+    dữ liệu nào do người dùng chọn): thiếu dữ liệu chỉ được báo, mã thoát vẫn 0."""
     ws = fake_ws(tmp_path)
     for path in (ws / "data" / "benchmarks" / "deep_blending" / "playroom" / "sparse" / "0").iterdir():
         path.unlink()
-    assert main(["--ws", str(ws), "--dataset", "deep_blending"]) == 1
-    assert "playroom     INCOMPLETE" in capsys.readouterr().out
+    configs = config_copy(tmp_path)
+    config = configs / "deep_blending.yaml"
+    config.write_text(config.read_text(encoding="utf-8").replace("required: false", "required: true", 1),
+                      encoding="utf-8")
+    assert main(["--configs", str(configs), "--ws", str(ws), "--dataset", "deep_blending"]) == 1
+    out = capsys.readouterr().out
+    assert "playroom     INCOMPLETE" in out and "(benchmark, bắt buộc): THIẾU" in out
+    assert main(["--ws", str(ws), "--dataset", "deep_blending"]) == 0
+    assert "== deep_blending (benchmark): chưa có" in capsys.readouterr().out
     assert main(["--ws", str(ws), "--dataset", "nope"]) == 2
 
 
@@ -123,8 +130,11 @@ def test_configs_match_the_scripts():
             script, *args = command.split("bash ", 1)[1].split()
             assert (REPO / script).is_file(), script
             assert args[0] == name, command
-    assert datasets["deep_blending"]["source"]["auto_download"] is True
-    assert not datasets["mipnerf360"]["source"]["auto_download"]
+    # repo không tải dữ liệu nào: không còn mục source (đường dẫn tải, SHA-256, auto_download) trong cấu hình
+    assert all("source" not in entry for entry in datasets.values())
+    assert not any(entry.get("required") for entry in datasets.values())  # không luồng nào bắt buộc phải có dữ liệu
+    lib = (REPO / "scripts" / "lib" / "benchmark.sh").read_text(encoding="utf-8")
+    assert "curl" not in lib and "DOWNLOAD" not in lib and "zipfile" not in lib
     m360 = datasets["mipnerf360"]
     indoor = set(m360["indoor_scenes"])
     assert all(m360["benchmark"]["image_factor"][s] == (2 if s in indoor else 4) for s in m360["scenes"])
@@ -166,12 +176,11 @@ def test_get_prints_one_field(tmp_path, capsys):
     assert capsys.readouterr().out.strip() == str(ws / "data" / "benchmarks" / "deep_blending")
     assert main(["--ws", str(ws), "--get", "mipnerf360", "results.gsplat_quick"]) == 0
     assert capsys.readouterr().out.strip() == str(ws / "outputs" / "benchmarks" / "mipnerf360" / "gsplat_quick")
-    assert main(["--ws", str(ws), "--get", "deep_blending", "source.auto_download"]) == 0
-    assert capsys.readouterr().out.strip() == "true"
     assert main(["--ws", str(ws), "--get", "deep_blending", "benchmark.tag"]) == 0
     assert capsys.readouterr().out.strip() == "db"
-    assert main(["--ws", str(ws), "--get", "mipnerf360", "source.urls"]) == 0
-    assert capsys.readouterr().out.strip().endswith("360_v2.zip")
+    assert main(["--ws", str(ws), "--get", "mipnerf360", "scenes"]) == 0
+    assert capsys.readouterr().out.strip().split() == ["room", "counter", "kitchen", "bonsai", "bicycle", "garden",
+                                                       "stump", "flowers", "treehill"]
     assert main(["--ws", str(ws), "--get", "deep_blending", "nope"]) == 1
     assert main(["--ws", str(ws), "--get", "nope", "root"]) == 2
 

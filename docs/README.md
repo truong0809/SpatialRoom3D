@@ -79,17 +79,18 @@ Dữ liệu và kết quả nằm trên network volume, ngoài repo, không đư
 ```
 /workspace/
 ├── SpatialRoom3D/            repo này
-├── data/                     custom_scenes/<cảnh>/ (ảnh, video tự chụp), benchmarks/{deep_blending,mipnerf360}/, downloads/
+├── data/                     custom_scenes/<cảnh>/ (ảnh, video tự chụp), benchmarks/{deep_blending,mipnerf360}/
 └── outputs/                  custom_scenes/, benchmarks/, checkpoints/ (PLY đã xuất), logs/, reports/, jobs/
 ```
+
+Repo không tải dữ liệu nào: ảnh / video tự chụp và dữ liệu benchmark (Deep Blending, Mip-NeRF 360) do bạn tự đưa lên `data/`. Chạy với dữ liệu nào là do bạn chọn.
 
 ## Chạy trên pod Runpod
 
 Cách dễ nhất: notebook `app/notebooks/runpod.ipynb`, các bước trong [USAGE_GUIDE.md](USAGE_GUIDE.md). Bằng lệnh, từ `/workspace/SpatialRoom3D`:
 
 ```bash
-bash scripts/pod/run_all.sh --background --setup-only         # pod mới: cài / kiểm tra môi trường (không train)
-bash scripts/pod/run_all.sh --background                      # baseline Deep Blending: chạy thử -> B0 -> default / mcmc (tốn GPU)
+bash scripts/pod/run_all.sh --background                      # pod mới: chỉ cài / kiểm tra môi trường (không train, không tải dữ liệu)
 bash scripts/pod/job.sh status                                # theo dõi việc chạy nền (log: bash scripts/pod/job.sh log <tên>)
 bash scripts/pod/check_datasets.sh                            # dữ liệu và kết quả của mọi luồng (chỉ đọc)
 bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong1 phong1 --background   # cả luồng cho một cảnh tự chụp
@@ -97,7 +98,8 @@ bash scripts/prepare_data.sh custom /workspace/data/custom_scenes/phong1 phong1 
 bash scripts/run_train.sh custom phong1                                                  #             train default, mcmc
 bash scripts/run_render.sh custom phong1 default_s42                                     #             render, xuất PLY
 bash scripts/run_evaluate.sh custom phong1                                               #             so sánh
-bash scripts/run_train.sh deep_blending gsplat                # benchmark (experiments/deep_blending/README.md)
+bash scripts/prepare_data.sh deep_blending                    # benchmark: kiểm tra dữ liệu bạn đã đưa lên (không dùng GPU)
+bash scripts/run_train.sh deep_blending gsplat                #            train (experiments/deep_blending/README.md)
 bash scripts/pod/results.sh [cảnh]                            # xem nhanh kết quả
 bash scripts/pod/job.sh stop --all                            # dừng mọi việc chạy nền
 python3 -m app.cli --help                                     # cùng các lệnh trên, qua một giao diện dòng lệnh

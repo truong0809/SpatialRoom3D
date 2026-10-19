@@ -6,7 +6,7 @@
 #       canh tu chup: kiem tra anh / video, chon frame (video), COLMAP, bao cao; ket qua
 #       outputs/custom_scenes/<ten_canh>/colmap/ (scripts/pipeline/prepare_scene.sh; can GPU lock, env gs-tools)
 #   bash scripts/prepare_data.sh deep_blending | mipnerf360
-#       benchmark: tim du lieu, tai khi duoc phep (DOWNLOAD=1 voi Mip-NeRF 360), kiem tra bo cuc tung canh
+#       benchmark: kiem tra du lieu ban da dua len (bo cuc tung canh); khong tai, khong giai nen gi
 #       (scripts/pipeline/prepare_benchmark.sh; khong dung GPU)
 #
 # Kiem tra du lieu da co (chi doc): bash scripts/pod/check_datasets.sh
