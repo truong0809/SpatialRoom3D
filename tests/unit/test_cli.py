@@ -14,6 +14,7 @@ def test_every_command_points_to_an_existing_script():
     assert {"prepare", "train", "render", "evaluate"} <= set(COMMANDS)  # bốn bước chính của scripts/
     assert COMMANDS["fetch"][0] == "scripts/pod/fetch_data.sh"
     assert COMMANDS["experiment"][0] == "scripts/pod/run_experiment.sh"
+    assert COMMANDS["filter"][0] == "scripts/run_filter.sh"
 
 
 def test_arguments_pass_through_unchanged():

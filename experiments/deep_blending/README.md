@@ -13,7 +13,7 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
   - ảnh có sẵn của bộ dữ liệu, không thu nhỏ thêm (`data_factor 1`);
   - 30.000 vòng; LPIPS VGG.
 - **Số liệu đối chiếu:** trung bình Inria công bố cho Deep Blending (PSNR 29,690, SSIM 0,906, LPIPS 0,238; nguồn ghi trong cấu hình); ngưỡng 0,5 dB / 0,01 / 0,01.
-- **MCMC:** `opacity_reg=0.001` cho mọi chế độ preset `mcmc` (`mcmc` và chế độ tự thêm cùng preset). Paper 3DGS-MCMC dùng giá trị này cho Deep Blending; config chính chủ chỉ đặt cho drjohnson, ở đây dùng cho cả hai cảnh như lượt đã đo (`docs/ENVIRONMENT_AUDIT.md` mục 7). Cần ghi rõ khi báo cáo.
+- **MCMC:** `opacity_reg=0.001` cho mọi chế độ preset `mcmc` (`mcmc` và chế độ tự thêm cùng preset), trừ chế độ tự đặt `opacity_reg` trong `configs/base.yaml` (giữ giá trị của nó). Paper 3DGS-MCMC dùng giá trị này cho Deep Blending; config chính chủ chỉ đặt cho drjohnson, ở đây dùng cho cả hai cảnh như lượt đã đo (`docs/ENVIRONMENT_AUDIT.md` mục 7). Cần ghi rõ khi báo cáo.
 - **Thực nghiệm chính** (`default` / `mcmc`, 3 seed, cùng 4 cảnh trong nhà của Mip-NeRF 360): `docs/design/experiments.md` mục 2.
 
 ```bash

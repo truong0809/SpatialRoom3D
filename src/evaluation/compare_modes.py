@@ -15,7 +15,13 @@
 - Baseline (--baseline) là một biến thể; mặc định "default" (chế độ default, không tham số riêng, đúng protocol).
   Với lượt chạy thử QUICK, baseline là "default{max_steps=3000}". Tên một chế độ chỉ có một biến thể cũng được
   (vd. --baseline mcmc --modes mcmc X: so chế độ X với mcmc; khi đó không đưa --reference-config, vì
-  đối chiếu với Inria chỉ dành cho baseline default).
+  đối chiếu với Inria chỉ dành cho baseline default). Chế độ có thêm các biến thể của một kế hoạch thực nghiệm (lượt có
+  tag, mục `variants`): tên chế độ chọn các lượt không có tag của nó.
+- Lượt có tag (biến thể của một kế hoạch thực nghiệm, vd. các lượt dò tham số của tune_mcmc nằm cùng thư mục với thực
+  nghiệm chính) chỉ vào bảng khi tag nằm trong `--tags`; mặc định bị để ngoài (một dòng cảnh báo ghi số lượt và các
+  tag), để bảng của một kế hoạch khác không lẫn chúng.
+- Lượt đã lọc Gaussian (`<lượt>/filtered/`, src.training.prune): thêm bảng chỉ số sau khi lọc, chênh lệch so với chính
+  lượt đó trước khi lọc, số Gaussian giữ lại và dung lượng PLY. Mọi bảng khác là mô hình chưa lọc.
 - Chênh lệch giữa hai biến thể chỉ tính trên các seed chung của hai bên; trung bình trên các cảnh chỉ tính
   trên các seed chung của mọi biến thể trong cảnh đó.
 - Đối chiếu với số liệu Inria (công bố hoặc B0 tự chạy) chỉ thực hiện khi mọi lượt baseline dùng cùng điều kiện
@@ -59,6 +65,14 @@ def discover(roots: list[Path]) -> list[RunResult]:
     return runs
 
 
+def select_tags(runs: list[RunResult], tags: list[str] | None) -> tuple[list[RunResult], list[RunResult]]:
+    """(lượt đưa vào bảng, lượt có tag bị để ngoài): lượt không tag luôn được giữ; lượt có tag chỉ khi tag nằm trong
+    `tags`."""
+    wanted = set(tags or [])
+    kept = [run for run in runs if not run.tag or run.tag in wanted]
+    return kept, [run for run in runs if run.tag and run.tag not in wanted]
+
+
 def variant_of(run: RunResult) -> str:
     label = run.mode or "?"
     if run.args:
@@ -95,6 +109,36 @@ def _ratio(a, b):
     return a / b if a and b else None
 
 
+def filtered_ok(run: RunResult) -> bool:
+    return (run.filtered or {}).get("status") == "OK"
+
+
+def aggregate_filtered(runs: list[RunResult]) -> dict | None:
+    """Bản đã lọc Gaussian (src.training.prune) của các lượt đã lọc xong: chỉ số sau khi lọc và chênh lệch so với chính
+    lượt đó trước khi lọc (cùng ảnh test), trung bình theo seed; None khi chưa lượt nào được lọc."""
+    done = [run for run in runs if filtered_ok(run)]
+    if not done:
+        return None
+
+    def change(name):
+        return _mean(None if run.metrics.get(name) is None else run.filtered["metrics"][name] - run.metrics[name]
+                     for run in done)
+    thresholds = sorted({json.dumps(run.filtered.get("thresholds"), sort_keys=True) for run in done})
+    return {
+        "n": len(done),
+        "seeds": sorted(run.seed for run in done if run.seed is not None),
+        "metrics": {name: _mean(run.filtered["metrics"][name] for run in done) for name in METRICS},
+        "delta": {name: change(name) for name in METRICS},
+        "num_gaussians": _mean(run.filtered.get("num_gaussians") for run in done),
+        "num_gaussians_before": _mean(run.num_gaussians for run in done),
+        "kept_fraction": _mean(run.filtered.get("kept_fraction") for run in done),
+        "ply_size_mb": _mean(run.filtered.get("ply_size_mb") for run in done),
+        "ply_size_mb_before": _mean(run.ply_size_mb for run in done),
+        "render_ms_per_image": _mean(run.filtered.get("render_ms_per_image") for run in done),
+        "thresholds": [json.loads(text) for text in thresholds],
+    }
+
+
 def aggregate(runs: list[RunResult]) -> dict:
     seeds = [run.seed for run in runs if run.seed is not None]
     return {
@@ -112,6 +156,7 @@ def aggregate(runs: list[RunResult]) -> dict:
         "render_ms_per_image": _mean(run.render_ms_per_image for run in runs),
         "ply_size_mb": _mean(run.ply_size_mb for run in runs),
         "run_dirs": [run.run_dir for run in runs],
+        "filtered": aggregate_filtered(runs),
     }
 
 
@@ -169,12 +214,18 @@ def fairness(baseline_runs: list[RunResult], runs: list[RunResult]) -> list[dict
 
 def resolve_baseline(runs: list[RunResult], baseline: str, include_deviating: bool = False) -> str:
     """`--baseline` là tên một biến thể. Nếu là tên một chế độ mà chế độ đó chỉ có đúng một biến thể (vd. "mcmc" khi
-    mọi lượt mcmc của Deep Blending chạy với opacity_reg 0.001: biến thể "mcmc[opacity-reg=0.001]"), dùng biến thể đó."""
-    variants = {variant_of(run) for run in runs if run.status == "OK" and (include_deviating or not run.deviations)}
+    mọi lượt mcmc của Deep Blending chạy với opacity_reg 0.001: biến thể "mcmc[opacity-reg=0.001]"), dùng biến thể đó.
+    Chế độ có thêm các biến thể của một kế hoạch thực nghiệm (lượt có tag, mục variants): mốc là các lượt không có tag
+    của chế độ đó, khi chúng chỉ thuộc một biến thể."""
+    usable = [run for run in runs if run.status == "OK" and (include_deviating or not run.deviations)]
+    variants = {variant_of(run) for run in usable}
     if baseline in variants or not re.fullmatch(r"[A-Za-z0-9_]+", baseline):
         return baseline
     candidates = sorted(variant for variant in variants if mode_of(variant) == baseline)
     if len(candidates) > 1:
+        plain = sorted({variant_of(run) for run in usable if run.mode == baseline and not run.tag})
+        if len(plain) == 1:
+            return plain[0]
         print(f"WARN: mode {baseline} has several variants {candidates}; pass one of them as --baseline",
               file=sys.stderr)
     return candidates[0] if len(candidates) == 1 else baseline
@@ -282,6 +333,10 @@ def build_report(runs: list[RunResult], baseline: str, modes: list[str] | None,
             report["excluded"].append({"run_dir": run.run_dir, "scene": run.scene, "variant": variant_of(run),
                                        "reason": "protocol deviation"})
             continue
+        if run.filtered is not None and not filtered_ok(run):
+            report["incomplete"].append({"run_dir": run.run_dir, "scene": run.scene, "variant": variant_of(run),
+                                         "filtered": run.filtered.get("status"),
+                                         **({"problem": run.filtered["problem"]} if run.filtered.get("problem") else {})})
         grouped.setdefault(keys[run.run_dir], {}).setdefault(variant_of(run), []).append(run)
 
     variants = sorted({variant for by_variant in grouped.values() for variant in by_variant},
@@ -323,6 +378,12 @@ def build_report(runs: list[RunResult], baseline: str, modes: list[str] | None,
             report["complete_scenes"].append(scene)
             report["mean_over_scenes_seeds"][scene] = sorted(scene_common)
 
+    for scene, by_variant in report["scenes"].items():
+        for variant, agg in by_variant.items():
+            if agg["filtered"] and len(agg["filtered"]["thresholds"]) > 1:
+                report["warnings"].append(f"{scene} / {variant}: runs filtered with different thresholds "
+                                          f"{agg['filtered']['thresholds']}; their mean mixes them")
+
     for variant in variants:
         values = [aggregate(_with_seeds(grouped[scene][variant], set(report["mean_over_scenes_seeds"][scene])))
                   ["metrics"] for scene in report["complete_scenes"]]
@@ -361,6 +422,50 @@ def _metric(agg: dict, name: str, digits: int) -> str:
     return _f(value, digits) + ("" if std is None else f" ± {std:.{digits}f}")
 
 
+def _signed(value, digits=3):
+    return "-" if value is None else f"{value:+.{digits}f}"
+
+
+def _threshold_text(thresholds: dict | None) -> str:
+    if not thresholds:
+        return "ngưỡng không rõ"
+    parts = []
+    if thresholds.get("min_opacity"):
+        parts.append(f"opacity < {thresholds['min_opacity']}")
+    if thresholds.get("max_scale"):
+        parts.append(f"trục lớn nhất > {thresholds['max_scale']} × scene_scale")
+    return "bỏ " + " hoặc ".join(parts) if parts else "không ngưỡng nào"
+
+
+def filtered_lines(report: dict) -> list[str]:
+    """Bảng trước / sau khi lọc Gaussian, chỉ khi có lượt đã lọc."""
+    rows = [(scene, variant, agg["filtered"]) for scene, by_variant in report["scenes"].items()
+            for variant, agg in by_variant.items() if agg.get("filtered")]
+    if not rows:
+        return []
+    thresholds = sorted({json.dumps(t, sort_keys=True) for _, _, f in rows for t in f["thresholds"]})
+    mixed = len(thresholds) > 1  # ngưỡng khác nhau giữa các dòng: thêm cột ngưỡng cho từng dòng
+    lines = ["", "Sau khi lọc Gaussian (src.training.prune: " + "; ".join(_threshold_text(json.loads(t)) for t in thresholds)
+             + "), chấm lại trên cùng ảnh test. Δ là chênh lệch so với chính các lượt đó trước khi lọc (âm ở PSNR/SSIM "
+             "và dương ở LPIPS là kém đi); n = số lượt đã lọc. Bảng chính ở trên là mô hình chưa lọc.", "",
+             "| Cảnh | Biến thể | n | PSNR ↑ | SSIM ↑ | LPIPS ↓ | ΔPSNR | ΔSSIM | ΔLPIPS | Số Gaussian giữ lại "
+             "| PLY (MB) trước → sau | Render (ms/ảnh) |" + (" Ngưỡng |" if mixed else ""),
+             "|---|---|---|---|---|---|---|---|---|---|---|---|" + ("---|" if mixed else "")]
+    for scene, variant, f in rows:
+        kept = "-" if f["num_gaussians"] is None else f"{f['num_gaussians']:,.0f}"
+        if f["kept_fraction"] is not None:
+            kept += f" ({f['kept_fraction'] * 100:.1f}%)"
+        row = (f"| {scene} | {variant} | {f['n']} | {_f(f['metrics']['PSNR'], 3)} | {_f(f['metrics']['SSIM'], 4)} "
+               f"| {_f(f['metrics']['LPIPS'], 4)} | {_signed(f['delta']['PSNR'], 3)} "
+               f"| {_signed(f['delta']['SSIM'], 4)} | {_signed(f['delta']['LPIPS'], 4)} | {kept} "
+               f"| {_f(f['ply_size_mb_before'], 0)} → {_f(f['ply_size_mb'], 0)} "
+               f"| {_f(f['render_ms_per_image'], 2)} |")
+        if mixed:
+            row += " " + "; ".join(_threshold_text(t) for t in f["thresholds"]) + " |"
+        lines.append(row)
+    return lines
+
+
 def _conditions_cell(checks: list[dict]) -> str:
     bad = [f"{c['check']}={c['status']}" for c in checks if c["status"] not in GOOD_STATUSES]
     return "đủ điều kiện" if not bad else "chưa đủ điều kiện: " + ", ".join(bad)
@@ -397,6 +502,7 @@ def format_markdown(report: dict) -> str:
                               for scene in report["complete_scenes"]), ""]
         for variant, m in report["mean_over_scenes"].items():
             lines.append(f"- `{variant}`: PSNR {_f(m['PSNR'])}, SSIM {_f(m['SSIM'])}, LPIPS {_f(m['LPIPS'])}")
+    lines += filtered_lines(report)
     if report.get("reference_check"):
         ref = report["reference_check"]
         lines += ["", f"Đối chiếu `{ref['mode']}` với số liệu công bố ({', '.join(ref['scenes'])}): "
@@ -441,6 +547,9 @@ def main(argv: list[str] | None = None) -> int:
                              "công bố (trung bình mọi cảnh) ghi SKIPPED, đối chiếu B0 chỉ trên các cảnh này")
     parser.add_argument("--include-deviating", action="store_true",
                         help="giữ lượt sai khác protocol thành biến thể riêng thay vì loại bỏ")
+    parser.add_argument("--tags", nargs="+", default=[], metavar="TAG",
+                        help="đưa cả các lượt có tag này vào bảng (biến thể của một kế hoạch thực nghiệm, mục variants); "
+                             "mặc định lượt có tag bị để ngoài")
     parser.add_argument("--reference-config", type=Path,
                         help="bản JSON của mục benchmark trong configs/<benchmark>.yaml (reference/tolerance/scenes; "
                              "scripts/run_evaluate.sh ghi ra trong outputs/reports/configs/)")
@@ -466,9 +575,14 @@ def main(argv: list[str] | None = None) -> int:
             skip_reference = (f"chỉ chạy {len(wanted)} cảnh ({', '.join(args.scenes)}), số liệu công bố là trung bình "
                               f"của {len(scenes)} cảnh ({', '.join(scenes)})")
         scenes = list(args.scenes)
+    runs, left_out = select_tags(runs, args.tags)
     baseline = resolve_baseline(runs, args.baseline, args.include_deviating)
     report = build_report(runs, baseline, args.modes, reference, tolerance, scenes,
                           args.include_deviating, iteration, skip_reference)
+    if left_out:
+        report["warnings"].append(
+            f"left out {len(left_out)} run(s) with a tag ({', '.join(sorted({run.tag for run in left_out}))}): variants "
+            "of another experiment plan; pass their tags with --tags (TAGS=... for scripts/run_evaluate.sh) to include them")
     if args.b0_root:
         if config is None:
             parser.error("--b0-root needs --reference-config (scenes, method, iteration, tolerance)")

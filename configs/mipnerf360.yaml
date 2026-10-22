@@ -35,7 +35,7 @@ results:
   gsplat_quick: ${WS}/outputs/benchmarks/mipnerf360/gsplat_quick
 results_layout:
   inria_b0: "<cảnh>/"
-  gsplat: "<cảnh>/<chế_độ>_s<seed>/ (ảnh PNG thu nhỏ của gsplat: <cảnh>/.images_<N>_png_<dấu mô hình>/)"
+  gsplat: "<cảnh>/<chế_độ>[_<tag>]_s<seed>/ (tag: biến thể của một kế hoạch; filtered/ khi đã lọc Gaussian; ảnh PNG thu nhỏ của gsplat: <cảnh>/.images_<N>_png_<dấu mô hình>/)"
   gsplat_quick: "<cảnh>/<chế_độ>_s<seed>/"
 
 commands:
@@ -45,6 +45,8 @@ commands:
   gsplat_default_and_mcmc: bash scripts/run_train.sh mipnerf360 gsplat
   gsplat_quick_check: QUICK=1 bash scripts/run_train.sh mipnerf360 gsplat
   main_experiment: bash scripts/pod/run_experiment.sh main --background   # 4 cảnh trong nhà, configs/experiments/main.yaml
+  tune_mcmc: bash scripts/pod/run_experiment.sh tune_mcmc --background   # room, 10 biến thể mcmc, configs/experiments/tune_mcmc.yaml
+  filter: bash scripts/run_filter.sh mipnerf360 room mcmc_s42             # lọc Gaussian một lượt rồi chấm lại
   evaluate: bash scripts/run_evaluate.sh mipnerf360
 
 status: "đã cấu hình, chưa chạy; chưa xác minh dữ liệu trên pod"

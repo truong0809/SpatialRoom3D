@@ -4,7 +4,7 @@
 
 Đồ án tốt nghiệp. Hệ thống nhận ảnh hoặc video quay một không gian nội thất bằng camera thông thường (không cần LiDAR), ước lượng camera bằng COLMAP, tái tạo cảnh bằng **3D Gaussian Splatting (3DGS)** trên [gsplat](https://github.com/nerfstudio-project/gsplat), xuất mô hình `.ply` để xem trên trình xem 3DGS và đánh giá chất lượng bằng PSNR / SSIM / LPIPS.
 
-> **Trạng thái:** repo này đã kiểm thử trên CPU, chưa chạy trên pod; thực nghiệm chính chưa chạy. Số đo GPU tham khảo với cùng mã huấn luyện (B0 đạt ngưỡng trên Deep Blending; `default` / `mcmc`, một seed): [docs/ENVIRONMENT_AUDIT.md](docs/ENVIRONMENT_AUDIT.md) mục 7. Bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+> **Trạng thái:** repo này đã kiểm thử trên CPU, chưa chạy trên pod; thực nghiệm chính và bước dò tham số chưa chạy. Số đo GPU tham khảo với cùng mã huấn luyện (B0 đạt ngưỡng trên Deep Blending; `default` / `mcmc`, một seed): [docs/ENVIRONMENT_AUDIT.md](docs/ENVIRONMENT_AUDIT.md) mục 7. Bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
 
 ## Luồng xử lý
 
@@ -15,6 +15,8 @@ flowchart LR
     C --> D["Huấn luyện 3DGS<br/>gsplat: default / mcmc"]
     D --> E["Xuất PLY, render"]
     D --> F["Đánh giá<br/>PSNR · SSIM · LPIPS"]
+    D -.-> G["Lọc Gaussian<br/>(tùy chọn), chấm lại"]
+    G -.-> E
 ```
 
 | Bước | Mã nguồn | Lệnh |
@@ -22,6 +24,7 @@ flowchart LR
 | Kiểm tra ảnh / video, chọn frame, COLMAP, kiểm tra trước khi train | `src/input/`, `src/reconstruction/` | `scripts/prepare_data.sh` |
 | Huấn luyện 3DGS | `src/training/` | `scripts/run_train.sh` |
 | Render lại từ checkpoint, xuất PLY | `src/rendering/` | `scripts/run_render.sh` |
+| Lọc Gaussian sau khi train, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
 | Đánh giá, so sánh các chế độ | `src/evaluation/` | `scripts/run_evaluate.sh` |
 
 Ảnh chụp được dùng thẳng; video được chọn frame nét. Trước khi train, cảnh được kiểm tra số ảnh, tỉ lệ ảnh COLMAP ghép được, việc tách nhóm và độ phủ góc nhìn.
@@ -33,7 +36,7 @@ flowchart LR
 | `default` | 3DGS (Kerbl et al., 2023), `DefaultStrategy` của gsplat | Baseline; được đối chiếu với 3DGS gốc của Inria (B0) trên Deep Blending |
 | `mcmc` | 3DGS-MCMC (Kheradmand et al., 2024), `MCMCStrategy` của gsplat | Cùng protocol, cùng số Gaussian cuối với `default` trên cùng cảnh |
 
-Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep Blending (`drjohnson`, `playroom`) và Mip-NeRF 360 (`room`, `counter`, `kitchen`, `bonsai`), 3 seed, 30.000 vòng. Thiết kế: [docs/design/training_modes.md](docs/design/training_modes.md), [docs/design/experiments.md](docs/design/experiments.md).
+Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep Blending (`drjohnson`, `playroom`) và Mip-NeRF 360 (`room`, `counter`, `kitchen`, `bonsai`), 3 seed, 30.000 vòng. Bước dò tham số (`tune_mcmc`: 10 biến thể của `mcmc` trên `room`, một seed, kèm lọc Gaussian) dùng để chọn tham số cho một chế độ thứ ba `mcmc_indoor`, sẽ được thêm vào thực nghiệm chính khi có số liệu; đây là tinh chỉnh tham số trên phương pháp có sẵn, không phải thuật toán mới. Thiết kế: [docs/design/training_modes.md](docs/design/training_modes.md), [docs/design/experiments.md](docs/design/experiments.md).
 
 ## Chạy trên Runpod
 
@@ -47,9 +50,11 @@ bash scripts/pod/job.sh status                # theo dõi việc chạy nền; l
 bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong1 phong1 --background             # thư mục ảnh
 bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong2/phong2.mp4 phong2 --background  # file video
 
-# Thực nghiệm chính (tự tải dữ liệu benchmark còn thiếu)
+# Thực nghiệm (tự tải dữ liệu benchmark còn thiếu): main = thực nghiệm chính, tune_mcmc = dò tham số mcmc
 bash scripts/pod/run_experiment.sh main --plan                       # in kế hoạch, ước lượng (không chạy gì)
 VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # chạy thực nghiệm trong một việc nền
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh tune_mcmc --background
+bash scripts/run_filter.sh custom phong1 mcmc_s42                    # lọc Gaussian một lượt rồi chấm lại
 
 bash scripts/pod/results.sh                   # xem nhanh kết quả
 python3 -m app.cli --help                     # các lệnh trên qua một giao diện dòng lệnh

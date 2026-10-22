@@ -192,6 +192,74 @@ def test_extra_modes_share_the_default_budget_and_the_mcmc_convention(sh):
     assert "--modes default mcmc_x mcmc " in compare[0] and "--scenes drjohnson playroom " in compare[0]
 
 
+def test_variants_run_after_the_modes_into_their_own_folders(sh):
+    root = sh.ws.joinpath(*M360)
+    make_scene(root, "room", factors=(2, 4))
+    variants = "mcmc:or0001:opacity_reg=0.001 mcmc:rbg:random_bkgd=true,strategy.noise_lr=250000"
+    out = run(sh, "run_gsplat_modes.sh", "mipnerf360", SCENES="room", VARIANTS=variants)
+    assert out.returncode == 0, out.stdout + out.stderr
+    results = out_dir(sh, "mipnerf360", "gsplat") / "room"
+    lines = training_calls(sh)
+    assert [line.split("--out ")[1].split()[0] for line in lines] == [
+        str(results / name) for name in ("default_s42", "mcmc_s42", "mcmc_or0001_s42", "mcmc_rbg_s42")]
+    base = f"--cap-max-from {results / 'default_s42'}"
+    assert lines[2].startswith("--mode mcmc ") and (
+        f"{base} --tag or0001 --set opacity_reg=0.001 --dataset-protocol data_factor=2") in lines[2]
+    assert (f"{base} --tag rbg --set random_bkgd=true --set strategy.noise_lr=250000 --dataset-protocol data_factor=2"
+            in lines[3])
+    assert "--tag" not in lines[1] and "variants: mcmc:or0001" in out.stdout
+    compare = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line]
+    assert "--modes default mcmc " in compare[0]  # các biến thể là biến thể của mcmc trong bảng
+    assert "--tags or0001 rbg " in compare[0]  # các biến thể vừa train vào bảng; lượt có tag khác thì không
+
+
+def test_a_mode_that_sets_the_convention_key_keeps_its_own_value(sh):
+    for scene in ("drjohnson", "playroom"):
+        make_scene(sh.ws.joinpath(*DB), scene)
+    add_mode(sh, "mcmc_indoor", {"description": "mcmc đã chọn tham số", "preset": "mcmc",
+                                 "args": {"opacity_reg": 0.005, "scale_reg": 0.05}, "cap_max": {"policy": "match_baseline"}})
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", SCENES="playroom", MODES="default mcmc mcmc_indoor",
+              VARIANTS="mcmc_indoor:nlr:strategy.noise_lr=250000")
+    assert out.returncode == 0, out.stdout + out.stderr
+    lines = training_calls(sh)
+    assert [line.split()[1] for line in lines] == ["default", "mcmc", "mcmc_indoor", "mcmc_indoor"]
+    assert lines[1].endswith("--set opacity_reg=0.001")  # quy ước của Deep Blending cho mcmc
+    assert "opacity_reg=0.001" not in lines[2] and "opacity_reg=0.001" not in lines[3]  # chế độ tự đặt opacity_reg
+    assert lines[3].endswith("--tag nlr --set strategy.noise_lr=250000")
+    assert "mcmc_indoor sets opacity_reg itself (configs/base.yaml): MCMC_SET is not added to it" in out.stdout
+    compare = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line]
+    assert "--tags nlr " in compare[0]
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", SCENES="playroom", MCMC_SET="opacity_reg=1 scale_reg=2")
+    assert out.returncode == 1 and "MCMC_SET must be one key=value pair" in out.stdout + out.stderr
+
+
+def test_variants_add_their_parameters_after_the_mcmc_convention(sh):
+    for scene in ("drjohnson", "playroom"):
+        make_scene(sh.ws.joinpath(*DB), scene)
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", SCENES="playroom", VARIANTS="mcmc:or0005:opacity_reg=0.005")
+    assert out.returncode == 0, out.stdout + out.stderr
+    line = training_calls(sh)[-1]
+    assert line.endswith("--tag or0005 --set opacity_reg=0.001 --set opacity_reg=0.005")  # biến thể được ưu tiên
+
+
+@pytest.mark.parametrize("variants, message", [
+    ("mcmc:or0001", "invalid entry in VARIANTS"),
+    ("mcmc:Or1:opacity_reg=0.001", "invalid entry in VARIANTS"),
+    ("mcmc:a:b:opacity_reg=0.001", "invalid entry in VARIANTS"),
+    ("default:x:opacity_reg=0.001", "a variant of default"),
+    ("mcmc_x:a:opacity_reg=0.001", "is not in MODES"),
+    ("mcmc:a:opacity_reg=0.001 mcmc:a:scale_reg=0.05", "listed twice"),
+    ("mcmc:a:opacity reg=1", "invalid parameter 'opacity'"),  # dấu cách tách mục
+    ("mcmc:a:opacity_reg=0.001,scale_reg", "invalid parameter"),
+])
+def test_bad_variants_stop_before_training(sh, variants, message):
+    for scene in ("drjohnson", "playroom"):
+        make_scene(sh.ws.joinpath(*DB), scene)
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", VARIANTS=variants)
+    assert out.returncode == 1 and message in out.stdout, out.stdout + out.stderr
+    assert training_calls(sh) == []
+
+
 def test_unknown_modes_or_no_baseline_stop_before_training(sh):
     for scene in ("drjohnson", "playroom"):
         make_scene(sh.ws.joinpath(*DB), scene)

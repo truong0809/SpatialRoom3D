@@ -14,13 +14,14 @@ layout: [input, images, sparse/0]
 results:
   gsplat: ${WS}/outputs/custom_scenes
 results_layout:
-  gsplat: "<cảnh>/<chế_độ>[_<TAG>]_s<seed>/, cạnh <cảnh>/colmap/ (ảnh đã chuẩn hóa, COLMAP, báo cáo)"
+  gsplat: "<cảnh>/<chế_độ>[_<TAG>]_s<seed>/ (filtered/ khi đã lọc Gaussian), cạnh <cảnh>/colmap/ (ảnh đã chuẩn hóa, COLMAP, báo cáo)"
 
 commands:
   run: "bash scripts/pod/run_scene.sh <thư_mục_ảnh | file_video | -> <tên_cảnh> --background"
   prepare: "bash scripts/prepare_data.sh custom <thư_mục_ảnh | file_video> <tên_cảnh>"
   train: "bash scripts/run_train.sh custom <tên_cảnh> [default] [mcmc]"
   render: "bash scripts/run_render.sh custom <tên_cảnh> [<lượt>]"
+  filter: "bash scripts/run_filter.sh custom <tên_cảnh> [<lượt> ...]"
   evaluate: "bash scripts/run_evaluate.sh custom <tên_cảnh>"
 
 status: "mỗi cảnh một thư mục; chưa có cảnh nào chạy xong xác minh được trên pod"

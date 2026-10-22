@@ -34,6 +34,7 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
 - MCMC giữ `opacity_reg` mặc định của preset mcmc trong gsplat (0,01); chỉ Deep Blending dùng 0,001.
 - Chạy một phần cảnh (`SCENES`, vd. 4 cảnh trong nhà): bảng so sánh không đối chiếu với trung bình công bố (ghi SKIPPED), và chỉ đối chiếu B0 khi mọi cảnh được chọn đều có lượt B0.
 - Thực nghiệm chính dùng 4 cảnh trong nhà, không chạy B0 ở đây: `docs/design/experiments.md` mục 2.
+- Dò tham số `mcmc` (`configs/experiments/tune_mcmc.yaml`) chỉ dùng `room`, seed 42: `default`, `mcmc` và 10 biến thể của `mcmc` trong `gsplat/room/<chế_độ>[_<tag>]_s42/`, kèm bản đã lọc Gaussian trong `filtered/` của mỗi lượt (`docs/design/experiments.md` mục 3, 4). Các biến thể có tag nên bảng của thực nghiệm chính không lẫn chúng. `room` là cảnh dùng để chọn tham số: bảng tự động vẫn tính `room`; kết luận về chế độ chọn ra (`mcmc_indoor`) dùng bảng không có `room` (`docs/design/experiments.md` mục 3.1).
 - B0: lần đầu mở một cảnh, `train.py` của Inria tạo `sparse/0/points3D.ply` trong thư mục dữ liệu (bộ này không có sẵn file đó). Đây là hành vi của bản gốc, giữ nguyên để đúng baseline; dấu mô hình COLMAP không đổi vì chỉ tính trên file `.bin`.
 
 **Số liệu đối chiếu:** trung bình Inria công bố cho Mip-NeRF 360: PSNR 27,572, SSIM 0,816, LPIPS 0,215 (biểu đồ `assets/charts/base_*.png` trong `results.md` của Inria @54c035f, cấu hình ORIGINAL, rasterizer mặc định; đọc ngày 18/10/2026). So với trung bình này chỉ có nghĩa khi chạy đủ 9 cảnh.
@@ -49,6 +50,7 @@ bash scripts/run_train.sh mipnerf360 b0                       # B0 (9 cảnh; ch
 bash scripts/run_train.sh mipnerf360 gsplat                   # default + mcmc, bảng so sánh
 SCENES="room counter kitchen bonsai" bash scripts/run_train.sh mipnerf360 gsplat   # chỉ 4 cảnh trong nhà
 bash scripts/run_evaluate.sh mipnerf360
+bash scripts/pod/run_experiment.sh tune_mcmc --plan           # dò tham số mcmc trên room: kế hoạch, các bước
 ```
 
 Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất khoảng 13–20 phút mỗi cảnh mỗi chế độ (số đo ở `docs/ENVIRONMENT_AUDIT.md` mục 7). Mip-NeRF 360 chưa chạy nên chưa có số đo thời gian (9 cảnh).
@@ -56,6 +58,7 @@ Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất kho�
 ## Đã kiểm tra những gì
 
 - Lệnh sinh ra (hệ số ảnh theo cảnh, không có tham số mcmc riêng, dừng khi thiếu `images_N/`, báo cáo khi chỉ có một phần cảnh): `tests/unit/test_benchmarks.py`, chạy với stub.
+- Biến thể tham số của `tune_mcmc` (thư mục `<chế_độ>_<tag>_s<seed>`, cùng `cap_max` lấy từ `default`, tham số của biến thể đứng sau quy ước mcmc của benchmark): `tests/unit/test_benchmarks.py`, `tests/unit/test_experiment.py`, chạy với stub.
 - Tải và giải nén (chỉ cảnh và thư mục cần dùng, bỏ file ẩn / symlink, dừng khi đường dẫn không an toàn hoặc thiếu thư mục): `tests/unit/test_fetch.py`, với curl giả và file zip tổng hợp; **chưa tải file thật**.
 - Bản xem dữ liệu, cache PNG dùng chung, cache dở dang hoặc có file lạ bị xóa, hai cảnh không dùng chung cache, cùng cấu hình thì bỏ qua: `tests/unit/test_train_run.py`, với runner giả ghép ảnh đúng như gsplat 6e8c837 (bắt được lỗi khi dấu `.complete` nằm trong thư mục PNG).
 - **Chưa chạy** với gsplat thật hay dữ liệu thật.

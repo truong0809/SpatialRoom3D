@@ -14,7 +14,8 @@ import pytest
 import yaml
 
 from shell_env import REPO, ShellEnv, calls, make_fake_repo, write_stub
-from src.training.experiment import load_experiment, main, plan_lines, space_needs, tree_bytes
+from src.datasets.registry import load_registry
+from src.training.experiment import load_experiment, main, plan_lines, run_args, space_needs, tree_bytes
 
 pytestmark = pytest.mark.skipif(not os.path.isdir("/proc/self"), reason="needs Linux /proc")
 
@@ -24,26 +25,36 @@ STUBS = {
         'case " ${FAKE_FETCH_FAIL:-} " in *" $1 "*) echo "ERROR: fake download failure"; exit 1 ;; esac\n',
     "scripts/run_train.sh":
         'echo "train $* | MODES=${MODES-} SEEDS=${SEEDS-} SCENES=${SCENES-} QUICK=${QUICK-unset}'
-        ' MCMC_SET=${MCMC_SET-unset} OUT_ROOT=${OUT_ROOT-unset} FORCE=${FORCE-unset}" >> "$CALLS"\n'
+        ' MCMC_SET=${MCMC_SET-unset} OUT_ROOT=${OUT_ROOT-unset} FORCE=${FORCE-unset}'
+        ' VARIANTS=${VARIANTS-unset}" >> "$CALLS"\n'
         'if [ "$2" = gsplat ] && [ -n "${FAKE_RUN_SIZE:-}" ]; then\n'
-        '  for scene in $SCENES; do for mode in $MODES; do\n'
-        '    out="$WS/outputs/benchmarks/$1/gsplat/$scene/${mode}_s$SEEDS"\n'
+        '  runs="$MODES"\n'
+        '  for entry in ${VARIANTS:-}; do runs="$runs $(echo "$entry" | cut -d: -f1)_$(echo "$entry" | cut -d: -f2)"; done\n'
+        '  for scene in $SCENES; do for run in $runs; do\n'
+        '    out="$WS/outputs/benchmarks/$1/gsplat/$scene/${run}_s$SEEDS"\n'
         '    [ -f "$out/summary.json" ] && continue\n'
         '    mkdir -p "$out"; truncate -s "$FAKE_RUN_SIZE" "$out/blob"; echo \'{"status": "OK"}\' > "$out/summary.json"\n'
         '  done; done\n'
         'fi\n'
         'exit "${FAKE_TRAIN_RC:-0}"\n',
     "scripts/run_evaluate.sh":
-        'echo "evaluate $* | BASELINE=${BASELINE-unset} MODES=${MODES-} SCENES=${SCENES-} QUICK=${QUICK-unset}"'
+        'echo "evaluate $* | BASELINE=${BASELINE-unset} MODES=${MODES-} SCENES=${SCENES-} QUICK=${QUICK-unset}'
+        ' TAGS=${TAGS-unset}"'
         ' >> "$CALLS"\n'
         'printf "| bảng so sánh %s |\\n" "$1" > "$REPORT.md"\n',
     "scripts/pod/pack_results.sh": 'echo "pack $*" >> "$CALLS"\n',
 }
 FAKE_PYTHON = r'''#!/usr/bin/env bash
-# python của env conda giả: kiểm tra import (-c) luôn qua; smoke test tham số các chế độ ghi lại lời gọi
+# python của env conda giả: kiểm tra import (-c) luôn qua; smoke test, kiểm tra điểm SfM và lọc Gaussian ghi lại lời gọi
 case "${1:-}" in
   -c) exit 0 ;;
   */smoke_test_gsplat.py) shift; echo "smoke $*" >> "$CALLS"; exit "${FAKE_SMOKE_RC:-0}" ;;
+  -m)
+    case "${2:-}" in
+      src.training.depth_check) shift 2; echo "depth $*" >> "$CALLS"
+        case " $* " in *"${FAKE_DEPTH_FAIL:-@@}"*) exit 1 ;; esac; exit 0 ;;
+      src.training.prune) shift 2; echo "prune $*" >> "$CALLS"; exit "${FAKE_PRUNE_RC:-0}" ;;
+    esac ;;
 esac
 echo "fake python: unexpected $*" >&2
 exit 3
@@ -176,8 +187,8 @@ def test_runs_every_step_in_order_and_user_variables_cannot_change_the_plan(sh):
                                                        (m360, 44)]):
         assert f"MODES=default mcmc SEEDS={seed} {bench_scenes} QUICK=0 MCMC_SET=unset OUT_ROOT=unset" in line
     assert [line for line in calls(sh.root) if line.startswith("evaluate")] == [
-        f"evaluate deep_blending | BASELINE=unset MODES=default mcmc {db} QUICK=unset",
-        f"evaluate mipnerf360 | BASELINE=unset MODES=default mcmc {m360} QUICK=unset"]
+        f"evaluate deep_blending | BASELINE=unset MODES=default mcmc {db} QUICK=unset TAGS=",
+        f"evaluate mipnerf360 | BASELINE=unset MODES=default mcmc {m360} QUICK=unset TAGS="]  # lượt có tag: để ngoài
     rows = summary_rows(sh)
     assert [row[0] for row in rows][:4] == ["env_check", "space_check", "fetch_deep_blending", "fetch_mipnerf360"]
     assert all(status == "OK" for _, status in rows)
@@ -198,12 +209,12 @@ def test_a_plan_with_an_extra_mode_adds_the_table_against_mcmc(sh):
     assert len(trains) == 6 and all("MODES=default mcmc mcmc_x" in line for line in trains)
     db, m360 = "SCENES=drjohnson playroom", "SCENES=room counter kitchen bonsai"
     assert [line for line in calls(sh.root) if line.startswith("evaluate")] == [
-        f"evaluate deep_blending | BASELINE=unset MODES=default mcmc mcmc_x {db} QUICK=unset",
-        f"evaluate deep_blending | BASELINE=mcmc MODES=mcmc mcmc_x {db} QUICK=unset",  # chế độ mới so với mcmc
-        f"evaluate mipnerf360 | BASELINE=unset MODES=default mcmc mcmc_x {m360} QUICK=unset",
-        f"evaluate mipnerf360 | BASELINE=mcmc MODES=mcmc mcmc_x {m360} QUICK=unset"]
+        f"evaluate deep_blending | BASELINE=unset MODES=default mcmc mcmc_x {db} QUICK=unset TAGS=",
+        f"evaluate deep_blending | BASELINE=mcmc MODES=mcmc mcmc_x {db} QUICK=unset TAGS=",  # chế độ mới so với mcmc
+        f"evaluate mipnerf360 | BASELINE=unset MODES=default mcmc mcmc_x {m360} QUICK=unset TAGS=",
+        f"evaluate mipnerf360 | BASELINE=mcmc MODES=mcmc mcmc_x {m360} QUICK=unset TAGS="]
     text = summary_tsv(sh, "extra").with_suffix(".md").read_text(encoding="utf-8")
-    assert "### mcmc mcmc_x so với mcmc (mipnerf360)" in text and "| report_mipnerf360_vs_mcmc | OK |" in text
+    assert "### So với mcmc (mipnerf360)" in text and "| report_mipnerf360_vs_mcmc | OK |" in text
 
 
 def test_a_failed_download_skips_only_that_benchmark(sh):
@@ -218,7 +229,7 @@ def test_a_failed_download_skips_only_that_benchmark(sh):
 
 def test_environment_not_ready_stops_before_any_download(sh):
     out = experiment(sh, "main", FAKE_SMOKE_RC=1)  # trainer không nhận tham số của một chế độ
-    assert out.returncode == 1 and "does not accept the arguments of a mode in the plan" in out.stdout
+    assert out.returncode == 1 and "does not accept the arguments of a mode or variant in the plan" in out.stdout
     assert not steps(sh, "fetch") and not steps(sh, "train") and "môi trường chưa sẵn sàng" in out.stdout
     (sh.root / "calls.txt").unlink()
     shutil.rmtree(sh.ws / "code" / "gsplat")
@@ -340,3 +351,300 @@ def test_background_runs_as_one_queued_job(sh):
     state = sh.wait_state("exp_main", "DONE", "FAILED", timeout=120)
     assert state["state"] == "DONE", sh.log("exp_main")
     assert "TÓM TẮT thực nghiệm main" in sh.log("exp_main") and len(steps(sh, "train")) == 7
+
+
+# ------------------------------------------------------------------------- biến thể, loss độ sâu, lọc Gaussian
+TUNE_VARIANTS = [{"mode": "mcmc", "tag": "or0005", "set": {"opacity_reg": 0.005}},
+                 {"mode": "mcmc", "tag": "depth", "set": {"depth_loss": True}, "description": "loss độ sâu"}]
+
+
+def add_tune_plan(configs, **change):
+    """Kế hoạch `tune`: hai benchmark (một cảnh mỗi bên), 2 seed, 2 biến thể của mcmc, lọc Gaussian."""
+    plan = {"name": "tune", "description": "dò tham số", "modes": ["default", "mcmc"], "also_against": ["mcmc"],
+            "variants": TUNE_VARIANTS, "seeds": [42, 43],
+            "benchmarks": [{"dataset": "deep_blending", "scenes": ["playroom"], "b0": False},
+                           {"dataset": "mipnerf360", "scenes": ["room"], "b0": False}],
+            "post_filter": {"min_opacity": 0.02, "max_scale": 0.1}, "estimate": {"gpu_hours": 3, "disk_gb": 8}}
+    plan.update(change)
+    (configs / "experiments" / "tune.yaml").write_text(yaml.safe_dump(plan, allow_unicode=True), encoding="utf-8")
+
+
+def test_the_tune_mcmc_plan_is_valid():
+    plan = load_experiment("tune_mcmc", REPO / "configs", "/workspace")
+    assert plan["modes"] == ["default", "mcmc"] and plan["seeds"] == [42] and plan["also_against"] == ["mcmc"]
+    assert [(b["dataset"], b["scenes"], b["b0"]) for b in plan["benchmarks"]] == [("mipnerf360", ["room"], False)]
+    assert plan["runs"] == ["default", "mcmc", "mcmc_or0001", "mcmc_or0005", "mcmc_or005", "mcmc_sr0001", "mcmc_sr005",
+                            "mcmc_nlr250k", "mcmc_nlr1m", "mcmc_mo002", "mcmc_rbg", "mcmc_depth"]
+    assert all(variant["mode"] == "mcmc" and len(variant["set"]) == 1 for variant in plan["variants"])
+    assert plan["depth_runs"] == ["mcmc_depth"] and plan["depth_test_every"] == 8
+    assert plan["post_filter"] == {"min_opacity": 0.02, "max_scale": 0.1}
+    lines = plan_lines(plan)
+    assert "variants|mcmc:or0001:opacity_reg=0.001 mcmc:or0005:opacity_reg=0.005 mcmc:or005:opacity_reg=0.05" \
+           " mcmc:sr0001:scale_reg=0.001 mcmc:sr005:scale_reg=0.05 mcmc:nlr250k:strategy.noise_lr=250000" \
+           " mcmc:nlr1m:strategy.noise_lr=1000000 mcmc:mo002:strategy.min_opacity=0.02 mcmc:rbg:random_bkgd=true" \
+           " mcmc:depth:depth_loss=true" in lines
+    assert "post_filter|0.02 0.1" in lines and "depth_runs|mcmc_depth" in lines
+    main_plan = plan_lines(load_experiment("main", REPO / "configs", "/workspace"))
+    assert {"variants|", "runs|default mcmc", "depth_runs|", "depth_test_every|", "post_filter|"} <= set(main_plan)
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"variants": [{"mode": "default", "tag": "x", "set": {"opacity_reg": 0.1}}]}, "other than 'default'"),
+    ({"variants": [{"mode": "nope", "tag": "x", "set": {"opacity_reg": 0.1}}]}, "mode must be one of"),
+    ({"variants": [{"mode": "mcmc", "tag": "Big", "set": {"opacity_reg": 0.1}}]}, "tag must be lowercase"),
+    ({"variants": [{"mode": "mcmc", "tag": "a__b", "set": {"opacity_reg": 0.1}}]}, "tag must be lowercase"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {}}]}, "set must be a non-empty mapping"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"max_steps": 3000}}]}, "controlled by the protocol"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"strategy.cap_max": 5}}]}, "controlled by the protocol"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"opacity_reg": "0.1"}}]}, "cannot be passed"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"opacity_reg": [1, 2]}}]}, "must be a number"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"render_traj_path": "a b"}}]}, "cannot be passed"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"opacity_reg": 0.1}, "seed": 1}]}, "must be a mapping"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"opacity_reg": 0.1}},
+                   {"mode": "mcmc", "tag": "x", "set": {"scale_reg": 0.1}}]}, "another variant"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"opacity_reg": 0.1}},
+                   {"mode": "mcmc", "tag": "y", "set": {"opacity_reg": 0.1}}]}, "would train mcmc with the same configuration"),
+    ({"variants": [{"mode": "mcmc", "tag": "x", "set": {"strategy.noise_lr": 250000}},
+                   {"mode": "mcmc", "tag": "y", "set": {"strategy.noise_lr": 250000.0}}]},
+     "y and mcmc_x would train mcmc with the same configuration"),  # 250000 và 250000.0 là một
+    ({"variants": {"mode": "mcmc"}}, "variants must be a list"),
+    ({"post_filter": {"min_opacity": 0.02}}, "post_filter must be a mapping"),
+    ({"post_filter": True}, "post_filter must be a mapping"),
+    ({"post_filter": {"min_opacity": 1.0, "max_scale": 0.1}}, "must be below 1"),
+    ({"post_filter": {"min_opacity": -1, "max_scale": 0.1}}, "must be a number >= 0"),
+    ({"post_filter": {"min_opacity": 0, "max_scale": 0}}, "removes nothing"),
+])
+def test_bad_variants_and_filters_are_rejected(tmp_path, change, message):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    raw = yaml.safe_load((configs / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw.update(change)
+    (configs / "experiments" / "bad.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ValueError, match=message.replace("(", r"\(").replace(")", r"\)")):
+        load_experiment("bad", configs, "/workspace")
+
+
+def test_a_variant_must_differ_from_the_benchmark_mcmc_convention(tmp_path):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    raw = yaml.safe_load((configs / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw["variants"] = [{"mode": "mcmc", "tag": "or0001", "set": {"opacity_reg": 0.001}}]
+    (configs / "experiments" / "dup.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    # Deep Blending: mọi lượt mcmc đã chạy với opacity_reg 0.001 (benchmark.gsplat.mcmc_set)
+    with pytest.raises(ValueError, match="mcmc_or0001 and mcmc would train mcmc with the same configuration on deep_blending"):
+        load_experiment("dup", configs, "/workspace")
+    raw["benchmarks"] = [{"dataset": "mipnerf360", "scenes": ["room"], "b0": False}]  # Mip-NeRF 360: không có
+    (configs / "experiments" / "dup.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    assert load_experiment("dup", configs, "/workspace")["runs"] == ["default", "mcmc", "mcmc_or0001"]
+
+
+def add_mode(configs, name, entry):
+    path = configs / "base.yaml"
+    base = yaml.safe_load(path.read_text(encoding="utf-8"))
+    base["train_modes"]["modes"][name] = entry
+    path.write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def test_a_mode_keeps_its_own_value_of_the_mcmc_convention_key_and_twins_are_rejected(tmp_path):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    add_mode(configs, "mcmc_indoor", {"description": "x", "preset": "mcmc", "args": {"opacity_reg": 0.005},
+                                      "cap_max": {"policy": "match_baseline"}})
+    add_mode(configs, "mcmc_twin", {"description": "x", "preset": "mcmc", "args": {},
+                                    "cap_max": {"policy": "match_baseline"}})
+    train_modes = load_registry(configs, "/workspace")["train_modes"]
+    convention = {"opacity_reg": 0.001}  # benchmark.gsplat.mcmc_set của Deep Blending
+    assert run_args(train_modes, "mcmc", {}, convention) == {"opacity-reg": 0.001}
+    assert run_args(train_modes, "mcmc_indoor", {}, convention) == {"opacity-reg": 0.005}  # giá trị của chế độ
+    assert run_args(train_modes, "mcmc_indoor", {"opacity_reg": 0.002}, convention) == {"opacity-reg": 0.002}
+    raw = yaml.safe_load((configs / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw["modes"] = ["default", "mcmc", "mcmc_indoor"]
+    (configs / "experiments" / "three.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    assert load_experiment("three", configs, "/workspace")["runs"] == ["default", "mcmc", "mcmc_indoor"]
+    raw["modes"] = ["default", "mcmc", "mcmc_twin"]  # hai chế độ khác tên, cùng cấu hình: cảnh báo, cả hai vẫn train
+    (configs / "experiments" / "twin.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    plan = load_experiment("twin", configs, "/workspace")
+    assert plan["runs"] == ["default", "mcmc", "mcmc_twin"] and len(plan["warnings"]) == 2  # trên cả hai benchmark
+    assert plan["warnings"][0].startswith("mcmc_twin and mcmc train the same configuration on deep_blending")
+    assert f"warning|{plan['warnings'][1]}" in plan_lines(plan)
+    raw["modes"] = ["default", "mcmc_indoor"]  # biến thể trùng chính chế độ của nó: bảng sẽ gộp hai lượt làm một
+    raw["variants"] = [{"mode": "mcmc_indoor", "tag": "or0005", "set": {"opacity_reg": 0.005}}]
+    (configs / "experiments" / "same.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="mcmc_indoor_or0005 and mcmc_indoor would train mcmc_indoor with the same "
+                                         "configuration"):
+        load_experiment("same", configs, "/workspace")
+    assert load_experiment("main", configs, "/workspace")["warnings"] == []
+
+
+def test_space_needed_counts_the_variant_runs(tmp_path):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    add_tune_plan(configs)
+    sh = ShellEnv(tmp_path)
+    plan = load_experiment("tune", configs, str(sh.ws))
+    space = space_needs(plan, configs, str(sh.ws))
+    assert space["run_estimate_bytes"] == round(8e9 / 16)  # 2 benchmark × 1 cảnh × 4 lượt × 2 seed
+    first = fake_run(sh, "mipnerf360", "room", "mcmc_depth", 42, size=3_000_000)
+    need = {row["seed"]: row for row in space_needs(plan, configs, str(sh.ws))["seeds"]}
+    assert need[42]["finished"] == 1 and need[43]["measured"] == 1
+    assert need[43]["need_bytes"] == tree_bytes(first) + 7 * round(8e9 / 16)
+
+
+def test_space_counts_the_filter_output_of_finished_runs_not_yet_filtered(tmp_path):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    add_tune_plan(configs)  # post_filter: opacity 0,02, trục 0,1
+    sh = ShellEnv(tmp_path)
+    plan = load_experiment("tune", configs, str(sh.ws))
+    estimate = round(8e9 / 16)
+    run = fake_run(sh, "mipnerf360", "room", "mcmc", 42, size=1000)
+    for sub, size in (("ckpts", 5000), ("ply", 4000), ("renders", 300), ("videos", 200)):
+        (run / sub).mkdir()
+        (run / sub / "file").write_bytes(b"x" * size)
+    part = sum(tree_bytes(run / sub) for sub in ("ckpts", "ply", "renders", "videos"))
+
+    def need():
+        return {row["seed"]: row["need_bytes"] for row in space_needs(plan, configs, str(sh.ws))["seeds"]}
+
+    size = tree_bytes(run)
+    assert need() == {42: 7 * estimate + part,  # lượt đã xong, chưa lọc: còn cần chỗ cho bản đã lọc
+                      43: 7 * estimate + size + part}  # cùng lượt ở seed 43: đo từ seed 42, kể cả phần lọc
+    (run / "filtered").mkdir()
+    meta = {"status": "OK", "thresholds": {"min_opacity": 0.02, "max_scale": 0.1}}
+    (run / "filtered" / "filter_meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    assert need() == {42: 7 * estimate, 43: 7 * estimate + tree_bytes(run)}  # đã lọc với đúng ngưỡng
+    meta["thresholds"]["min_opacity"] = 0.05
+    (run / "filtered" / "filter_meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    assert need()[42] == 7 * estimate + part  # ngưỡng khác: sẽ lọc lại
+    # lượt không train (bị bỏ vì kiểm tra điểm SfM) không cần chỗ
+    rows = space_needs(plan, configs, str(sh.ws), without=["mipnerf360:mcmc_depth"])["seeds"]
+    assert [(row["seed"], row["runs"], row["need_bytes"]) for row in rows] == [
+        (42, 7, 6 * estimate + part), (43, 7, 6 * estimate + tree_bytes(run) + part)]
+    with pytest.raises(ValueError, match="expected <benchmark>:<run>"):
+        space_needs(plan, configs, str(sh.ws), without=["mipnerf360:nope"])
+
+
+def test_variants_depth_check_and_filter_steps_run_in_order(sh):
+    add_tune_plan(sh.repo / "configs")
+    out = experiment(sh, "tune", "--plan")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "mcmc_or0005: mcmc, opacity_reg=0.005" in out.stdout and "loss độ sâu (mcmc_depth)" in out.stdout
+    assert "depth_check_mipnerf360: python -m src.training.depth_check --test-every 8" in out.stdout
+    assert "filter_deep_blending_s43: python -m src.training.prune --min-opacity 0.02 --max-scale 0.1" in out.stdout
+    (sh.root / "calls.txt").unlink()
+
+    out = experiment(sh, "tune", VARIANTS="mcmc:evil:opacity_reg=9")
+    assert out.returncode == 0, out.stdout + out.stderr
+    order = [line.split(" | ")[0].split(" --")[0] for line in calls(sh.root)]
+    assert order == ["smoke", "fetch deep_blending playroom", "fetch mipnerf360 room", "depth", "depth",
+                     "train deep_blending gsplat", "prune", "train mipnerf360 gsplat", "prune",
+                     "train deep_blending gsplat", "prune", "train mipnerf360 gsplat", "prune",
+                     "evaluate deep_blending", "evaluate deep_blending", "evaluate mipnerf360",
+                     "evaluate mipnerf360"] + [order[-1]]
+    lines = calls(sh.root)
+    assert lines[0].endswith("--modes default mcmc --variants mcmc:or0005:opacity_reg=0.005 mcmc:depth:depth_loss=true")
+    db = sh.ws / "data" / "benchmarks"
+    assert lines[3] == f"depth --examples-dir {sh.ws / 'code' / 'gsplat' / 'examples'} --test-every 8 " \
+                       f"{db / 'deep_blending' / 'playroom'}"
+    trains = [line for line in lines if line.startswith("train ")]
+    assert all("VARIANTS=mcmc:or0005:opacity_reg=0.005 mcmc:depth:depth_loss=true" in line for line in trains)
+    results = sh.ws / "outputs" / "benchmarks" / "mipnerf360" / "gsplat" / "room"
+    prunes = [line for line in lines if line.startswith("prune ")]
+    assert prunes[3] == ("prune --min-opacity 0.02 --max-scale 0.1 --skip-unfinished "
+                         + " ".join(str(results / f"{run}_s43") for run in ("default", "mcmc", "mcmc_or0005",
+                                                                              "mcmc_depth")))
+    rows = summary_rows(sh, "tune")
+    assert [name for name, _ in rows][:6] == ["env_check", "space_check", "fetch_deep_blending", "fetch_mipnerf360",
+                                              "depth_check_deep_blending", "depth_check_mipnerf360"]
+    assert all(status == "OK" for _, status in rows)
+    text = summary_tsv(sh, "tune").with_suffix(".md").read_text(encoding="utf-8")
+    assert "- Biến thể: mcmc:or0005:opacity_reg=0.005 mcmc:depth:depth_loss=true" in text
+    assert "- Lọc Gaussian sau khi train: opacity < 0.02, trục lớn nhất > 0.1 × scene_scale" in text
+    assert "| filter_mipnerf360_s43 | OK |" in text
+    evaluations = [line.split(" | ")[1] for line in lines if line.startswith("evaluate ")]
+    assert all(line.endswith(" TAGS=or0005 depth") for line in evaluations)  # bảng của kế hoạch có các biến thể của nó
+    assert evaluations[1].startswith("BASELINE=mcmc MODES=mcmc ")
+
+
+def test_a_failed_depth_check_drops_only_the_depth_runs_of_that_benchmark(sh):
+    add_tune_plan(sh.repo / "configs")
+    out = experiment(sh, "tune", FAKE_DEPTH_FAIL="mipnerf360")
+    assert out.returncode == 1  # một bước không đạt
+    assert "depth_check_mipnerf360 không đạt: bỏ mcmc_depth trên mipnerf360" in out.stdout
+    trains = [line for line in calls(sh.root) if line.startswith("train ")]
+    assert [line.split(" | ")[0] for line in trains] == ["train deep_blending gsplat", "train mipnerf360 gsplat"] * 2
+    for line in trains:
+        if line.startswith("train mipnerf360"):  # chỉ bỏ lượt có loss độ sâu; các lượt khác vẫn train
+            assert "MODES=default mcmc " in line and line.endswith(" VARIANTS=mcmc:or0005:opacity_reg=0.005")
+        else:
+            assert line.endswith(" VARIANTS=mcmc:or0005:opacity_reg=0.005 mcmc:depth:depth_loss=true")
+    rows = dict(summary_rows(sh, "tune"))
+    assert rows["depth_check_mipnerf360"] == "FAIL" and rows["gsplat_mipnerf360_s42"] == "OK"
+    assert rows["filter_mipnerf360_s42"] == "OK" and rows["filter_deep_blending_s43"] == "OK"
+    text = summary_tsv(sh, "tune").with_suffix(".md").read_text(encoding="utf-8")
+    assert "- mipnerf360: kiểm tra điểm SfM không đạt, không train mcmc_depth" in text
+
+
+def test_reports_after_a_dropped_depth_mode_cover_the_modes_that_trained(sh):
+    configs = sh.repo / "configs"
+    base = yaml.safe_load((configs / "base.yaml").read_text(encoding="utf-8"))
+    base["train_modes"]["modes"]["mcmc_dl"] = {"description": "mcmc + loss độ sâu", "preset": "mcmc",
+                                               "args": {"depth_loss": True}, "cap_max": {"policy": "match_baseline"}}
+    (configs / "base.yaml").write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    add_tune_plan(configs, modes=["default", "mcmc", "mcmc_dl"], also_against=["mcmc", "mcmc_dl"],
+                  variants=[TUNE_VARIANTS[0], {"mode": "mcmc_dl", "tag": "x", "set": {"scale_reg": 0.05}}])
+    out = experiment(sh, "tune", FAKE_DEPTH_FAIL="mipnerf360")
+    assert out.returncode == 1
+    assert "depth_check_mipnerf360 không đạt: bỏ mcmc_dl mcmc_dl_x trên mipnerf360" in out.stdout
+    # chỗ trống không tính 2 lượt bị bỏ: 5 lượt trên Deep Blending + 3 trên Mip-NeRF 360, mỗi lượt 8 GB / 20 lượt
+    assert "Seed 42: 0/8 lượt đã xong, cần thêm khoảng 3.2 GB" in out.stdout
+    m360 = [line for line in calls(sh.root) if line.startswith("train mipnerf360")]
+    assert all("MODES=default mcmc " in line and line.endswith(" VARIANTS=mcmc:or0005:opacity_reg=0.005") for line in m360)
+    evaluations = [line for line in calls(sh.root) if line.startswith("evaluate mipnerf360")]
+    assert [line.split(" | ")[1].split(" SCENES")[0] for line in evaluations] == [
+        "BASELINE=unset MODES=default mcmc", "BASELINE=mcmc MODES=mcmc"]  # không có mcmc_dl: bảng vẫn đủ cảnh
+    rows = dict(summary_rows(sh, "tune"))
+    assert rows["report_mipnerf360_vs_mcmc_dl"] == "SKIP" and rows["report_deep_blending_vs_mcmc_dl"] == "OK"
+    db = [line for line in calls(sh.root) if line.startswith("evaluate deep_blending")]
+    assert db[0].split(" | ")[1].startswith("BASELINE=unset MODES=default mcmc mcmc_dl ")  # Deep Blending không đổi
+
+
+def test_b0_does_not_wait_for_the_depth_check(sh):
+    add_tune_plan(sh.repo / "configs", benchmarks=[{"dataset": "deep_blending", "scenes": ["playroom"], "b0": True}],
+                  seeds=[42])
+    out = experiment(sh, "tune", FAKE_DEPTH_FAIL="deep_blending")
+    assert out.returncode == 1
+    trains = [line for line in calls(sh.root) if line.startswith("train ")]
+    assert [line.split(" | ")[0] for line in trains] == ["train deep_blending b0", "train deep_blending gsplat"]
+    assert trains[1].endswith(" VARIANTS=mcmc:or0005:opacity_reg=0.005")  # chỉ bỏ lượt có loss độ sâu
+    rows = dict(summary_rows(sh, "tune"))
+    assert rows["depth_check_deep_blending"] == "FAIL" and rows["b0_deep_blending"] == "OK"
+
+
+def test_a_failed_depth_check_skips_the_benchmark_when_the_baseline_uses_depth(sh):
+    configs = sh.repo / "configs"
+    base = yaml.safe_load((configs / "base.yaml").read_text(encoding="utf-8"))
+    base["train_modes"]["modes"]["default"]["args"] = {"depth_loss": True}  # baseline có loss độ sâu
+    (configs / "base.yaml").write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    add_tune_plan(configs, variants=[TUNE_VARIANTS[0]])
+    out = experiment(sh, "tune", FAKE_DEPTH_FAIL="mipnerf360")
+    assert out.returncode == 1
+    trains = [line.split(" | ")[0] for line in calls(sh.root) if line.startswith("train ")]
+    assert trains == ["train deep_blending gsplat"] * 2  # mọi lượt khác lấy ngân sách từ default: bỏ cả benchmark
+    rows = dict(summary_rows(sh, "tune"))
+    assert rows["gsplat_mipnerf360_s42"] == "SKIP" and rows["filter_mipnerf360_s42"] == "SKIP"
+    text = summary_tsv(sh, "tune").with_suffix(".md").read_text(encoding="utf-8")
+    assert "BỎ QUA (depth_check_mipnerf360 không đạt và default dùng loss độ sâu)" in text
+    assert "- mipnerf360: kiểm tra điểm SfM không đạt và default dùng loss độ sâu, không train lượt gsplat nào" in text
+    assert "depth_check_mipnerf360 không đạt và default dùng loss độ sâu: không train lượt gsplat nào" in out.stdout
+
+
+def test_a_failed_filter_is_reported_and_training_goes_on(sh):
+    add_tune_plan(sh.repo / "configs", variants=[TUNE_VARIANTS[0]])  # không còn loss độ sâu: không kiểm tra SfM
+    out = experiment(sh, "tune", FAKE_PRUNE_RC=1, FAKE_TRAIN_RC=1)
+    assert out.returncode == 1
+    assert not [line for line in calls(sh.root) if line.startswith("depth ")]
+    assert len([line for line in calls(sh.root) if line.startswith("train ")]) == 4
+    rows = dict(summary_rows(sh, "tune"))
+    assert rows["gsplat_mipnerf360_s42"] == "FAIL"
+    assert rows["filter_mipnerf360_s42"] == "FAIL" and rows["report_mipnerf360"] == "OK"  # lọc lượt đã xong vẫn chạy

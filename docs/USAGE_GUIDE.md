@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng: ảnh chụp hoặc video → mô hình 3DGS
 
-_Cập nhật: 19/10/2026_
+_Cập nhật: 21/10/2026_
 
 Giao diện hiện có:
 - notebook `app/notebooks/runpod.ipynb`, chạy trong Jupyter của pod Runpod;
@@ -12,7 +12,7 @@ Giao diện hiện có:
 
 ### 1.1 Network volume
 
-Runpod → **Storage → New Network Volume**: ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
+Runpod → **Storage → New Network Volume**: ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; chạy cả dò tham số ở mục 5.2 rồi thêm chế độ mới vào thực nghiệm chính thì nên 150 GB; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
 
 ### 1.2 Pod
 
@@ -42,7 +42,8 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | Lúc nào | Chạy các ô |
 |---|---|
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
-| Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `CHAY = True`), theo dõi ở ô 5 |
+| Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `EXP = "main"`, `CHAY = True`), theo dõi ở ô 5 |
+| Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 5 giờ) | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, `CHAY = True`), theo dõi ở ô 5 |
 | Đưa dữ liệu của bạn lên (mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
 | Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
 | Cảnh tự chụp: thư mục ảnh hoặc video (tốn GPU) | 8 (`CHAY = True`), theo dõi ở ô 5, kết quả ở ô 9 |
@@ -57,9 +58,9 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | 4 | Cài môi trường ở nền: `scripts/pod/run_all.sh` (env `gs-inria`, `gs-tools`, `gs-gsplat`, kèm smoke test). **Không train.** Lần đầu khoảng 80 phút (đo ngày 17/10/2026 trên RTX 4090) | Có (smoke test) |
 | 5 | Theo dõi việc nền, cập nhật mỗi 15 giây; tự dừng khi hết việc | Không |
 | 6 | Kiểm tra dữ liệu (chỉ đọc): thư mục gốc của từng bộ dữ liệu, từng cảnh có `images/` và `sparse/0/` không | Không |
-| 7 | `WHAT` = `experiment` (thực nghiệm chính, mục 5.1; `CHAY = False` chỉ in kế hoạch), hoặc với benchmark `BENCH`: `check` (kiểm tra dữ liệu), `fetch` (tải dữ liệu về volume), `gsplat` (`default` / `mcmc`), `b0` (3DGS gốc của Inria), `evaluate` (lập lại bảng). Việc chạy nền chỉ chạy khi `CHAY = True`; `gsplat` và `b0` chỉ được xếp hàng khi dữ liệu qua bước kiểm tra (mục 5) | Tùy |
+| 7 | `WHAT` = `experiment` (kế hoạch `EXP`: `main` là thực nghiệm chính, mục 5.1; `tune_mcmc` là dò tham số mcmc, mục 5.2; `CHAY = False` chỉ in kế hoạch), hoặc với benchmark `BENCH`: `check` (kiểm tra dữ liệu), `fetch` (tải dữ liệu về volume), `gsplat` (`default` / `mcmc`), `b0` (3DGS gốc của Inria), `evaluate` (lập lại bảng). Việc chạy nền chỉ chạy khi `CHAY = True`; `gsplat` và `b0` chỉ được xếp hàng khi dữ liệu qua bước kiểm tra (mục 5) | Tùy |
 | 8 | Cảnh tự chụp (`CHAY = True`): ảnh / video → COLMAP → `default` → `mcmc` (mục 3) | Có |
-| 9 | Kết quả một cảnh; `XUAT_PLY` (xuất PLY, không cần GPU), `RENDER_LAI` (render lại video quỹ đạo, chạy nền) | Tùy |
+| 9 | Kết quả một cảnh (kèm dòng "+ đã lọc" dưới lượt đã lọc Gaussian); `XUAT_PLY` (xuất PLY, không cần GPU), `RENDER_LAI` (render lại video quỹ đạo, chạy nền), `LOC` (lọc Gaussian của lượt `RUN` rồi chấm lại, chạy nền; mục 4) | Tùy |
 | 10 | Mọi kết quả và gói kết quả nhẹ `ket_qua_*.tar.gz` | Không |
 | 11 | Dừng mọi việc nền, kể cả việc đang xếp hàng (`DUNG=1`) | — |
 
@@ -205,6 +206,20 @@ bash scripts/run_render.sh deep_blending playroom default_s42        # benchmark
 - Trong notebook: ô 9 (`XUAT_PLY`, `RENDER_LAI`, `TRAJ`).
 - Gói kết quả nhẹ (mục 7) không chứa PLY, checkpoint hay video: tải các file này riêng qua thanh file của Jupyter.
 
+**Lọc Gaussian** (bỏ lớp sương mờ và Gaussian quá lớn, rồi chấm lại trên đúng ảnh test; `docs/design/experiments.md` mục 4). Cần GPU, chạy trong terminal của Jupyter:
+
+```bash
+bash scripts/run_filter.sh custom phong1 mcmc_s42              # một lượt: kết quả trong .../phong1/mcmc_s42/filtered/
+bash scripts/run_filter.sh custom phong1                       # mọi lượt đã train xong của cảnh
+MIN_OPACITY=0.05 MAX_SCALE=0.2 bash scripts/run_filter.sh mipnerf360 room mcmc_s42   # ngưỡng khác (mặc định 0,02 / 0,1)
+bash scripts/run_evaluate.sh custom phong1                     # bảng có thêm phần sau khi lọc
+```
+
+- PLY đã lọc: `<lượt>/filtered/ply/point_cloud_<bước>.ply`, mở bằng cùng trình xem như PLY gốc. Ảnh test và video của bản đã lọc: `<lượt>/filtered/renders/`, `<lượt>/filtered/videos/`.
+- Lượt gốc không bị sửa. Lọc lại với cùng ngưỡng thì bỏ qua; ngưỡng khác (hoặc `FORCE=1`) thì thư mục `filtered/` cũ đổi tên `filtered.prev_<thời gian>`.
+- Trong notebook: ô 9 với `LOC = True` lọc lượt `RUN` (chạy nền). Khi việc xong, chạy lại ô 9: dòng `+ đã lọc` ngay dưới lượt đó có chỉ số sau khi lọc và tỉ lệ Gaussian giữ lại.
+- Bỏ Gaussian lớn có thể làm thủng tường hay trần ở xa: xem cột Δ của bảng (chỉ số sau so với trước khi lọc) và video trước khi dùng bản đã lọc cho demo.
+
 ## 5. Benchmark: Deep Blending, Mip-NeRF 360
 
 Chạy benchmark nào, lúc nào là do bạn quyết định; chỉ chạy khi đã duyệt chi phí GPU. Lệnh train cần dữ liệu có sẵn: thiếu thì dừng trước khi train. Protocol, số liệu đối chiếu và lệnh từng benchmark: `experiments/deep_blending/README.md`, `experiments/mipnerf360/README.md`; quy tắc so sánh: `docs/design/experiments.md`.
@@ -236,12 +251,28 @@ bash scripts/pod/run_experiment.sh main --plan                       # kế ho�
 VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # chạy nền (việc exp_main)
 ```
 
-Trong notebook: ô 7 với `WHAT = "experiment"`, `VOLUME_GB` = dung lượng thật của volume, rồi `CHAY = True`. Gửi được ngay sau ô 4: việc xếp hàng và tự chạy khi cài xong.
+Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "main"`, `VOLUME_GB` = dung lượng thật của volume, rồi `CHAY = True`. Gửi được ngay sau ô 4: việc xếp hàng và tự chạy khi cài xong.
 
 - Ước lượng (chưa đo trên Mip-NeRF 360): khoảng 12 giờ GPU trên RTX 4090; thêm khoảng 56 GB trên volume, cộng môi trường conda khoảng 15–20 GB, nên volume 100 GB đủ. Thêm chế độ vào kế hoạch thì cần thêm chỗ: tăng volume rồi đặt `VOLUME_GB` bằng dung lượng mới.
 - Chỗ trống được kiểm tra trước khi chạy và trước mỗi seed, chỉ cho các lượt chưa xong: mỗi lượt tính theo dung lượng thật của lượt cùng cảnh, cùng chế độ đã xong ở seed khác (chưa có thì theo ước lượng). Không đủ thì dừng train, các lượt đã xong vẫn giữ; tăng volume rồi chạy lại để làm nốt. `SPACE_CHECK=0` bỏ qua.
 - Pod vẫn tính tiền suốt lượt chạy. `AUTO_STOP = True` ở ô 7 (`AUTO_STOP=1` khi chạy lệnh) dừng pod khi việc cuối cùng xong; chưa thử trên pod.
 - Kết quả: `/workspace/outputs/reports/experiment_main_<thời_gian>.md` (các bước, bảng so với `default` của từng benchmark); ô 10 cũng in các bước của lượt gần nhất.
+
+### 5.2 Dò tham số `mcmc`: `tune_mcmc`
+
+Một việc nền trên `room` của Mip-NeRF 360, seed 42 (thiết kế: `docs/design/experiments.md` mục 3): `default`, `mcmc` và 10 biến thể của `mcmc`, mỗi biến thể đổi một tham số (`opacity_reg`, `scale_reg`, `strategy.noise_lr`, `strategy.min_opacity`, `random_bkgd`, `depth_loss`); kiểm tra điểm SfM trước khi train (vì có biến thể `depth_loss`); sau khi train, lọc Gaussian mọi lượt rồi chấm lại; bảng so với `default`, bảng so với `mcmc`, bảng sau khi lọc.
+
+```bash
+bash scripts/pod/run_experiment.sh tune_mcmc --plan                       # kế hoạch, các bước, dữ liệu đã có
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh tune_mcmc --background   # chạy nền (việc exp_tune_mcmc)
+```
+
+Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "tune_mcmc"`, `VOLUME_GB`, rồi `CHAY = True`.
+
+- Ước lượng (chưa đo): khoảng 5 giờ GPU trên RTX 4090; thêm khoảng 24 GB trên volume. Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
+- Một cảnh, một seed: chỉ để chọn ứng viên cho chế độ `mcmc_indoor`, chưa phải kết quả "cải thiện". `room` là cảnh dùng để chọn tham số: khi so `mcmc_indoor` trong thực nghiệm chính, kết luận dựa trên 5 cảnh còn lại. Bảng tự động vẫn có `room`; bảng không có `room`: `docs/design/experiments.md` mục 3.1.
+- Lượt `room/default_s42`, `room/mcmc_s42` dùng chung với thực nghiệm chính: chạy `main` sau đó không train lại hai lượt này. 10 biến thể có tag nên bảng của `main` không lẫn chúng (có một dòng cảnh báo ghi số lượt để ngoài); xem lại bảng của các biến thể: `TAGS="or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth" SCENES=room bash scripts/run_evaluate.sh mipnerf360` (ô 7: `WHAT = "evaluate"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `TAGS`).
+- Kết quả: `/workspace/outputs/reports/experiment_tune_mcmc_<thời_gian>.md`.
 
 ## 6. Giao diện dòng lệnh `python -m app.cli`
 
@@ -253,9 +284,10 @@ Một lệnh cho mọi bước; mỗi lệnh gọi đúng một script trong `sc
 | `prepare` | `scripts/prepare_data.sh` | `custom <ảnh\|video> <cảnh>` hoặc `<benchmark>` |
 | `train` | `scripts/run_train.sh` | `custom <cảnh> [chế độ ...]` hoặc `<benchmark> [gsplat\|b0]` |
 | `render` | `scripts/run_render.sh` | `custom <cảnh> [lượt]` hoặc `<benchmark> <cảnh> [lượt]` |
+| `filter` | `scripts/run_filter.sh` | Lọc Gaussian rồi chấm lại: `custom <cảnh> [lượt ...]` hoặc `<benchmark> <cảnh> [lượt ...]` (mục 4) |
 | `evaluate` | `scripts/run_evaluate.sh` | `<benchmark>` hoặc `custom [cảnh ...]` |
 | `fetch` | `scripts/pod/fetch_data.sh` | Tải dữ liệu benchmark: `<benchmark> [cảnh ...] [--dry-run]` |
-| `experiment` | `scripts/pod/run_experiment.sh` | Thực nghiệm trọn vẹn: `<tên> --plan` hoặc `<tên> --background` (mục 5.1) |
+| `experiment` | `scripts/pod/run_experiment.sh` | Thực nghiệm trọn vẹn: `<tên> --plan` hoặc `<tên> --background` (`main`: mục 5.1, `tune_mcmc`: mục 5.2) |
 | `scene` | `scripts/pod/run_scene.sh` | Cả luồng cho một cảnh tự chụp: `<ảnh\|video\|-> <cảnh> [--background]` |
 | `setup` | `scripts/pod/run_all.sh --background` | Cài / kiểm tra môi trường (chạy nền, không train) |
 | `status`, `log`, `stop` | `scripts/pod/job.sh` | Việc chạy nền: trạng thái, cuối log, dừng |
@@ -305,6 +337,8 @@ Gói kết quả gồm báo cáo, log, trạng thái việc nền, JSON / CSV k�
 | `COLMAP verdict FAIL` | Xem các dòng `gợi ý` ở ô 9, chụp / quay lại theo `docs/data/capture_protocol.md` và chạy ô 8 với tên cảnh mới |
 | `góc nhìn: THIẾU` (ô 9), `VIEW COVERAGE: LOW` (log) | Chỉ là cảnh báo: có hướng chưa ảnh nào nhìn tới, hoặc camera gần như đứng yên |
 | `not a finished run` (ô 9) | Lượt `RUN` chưa train xong hoặc tên sai: xem tên các lượt trong bảng của ô 9 |
+| `cannot be trained with the SfM depth loss` (bước `depth_check_<benchmark>` của thực nghiệm) | Có ảnh train không có điểm nào trong track của SfM (tên ảnh in ở dòng `FAIL` phía trên): lượt có `depth_loss` sẽ lỗi. Chỉ các lượt đó của benchmark đó bị bỏ, các lượt khác vẫn train. Dòng `WARN` (mọi điểm của ảnh nằm ngoài ảnh) chỉ là cảnh báo |
+| `the thresholds remove every Gaussian`, `evaluation of the filtered model failed` (lọc Gaussian) | Ngưỡng quá chặt: giảm `MIN_OPACITY` hoặc tăng `MAX_SCALE`. Lỗi chấm lại: xem `<lượt>/filtered/eval.log`; lượt gốc không bị ảnh hưởng |
 | `COLMAP model ... changed after this run was trained` (render lại) | Cảnh đã làm lại COLMAP sau lượt này: chạy ô 8 với `SOURCE = "-"` và `SCENE` của cảnh (lượt làm từ mô hình cũ tự được train lại), rồi render lượt mới; xuất PLY của lượt cũ vẫn được (`XUAT_PLY`) |
 | Lỗi khác | Chạy ô 10 và gửi gói `ket_qua_*.tar.gz` (không gửi `/workspace/.ssh`) |
 
@@ -319,6 +353,7 @@ Sự cố môi trường đã biết: `docs/ENVIRONMENT_AUDIT.md` mục 6.
 | Render lại, xuất PLY, CLI | Đã kiểm thử trên CPU với runner giả / stub (không có gsplat thật) | `tests/unit/test_render.py`, `tests/unit/test_cli.py` |
 | Notebook `runpod.ipynb` | Đã mô phỏng trên `/workspace` giả: GitHub thay bằng repo Git cục bộ, `ssh` / `curl` giả, không GPU, không conda (các việc cần GPU dừng sớm) | `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox" |
 | Tải dữ liệu benchmark, thực nghiệm chính | Đã kiểm thử với curl giả, file zip tổng hợp và các bước giả (stub); **chưa tải thật, chưa chạy trên pod** | `tests/unit/test_fetch.py`, `tests/unit/test_experiment.py` |
+| Dò tham số `tune_mcmc` (biến thể, kiểm tra điểm SfM), lọc Gaussian | Đã kiểm thử với các bước giả, runner giả; checkpoint PyTorch và PLY của gsplat kiểm tra trên CPU; **chưa chạy trên GPU** | `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py`, `test_prune.py` |
 | Trên pod (COLMAP 4.2.1, GPU) bằng repo này | **Chưa chạy** | — |
 
 Tóm tắt các ca với COLMAP thật (sandbox):

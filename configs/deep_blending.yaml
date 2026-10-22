@@ -29,7 +29,7 @@ results:
   gsplat_quick: ${WS}/outputs/benchmarks/deep_blending/gsplat_quick
 results_layout:
   inria_b0: "<cảnh>/ (results.json, run_meta.json, point_cloud/...)"
-  gsplat: "<cảnh>/<chế_độ>_s<seed>/ (summary.json, run_meta.json, ...)"
+  gsplat: "<cảnh>/<chế_độ>[_<tag>]_s<seed>/ (summary.json, run_meta.json, ...; tag: biến thể của một kế hoạch; filtered/ khi đã lọc Gaussian)"
   gsplat_quick: "<cảnh>/<chế_độ>_s<seed>/ (chạy thử 3.000 vòng)"
 
 commands:

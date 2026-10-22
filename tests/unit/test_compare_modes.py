@@ -13,7 +13,8 @@ TOLERANCE = {"PSNR": 0.5, "SSIM": 0.01, "LPIPS": 0.01}
 
 
 def write_run(root, scene, mode, seed, psnr, *, count=2_000_000, split="s1", deviations=None,
-              protocol=None, gpu="RTX A6000", status="OK", args=None, tag="", fingerprint="fp-a"):
+              protocol=None, gpu="RTX A6000", status="OK", args=None, tag="", fingerprint="fp-a", run_tag=None):
+    """`tag`: hậu tố thư mục; `run_tag`: tag ghi trong summary (biến thể của kế hoạch thực nghiệm, run.py --tag)."""
     run = root / scene / f"{mode}{tag}_s{seed}"
     run.mkdir(parents=True)
     (run / "run_meta.json").write_text("{}", encoding="utf-8")
@@ -23,9 +24,24 @@ def write_run(root, scene, mode, seed, psnr, *, count=2_000_000, split="s1", dev
                "train_seconds": 1800.0, "peak_vram_mib": 10240.0, "protocol": protocol,
                "deviations": deviations or {}, "split_sha256": split, "split_rule": "every_n",
                "split_applied_ok": True, "gsplat_commit": "6e8c837", "gpu": gpu, "args": args or {},
-               "lpips_net": protocol.get("lpips_net"), "scene_fingerprint": fingerprint}
+               "lpips_net": protocol.get("lpips_net"), "scene_fingerprint": fingerprint, "tag": run_tag}
     (run / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
     return run
+
+
+def write_filtered(run, psnr, *, kept=1_500_000, total=2_000_000, status="OK", min_opacity=0.02):
+    """Bản đã lọc của một lượt như src.training.prune ghi ra (rút gọn): filter_meta.json, stats, PLY."""
+    folder = run / "filtered"
+    (folder / "stats").mkdir(parents=True)
+    (folder / "ply").mkdir()
+    meta = {"status": status, "thresholds": {"min_opacity": min_opacity, "max_scale": 0.1}, "scene_scale": 4.4,
+            "counts": {"input": total, "removed": {"non_finite": 0, "opacity": total - kept, "max_scale": 0},
+                       "kept": kept, "kept_fraction": kept / total},
+            **({"error": "FilterError: eval: exit code 3"} if status != "OK" else {})}
+    (folder / "filter_meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    (folder / "stats" / "val_step29999.json").write_text(
+        json.dumps({"psnr": psnr, "ssim": 0.89, "lpips": 0.26, "ellipse_time": 0.003, "num_GS": kept}))
+    (folder / "ply" / "point_cloud_29999.ply").write_bytes(b"\0" * (3 * 2**20))
 
 
 def checks(report, scene, mode):
@@ -287,3 +303,78 @@ def test_a_mode_name_with_one_variant_can_be_the_baseline(tmp_path, capsys):
     assert main(["--root", str(tmp_path), "--baseline", "mcmc", "--modes", "mcmc", "--out", str(out)]) == 0
     assert "has several variants" in capsys.readouterr().err
     assert json.loads(out.read_text(encoding="utf-8"))["baseline"] == "mcmc"  # không đoán: baseline thiếu
+
+
+def test_the_plain_runs_of_a_mode_are_its_baseline_beside_plan_variants(tmp_path):
+    for seed in (42, 43, 44):
+        write_run(tmp_path, "playroom", "default", seed, 29.8)
+        write_run(tmp_path, "playroom", "mcmc", seed, 29.9, args={"opacity-reg": 0.001})  # quy ước mcmc của benchmark
+        write_run(tmp_path, "playroom", "mcmc", seed, 30.1, args={"opacity-reg": 0.005}, tag="_or0005",
+                  run_tag="or0005")  # biến thể của kế hoạch: tham số riêng, có tag
+    out = tmp_path / "r.json"
+    argv = ["--root", str(tmp_path), "--baseline", "mcmc", "--modes", "mcmc", "--out", str(out)]
+    assert main([*argv, "--tags", "or0005"]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["baseline"] == "mcmc[opacity-reg=0.001]"
+    assert report["deltas"]["playroom"]["mcmc[opacity-reg=0.005]"]["PSNR"] == pytest.approx(0.2)
+    assert not any("with a tag" in warning for warning in report["warnings"])
+
+
+def test_runs_with_a_tag_stay_out_unless_their_tag_is_asked_for(tmp_path):
+    # tune_mcmc ghi các biến thể có tag vào cùng thư mục với thực nghiệm chính: bảng của thực nghiệm chính không lẫn chúng
+    for scene in ("room", "counter"):
+        for seed in (42, 43, 44):
+            write_run(tmp_path, scene, "default", seed, 29.0)
+            write_run(tmp_path, scene, "mcmc", seed, 29.5)
+    write_run(tmp_path, "room", "mcmc", 42, 30.5, args={"opacity-reg": 0.001}, tag="_or0001", run_tag="or0001")
+    write_run(tmp_path, "room", "mcmc", 42, 29.0, args={"random-bkgd": True}, tag="_rbg", run_tag="rbg")
+    out = tmp_path / "r.json"
+    assert main(["--root", str(tmp_path), "--modes", "default", "mcmc", "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["variants"] == ["default", "mcmc"] and report["complete_scenes"] == ["counter", "room"]
+    assert report["mean_over_scenes_seeds"] == {"counter": [42, 43, 44], "room": [42, 43, 44]}
+    assert ("left out 2 run(s) with a tag (or0001, rbg): variants of another experiment plan; pass their tags with "
+            "--tags (TAGS=... for scripts/run_evaluate.sh) to include them") in report["warnings"]
+    assert main(["--root", str(tmp_path), "--modes", "default", "mcmc", "--tags", "or0001", "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["variants"] == ["default", "mcmc", "mcmc[opacity-reg=0.001]"]
+    assert report["scenes"]["room"]["mcmc[opacity-reg=0.001]"]["n"] == 1
+    assert any("left out 1 run(s) with a tag (rbg)" in warning for warning in report["warnings"])
+
+
+def test_filtered_runs_get_a_before_after_table(tmp_path):
+    for seed, psnr in ((42, 30.0), (43, 30.2)):
+        write_run(tmp_path, "room", "default", seed, 29.0)
+        write_filtered(write_run(tmp_path, "room", "mcmc", seed, psnr), psnr - 0.1)
+    failed = write_run(tmp_path, "room", "default", 44, 29.1)
+    write_filtered(failed, 0.0, status="FAILED")
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    after = report["scenes"]["room"]["mcmc"]["filtered"]
+    assert after["n"] == 2 and after["seeds"] == [42, 43]
+    assert after["metrics"]["PSNR"] == pytest.approx(30.0) and after["delta"]["PSNR"] == pytest.approx(-0.1)
+    assert after["delta"]["LPIPS"] == pytest.approx(0.01) and after["kept_fraction"] == pytest.approx(0.75)
+    assert after["num_gaussians_before"] == 2_000_000 and after["ply_size_mb"] == pytest.approx(3.0)
+    assert report["scenes"]["room"]["default"]["filtered"] is None  # lượt lọc lỗi không có số
+    assert {"run_dir": str(failed), "scene": "room", "variant": "default", "filtered": "FAILED",
+            "problem": "FilterError: eval: exit code 3"} in report["incomplete"]
+    assert report["deltas"]["room"]["mcmc"]["PSNR"] == pytest.approx(1.1)  # bảng chính: mô hình chưa lọc
+    text = format_markdown(report)
+    assert "Sau khi lọc Gaussian (src.training.prune: bỏ opacity < 0.02 hoặc trục lớn nhất > 0.1 × scene_scale)" in text
+    assert "| room | mcmc | 2 | 30.000 | 0.8900 | 0.2600 | -0.100 | -0.0100 | +0.0100 | 1,500,000 (75.0%) |" in text
+    write_filtered(write_run(tmp_path, "room", "mcmc", 44, 30.1), 30.0, min_opacity=0.05)
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    assert any("filtered with different thresholds" in warning for warning in report["warnings"])
+    assert ("| 3.00 | bỏ opacity < 0.02 hoặc trục lớn nhất > 0.1 × scene_scale; bỏ opacity < 0.05 hoặc trục lớn nhất "
+            "> 0.1 × scene_scale |") in format_markdown(report)  # một dòng trộn hai bộ ngưỡng: ghi cả hai
+
+
+def test_filtered_rows_name_their_thresholds_when_rows_differ(tmp_path):
+    write_run(tmp_path, "room", "default", 42, 29.0)
+    write_filtered(write_run(tmp_path, "room", "mcmc", 42, 30.0), 29.9)
+    write_filtered(write_run(tmp_path, "room", "default", 43, 29.1), 29.0, min_opacity=0.0123456789)
+    write_run(tmp_path, "room", "mcmc", 43, 30.1)
+    text = format_markdown(build_report(discover([tmp_path]), "default", ["default", "mcmc"]))
+    assert "| PLY (MB) trước → sau | Render (ms/ảnh) | Ngưỡng |" in text
+    rows = [line for line in text.splitlines() if line.startswith("| room |") and "→" in line]
+    assert rows[0].endswith("| bỏ opacity < 0.0123456789 hoặc trục lớn nhất > 0.1 × scene_scale |")  # default
+    assert rows[1].endswith("| bỏ opacity < 0.02 hoặc trục lớn nhất > 0.1 × scene_scale |")  # mcmc

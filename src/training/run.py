@@ -33,6 +33,7 @@ import functools
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -369,7 +370,8 @@ def owner_alive(meta: dict) -> bool:
     return "src.training.run" in cmdline
 
 
-def _backup_name(out: Path) -> Path:
+def backup_name(out: Path) -> Path:
+    """Tên cho thư mục cũ trước khi làm lại: <tên>.prev_<thời gian>[_<số>] (không ghi đè, không xóa)."""
     stamp = f"{dt.datetime.now():%Y%m%d_%H%M%S}"
     backup, counter = out.with_name(f"{out.name}.prev_{stamp}"), 1
     while backup.exists():
@@ -448,6 +450,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset-protocol", action="append", default=[], metavar="KEY=VALUE",
                         help="quy ước của benchmark, chỉ data_factor (vd. data_factor=4 cho cảnh ngoài trời của "
                              "Mip-NeRF 360): thay protocol gốc, không bị ghi là sai khác")
+    parser.add_argument("--tag", help="tên biến thể của chế độ (mục variants của kế hoạch thực nghiệm), chỉ ghi vào "
+                                      "run_meta.json; thư mục kết quả do --out quyết định")
     parser.add_argument("--gpu", default="0", help="chỉ số GPU khi CUDA_VISIBLE_DEVICES chưa đặt")
     parser.add_argument("--python", default=sys.executable, help="Python của env gs-gsplat")
     parser.add_argument("--force", action="store_true", help="chạy lại; thư mục cũ được đổi tên, không xóa")
@@ -464,6 +468,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command) -> int:
     args = build_parser().parse_args(argv)
+    if args.tag is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", args.tag):
+        print(f"ERROR: invalid --tag {args.tag!r} (letters, digits, '_' and '-')", file=sys.stderr)
+        return 2
     try:
         config = load_config(args.config)
         protocol_overrides = parse_assignments(args.protocol)
@@ -512,8 +519,8 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
         warnings.append(f"protocol deviations: {sorted(spec.deviations)} - not comparable with protocol runs")
 
     if args.dry_run:
-        plan = {"spec": spec.to_dict(), "seed": seed, "cap_max": cap_source, "scene_info": scene_info,
-                "data_dir": str(data_dir),
+        plan = {"spec": spec.to_dict(), "seed": seed, **({"tag": args.tag} if args.tag else {}),
+                "cap_max": cap_source, "scene_info": scene_info, "data_dir": str(data_dir),
                 **({"png_cache": str(png_cache_dir(out, data_factor, scene_info["fingerprint"]))}
                    if data_factor > 1 else {}),
                 "split": {k: v for k, v in split.to_dict().items() if k not in ("train", "test")},
@@ -574,7 +581,7 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
               f"{factor_view['png_cache']}" + (" (reused)" if factor_view["png_cache_reused"] else ""))
 
     if action == "replace":
-        backup = _backup_name(out)
+        backup = backup_name(out)
         out.rename(backup)
         print(f"[run] previous results moved to {backup}")
     out.mkdir(parents=True, exist_ok=True)
@@ -591,6 +598,7 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
         "scene_dir": str(scene_dir),
         "mode": spec.mode,
         "seed": seed,
+        **({"tag": args.tag} if args.tag else {}),
         "status": "RUNNING",
         "failed_step": None,
         "spec": spec.to_dict(),

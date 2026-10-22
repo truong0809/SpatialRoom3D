@@ -2,7 +2,8 @@
 # train_gsplat_modes.sh - Cac che do huan luyen gsplat (configs/base.yaml, train_modes) tren mot benchmark
 # (deep_blending | mipnerf360):
 #   1. default (baseline B1) cho tung canh;
-#   2. cac che do con lai (mac dinh: mcmc) voi cung so Gaussian cuoi cua lan chay default (giao thuc cua paper 3DGS-MCMC);
+#   2. cac che do con lai (mac dinh: mcmc) voi cung so Gaussian cuoi cua lan chay default (giao thuc cua paper 3DGS-MCMC),
+#      roi cac bien the tham so (VARIANTS), cung ngan sach Gaussian;
 #   3. bang so sanh cac che do; doi chieu default voi so lieu Inria cong bo (muc benchmark cua configs/<benchmark>.yaml)
 #      va voi luot Inria tu chay cua scripts/pipeline/train_inria_b0.sh (tung canh), neu da co.
 # Chay lai an toan: lan chay nao da co summary.json OK voi cung cau hinh se duoc bo qua.
@@ -18,16 +19,22 @@
 #   MODES="default mcmc"   cac che do (ten trong configs/base.yaml); phai co default, default luon chay truoc
 #   SCENES="..."   chi chay cac canh nay (mac dinh: moi canh trong configs/<benchmark>.yaml); khi chi la mot phan cac
 #                  canh, doi chieu voi so cong bo (trung binh moi canh) ghi SKIPPED, B0 chi doi chieu khi co du canh
-#   MCMC_SET=...   tham so them cho moi che do preset mcmc, mac dinh benchmark.gsplat.mcmc_set (Deep Blending: opacity_reg=0.001)
+#   MCMC_SET=...   tham so them cho moi che do preset mcmc, mac dinh benchmark.gsplat.mcmc_set (Deep Blending: opacity_reg=0.001);
+#                  mot cap <khoa>=<gia_tri>; che do tu dat khoa do trong configs/base.yaml (args) thi giu gia tri cua che do
+#   VARIANTS="mcmc:or0001:opacity_reg=0.001 mcmc:rbg:random_bkgd=true"
+#                  bien the tham so (thuong do scripts/pod/run_experiment.sh dat theo muc variants cua ke hoach):
+#                  <che_do>:<tag>:<khoa>=<gia_tri>[,<khoa>=<gia_tri>...]; che do phai co trong MODES (khong phai
+#                  default); tham so them sau MCMC_SET; ket qua vao <che_do>_<tag>_s<seed>
 #   WS=/workspace  ENV_NAME=gs-gsplat  CONFIG=<file JSON>   (du lieu phai co san)
 #   OUT_ROOT, B0_ROOT   mac dinh lay tu configs/<benchmark>.yaml (results.gsplat | gsplat_quick, results.inria_b0):
 #                       $WS/outputs/benchmarks/<benchmark>/{gsplat,gsplat_quick,inria_b0}
-# Ket qua: $OUT_ROOT/<canh>/<che_do>_s<seed>/; log va bao cao: $WS/outputs/logs, $WS/outputs/reports/modes_<tag>[_quick]_<thoi gian>.*
+# Ket qua: $OUT_ROOT/<canh>/<che_do>[_<tag>]_s<seed>/; log va bao cao: $WS/outputs/logs,
+#          $WS/outputs/reports/modes_<tag benchmark>[_quick]_<thoi gian>.*
 
 set -euo pipefail
 export MPLBACKEND=Agg  # xem setup_gsplat.sh: MPLBACKEND cua Jupyter lam matplotlib bao loi trong env gs-gsplat
 
-usage() { sed -n '2,25p' "$0"; exit 2; }
+usage() { sed -n '2,32p' "$0"; exit 2; }
 [ "$#" -eq 1 ] || usage
 BENCH="$1"
 [[ "$BENCH" =~ ^[a-z0-9_]+$ ]] || usage
@@ -73,6 +80,28 @@ for mode in "${MODE_ARGS[@]}"; do
   [[ " ${MODE_LIST[*]} " == *" $mode "* ]] || MODE_LIST+=("$mode")
 done
 [ "$HAS_DEFAULT" = 1 ] || die "MODES must include default (the baseline, and the Gaussian budget of the other modes)"
+# bien the tham so: <che_do>:<tag>:<khoa>=<gia_tri>[,...] (scripts/pod/run_experiment.sh, muc variants cua ke hoach)
+read -r -a VARIANT_ARGS <<< "${VARIANTS:-}"
+VARIANT_MODE=() VARIANT_TAG=() VARIANT_SETS=()
+for entry in "${VARIANT_ARGS[@]}"; do
+  IFS=: read -r vmode vtag vsets vrest <<< "$entry"
+  if ! [[ "$vmode" =~ ^[A-Za-z0-9_]+$ && "$vtag" =~ ^[a-z0-9]+(_[a-z0-9]+)*$ && -n "$vsets" && -z "$vrest" ]]; then
+    die "invalid entry in VARIANTS: $entry (expected <mode>:<tag>:<key>=<value>[,<key>=<value>...])"
+  fi
+  [ "$vmode" != default ] || die "VARIANTS: $entry is a variant of default, the baseline (not supported)"
+  [[ " ${MODE_LIST[*]} " == *" $vmode "* ]] || die "VARIANTS: the mode of $entry is not in MODES (${MODE_LIST[*]})"
+  [[ " ${MODE_LIST[*]} " != *" ${vmode}_$vtag "* ]] || die "VARIANTS: ${vmode}_$vtag is also a mode in MODES"
+  for other in "${!VARIANT_MODE[@]}"; do
+    [ "${VARIANT_MODE[$other]}_${VARIANT_TAG[$other]}" != "${vmode}_$vtag" ] || die "VARIANTS: ${vmode}_$vtag is listed twice"
+  done
+  IFS=, read -r -a pairs <<< "$vsets"
+  for pair in "${pairs[@]}"; do
+    [[ "$pair" =~ ^[A-Za-z0-9_.-]+=[A-Za-z0-9_.+-]+$ ]] || die "VARIANTS: invalid parameter '$pair' in $entry"
+  done
+  VARIANT_MODE+=("$vmode")
+  VARIANT_TAG+=("$vtag")
+  VARIANT_SETS+=("$vsets")
+done
 [ "${#SEED_LIST[@]}" -gt 0 ] || die "SEEDS is empty"
 for seed in "${SEED_LIST[@]}"; do
   [[ "$seed" =~ ^[0-9]+$ ]] || die "SEEDS must be non-negative integers: $seed"
@@ -98,21 +127,30 @@ set -u
 python -c "import torch, fused_ssim; from gsplat import csrc; x = torch.rand(1, 3, 16, 16, device='cuda'); fused_ssim.fused_ssim(x, x)" \
   || die "conda env $ENV_NAME is not ready for this GPU - run scripts/setup/setup_gsplat.sh (it rebuilds when the GPU type changes)"
 export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
-# preset cua tung che do (configs/base.yaml): MCMC_SET chi ap cho che do preset mcmc; ten sai thi dung truoc khi train
-PRESETS="$(python - "$REPO_DIR/configs/base.yaml" "${MODE_LIST[@]}" <<'PY'
+# preset cua tung che do (configs/base.yaml) va tham so them cua benchmark cho no: MCMC_SET chi ap cho che do preset
+# mcmc, tru khi chinh che do da dat khoa do (vd. mot che do da chon opacity_reg rieng); ten sai thi dung truoc khi train
+PRESETS="$(python - "$REPO_DIR/configs/base.yaml" "$MCMC_SET" "${MODE_LIST[@]}" <<'PY'
 import sys
-from src.training.profiles import load_config  # muc train_modes cua configs/base.yaml (PyYAML co trong env gs-gsplat)
+from src.training.profiles import load_config, normalize_flag  # PyYAML co trong env gs-gsplat
 modes = load_config(sys.argv[1])["modes"]
-unknown = [name for name in sys.argv[2:] if name not in modes]
+convention, names = sys.argv[2], sys.argv[3:]
+if convention and ("=" not in convention or len(convention.split()) != 1):
+    sys.exit(f"MCMC_SET must be one key=value pair, got {convention!r}")
+key = normalize_flag(convention.split("=", 1)[0]) if convention else None
+unknown = [name for name in names if name not in modes]
 if unknown:
     sys.exit(f"unknown mode(s) {unknown} in MODES; configs/base.yaml has {sorted(modes)}")
-for name in sys.argv[2:]:
-    print(name, modes[name].get("preset"))
+for name in names:
+    entry = modes[name]
+    own = {normalize_flag(arg) for arg in entry.get("args") or {}}
+    use = convention and entry.get("preset") == "mcmc" and key not in own
+    print(name, entry.get("preset"), convention if use else "-")
 PY
 )" || die "cannot use MODES=${MODE_LIST[*]} (see above)"
-declare -A PRESET=()
-while read -r name preset; do
+declare -A PRESET=() MODE_EXTRA=()
+while read -r name preset extra; do
   PRESET[$name]="$preset"
+  MODE_EXTRA[$name]="$extra"  # "-": khong them gi
 done <<< "$PRESETS"
 
 read -r -a SCENES <<< "${SCENES:-$(read_cfg scenes)}"
@@ -126,6 +164,14 @@ if [ -n "$MCMC_SET" ]; then
   MCMC_EXTRA=(--set "$MCMC_SET")
 fi
 echo "benchmark: $BENCH | scenes: ${SCENES[*]} | seeds: ${SEED_LIST[*]} | modes: ${MODE_LIST[*]} | mcmc extra: ${MCMC_EXTRA[*]-none}"
+for mode in "${MODE_LIST[@]:1}"; do
+  if [ "${PRESET[$mode]}" = mcmc ] && [ -n "$MCMC_SET" ] && [ "${MODE_EXTRA[$mode]}" = - ]; then
+    echo "  $mode sets ${MCMC_SET%%=*} itself (configs/base.yaml): MCMC_SET is not added to it"
+  fi
+done
+if [ "${#VARIANT_ARGS[@]}" -gt 0 ]; then
+  echo "variants: ${VARIANT_ARGS[*]}"
+fi
 echo "output: $OUT_ROOT"
 if [ "$QUICK" = "1" ]; then
   echo "QUICK mode: ${RUN_ARGS[*]} (smoke test of the whole flow, numbers are not results)"
@@ -161,13 +207,30 @@ for seed in "${SEED_LIST[@]}"; do
     for mode in "${MODE_LIST[@]:1}"; do
       step "3. $mode (same Gaussian count) | $scene | seed $seed"
       EXTRA=()
-      if [ "${PRESET[$mode]}" = mcmc ]; then
-        EXTRA=("${MCMC_EXTRA[@]}")
+      if [ "${MODE_EXTRA[$mode]}" != - ]; then
+        EXTRA=(--set "${MODE_EXTRA[$mode]}")
       fi
       # --replace-stale: lan OK cu lay ngan sach tu mot lan default truoc (da train lai) thi chay lai
       python -m src.training.run --mode "$mode" --scene "$src" --scene-name "$scene" \
         --out "$OUT_ROOT/$scene/${mode}_s$seed" --seed "$seed" --gsplat-dir "$WS/code/gsplat" --rerun-incomplete \
         --replace-stale --cap-max-from "$base" "${EXTRA[@]}" "${SCENE_ARGS[@]}" "${RUN_ARGS[@]}" || FAILED=1
+    done
+    for v in "${!VARIANT_MODE[@]}"; do
+      mode="${VARIANT_MODE[$v]}"
+      tag="${VARIANT_TAG[$v]}"
+      step "3. $mode, variant $tag (same Gaussian count) | $scene | seed $seed"
+      EXTRA=()
+      if [ "${MODE_EXTRA[$mode]}" != - ]; then
+        EXTRA=(--set "${MODE_EXTRA[$mode]}")
+      fi
+      IFS=, read -r -a pairs <<< "${VARIANT_SETS[$v]}"
+      for pair in "${pairs[@]}"; do
+        EXTRA+=(--set "$pair")  # sau MCMC_SET: tham so cua bien the duoc uu tien
+      done
+      python -m src.training.run --mode "$mode" --scene "$src" --scene-name "$scene" \
+        --out "$OUT_ROOT/$scene/${mode}_${tag}_s$seed" --seed "$seed" --gsplat-dir "$WS/code/gsplat" --rerun-incomplete \
+        --replace-stale --cap-max-from "$base" --tag "$tag" "${EXTRA[@]}" "${SCENE_ARGS[@]}" "${RUN_ARGS[@]}" \
+        || FAILED=1
     done
   done
 done
@@ -175,6 +238,9 @@ done
 # ---------------------------------------------------------------------------
 REPORT="$REPORT_DIR/${NAME_TAG}_$STAMP"
 CHECK_ARGS=(--reference-config "$CONFIG" --scenes "${SCENES[@]}")
+if [ "${#VARIANT_TAG[@]}" -gt 0 ]; then
+  CHECK_ARGS+=(--tags "${VARIANT_TAG[@]}")  # cac bien the vua train; luot co tag khac (ke hoach khac) bi de ngoai
+fi
 if [ "$SUBSET" = 0 ]; then
   [ -d "$B0_ROOT" ] || echo "WARN: no own Inria run in $B0_ROOT (run bash scripts/run_train.sh $BENCH b0): the B0 check will be INCOMPLETE"
   CHECK_ARGS+=(--b0-root "$B0_ROOT")

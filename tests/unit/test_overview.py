@@ -137,6 +137,45 @@ def test_overview_reads_runs_from_another_out_root(tmp_path):
     assert "mcmc_s42" in text and "32.50" in text and "default_s42" not in text
 
 
+def write_filtered(run, status="OK"):
+    """Bản đã lọc của một lượt như src.training.prune ghi ra (rút gọn)."""
+    meta = {"status": status, "thresholds": {"min_opacity": 0.02, "max_scale": 0.1}, "scene_scale": 4.4,
+            "counts": {"input": 1500000, "removed": {"non_finite": 0, "opacity": 300000, "max_scale": 0},
+                       "kept": 1200000, "kept_fraction": 0.8},
+            **({"error": "FilterError: evaluation of the filtered model failed with exit code 3"}
+               if status != "OK" else {})}
+    write(run / "filtered" / "filter_meta.json", meta)
+    write(run / "filtered" / "stats" / "val_step29999.json",
+          {"psnr": 31.05, "ssim": 0.925, "lpips": 0.155, "ellipse_time": 0.003, "num_GS": 1200000})
+    write(run / "filtered" / "ply" / "point_cloud_29999.ply", b"x" * 1024)
+    write(run / "filtered" / "videos" / "traj_29999.mp4", b"v")
+
+
+def test_overview_shows_the_filtered_copy_under_its_run(tmp_path):
+    ws = make_ws(tmp_path)
+    run = runs_dir(ws) / "default_s42"
+    write_filtered(run)
+    lines = build(ws, ["video8"])
+    row = lines.index(next(line for line in lines if line.strip().startswith("default_s42 ")))
+    assert lines[row + 1].split() == ["+", "đã", "lọc", "OK", "31.05", "0.925", "0.155", "1,200,000", "(opacity",
+                                      "<", "0.02,", "trục", ">", "0.1", "×", "scene_scale;", "giữ", "80.0%)"]
+    text = "\n".join(lines)
+    assert str(run / "filtered" / "ply" / "point_cloud_29999.ply") in text
+    assert str(run / "filtered" / "videos" / "traj_29999.mp4") in text
+
+    write(run / "filtered" / "filter_meta.json", {})  # lượt lọc lỗi: không có chỉ số, không liệt kê PLY đã lọc
+    write_filtered(runs_dir(ws) / "default_s43", status="FAILED")
+    write(runs_dir(ws) / "default_s43" / "summary.json", {
+        "run_dir": "x", "scene": "video8", "mode": "default", "seed": 43, "status": "OK",
+        "metrics": {"PSNR": 31.0, "SSIM": 0.93, "LPIPS": 0.15}})
+    lines = build(ws, ["video8"])
+    row = lines.index(next(line for line in lines if line.strip().startswith("default_s43 ")))
+    assert lines[row + 1].split()[:7] == ["+", "đã", "lọc", "FAILED", "-", "-", "-"]
+    assert lines[row + 2].strip() == "- FilterError: evaluation of the filtered model failed with exit code 3"
+    text = "\n".join(lines)
+    assert "default_s43/filtered/ply" not in text and "default_s42/filtered/ply" not in text
+
+
 def test_overview_shows_photo_scene_coverage_and_hints(tmp_path):
     ws = tmp_path / "ws"
     scene = ws / "outputs" / "custom_scenes" / "phong_anh" / "colmap"

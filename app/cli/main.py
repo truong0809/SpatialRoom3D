@@ -1,11 +1,12 @@
 """Giao diện dòng lệnh của SpatialRoom3D: một lệnh cho mọi bước, gọi đúng script trong scripts/ (không có logic riêng).
 
-Luồng chính: Ảnh/Video -> kiểm tra đầu vào -> frame (video) -> COLMAP -> chuẩn bị dữ liệu -> train 3DGS -> render,
-xuất PLY -> đánh giá (PSNR / SSIM / LPIPS).
+Luồng chính: Ảnh/Video -> kiểm tra đầu vào -> frame (video) -> COLMAP -> chuẩn bị dữ liệu -> train 3DGS -> (lọc
+Gaussian, tùy chọn) -> render, xuất PLY -> đánh giá (PSNR / SSIM / LPIPS).
 
     python -m app.cli prepare custom /workspace/data/custom_scenes/phong1 phong1   # = bash scripts/prepare_data.sh ...
     python -m app.cli train custom phong1                                          # = bash scripts/run_train.sh ...
     python -m app.cli render custom phong1 default_s42                             # = bash scripts/run_render.sh ...
+    python -m app.cli filter custom phong1 mcmc_s42                                # = bash scripts/run_filter.sh ...
     python -m app.cli evaluate custom phong1                                       # = bash scripts/run_evaluate.sh ...
     python -m app.cli scene /workspace/data/custom_scenes/phong1 phong1 --background   # cả luồng, chạy nền
     python -m app.cli --dry-run train deep_blending gsplat                         # chỉ in lệnh bash sẽ chạy
@@ -28,6 +29,8 @@ COMMANDS: dict[str, tuple[str, list[str], str]] = {
     "prepare": ("scripts/prepare_data.sh", [], "chuẩn bị dữ liệu: custom <ảnh|video> <cảnh> | <benchmark>"),
     "train": ("scripts/run_train.sh", [], "huấn luyện: custom <cảnh> [chế độ ...] | <benchmark> [gsplat|b0]"),
     "render": ("scripts/run_render.sh", [], "render ảnh / video, xuất PLY: custom <cảnh> [lượt] | <benchmark> <cảnh> [lượt]"),
+    "filter": ("scripts/run_filter.sh", [],
+               "lọc Gaussian rồi chấm lại: custom <cảnh> [lượt ...] | <benchmark> <cảnh> [lượt ...]"),
     "evaluate": ("scripts/run_evaluate.sh", [], "đánh giá, so sánh các chế độ và B0: <benchmark> | custom [cảnh ...]"),
     "scene": ("scripts/pod/run_scene.sh", [], "cả luồng cho một cảnh tự chụp: <ảnh|video|-> <cảnh> [--background]"),
     "fetch": ("scripts/pod/fetch_data.sh", [], "tải dữ liệu benchmark về volume: <benchmark> [cảnh ...] [--dry-run]"),

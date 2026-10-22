@@ -13,7 +13,8 @@ Nguồn đọc (mới nhất theo thời gian sửa file):
     outputs/reports/modes_db_quick_*.json       lượt chạy thử 3000 vòng (chỉ kiểm tra luồng chạy)
     outputs/reports/experiment_*.tsv            các bước của thực nghiệm gần nhất (bảng so sánh: file .md cùng tên)
     data/custom_scenes/<cảnh>/               nguồn gốc (ảnh / video) của cảnh tự chụp
-    <out-root>/<cảnh>/colmap/{frames_report,sfm_report}.json, <out-root>/<cảnh>/<chế độ>_s<seed>/
+    <out-root>/<cảnh>/colmap/{frames_report,sfm_report}.json, <out-root>/<cảnh>/<chế độ>_s<seed>/ (và filtered/
+    của lượt đó khi đã lọc Gaussian bằng scripts/run_filter.sh)
     (hai thư mục gốc lấy từ configs/custom_scene.yaml: mặc định data/custom_scenes và outputs/custom_scenes, giống
     scripts/pod/run_scene.sh)
 """
@@ -285,6 +286,11 @@ def scene_section(ws: Path, scene: str, out_root: Path) -> list[str]:
         plys += sorted((run_dir / "ply").glob("*.ply"))
         # video quỹ đạo của bước đánh giá, và của các lần render lại (scripts/run_render.sh)
         videos += sorted((run_dir / "videos").glob("*.mp4")) + sorted(run_dir.glob("render_*/videos/*.mp4"))
+        if result.filtered:  # bản đã lọc Gaussian (scripts/run_filter.sh), ngay dưới lượt gốc
+            lines += filtered_rows(result.filtered)
+            if result.filtered.get("status") == "OK":
+                plys += sorted((run_dir / "filtered" / "ply").glob("*.ply"))
+                videos += sorted((run_dir / "filtered" / "videos").glob("*.mp4"))
     if any(path.parent.parent.name.startswith("default") for path in plys):
         lines.append("   Ghi chú: ảnh test là mỗi ảnh thứ 8 của cùng video (nội suy giữa các góc rất gần nhau),"
                      " nên PSNR cao hơn khi xem từ góc mới.")
@@ -293,6 +299,23 @@ def scene_section(ws: Path, scene: str, out_root: Path) -> list[str]:
     for path in videos:
         lines.append(f"   video: {path} ({path.stat().st_size / 2**20:.1f} MB)")
     return lines
+
+
+def filtered_rows(filtered: dict) -> list[str]:
+    """Dòng của bản đã lọc Gaussian (src.evaluation.gsplat_results.load_filtered), cùng cột với bảng các lượt."""
+    metrics = filtered.get("metrics") or {}
+    thresholds = filtered.get("thresholds") or {}
+    kept = filtered.get("kept_fraction")
+    note = [f"opacity < {thresholds['min_opacity']}, trục > {thresholds['max_scale']} × scene_scale"
+            if {"min_opacity", "max_scale"} <= set(thresholds) else None,
+            f"giữ {kept * 100:.1f}%" if isinstance(kept, (int, float)) else None]
+    note = "; ".join(item for item in note if item)
+    rows = [f"   {'  + đã lọc':<16} {filtered.get('status') or '-':<12} {_f(metrics.get('PSNR'), 2):>7} "
+            f"{_f(metrics.get('SSIM')):>7} {_f(metrics.get('LPIPS')):>7} {_count(filtered.get('num_gaussians')):>11}"
+            + (f"   ({note})" if note else "")]
+    if filtered.get("problem"):
+        rows.append(f"     - {filtered['problem']}")
+    return rows
 
 
 def package_line(ws: Path) -> list[str]:

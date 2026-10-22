@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # run_experiment.sh - Mot thuc nghiem tron ven theo configs/experiments/<ten>.yaml, trong MOT viec dung GPU:
-#   kiem tra moi truong -> kiem tra cho trong -> tai du lieu con thieu (scripts/pod/fetch_data.sh) -> B0 Inria cho
-#   benchmark co b0: true -> gsplat cac che do (scripts/run_train.sh <benchmark> gsplat), xen ke benchmark theo tung
-#   seed (du mot seed tren moi canh roi moi sang seed sau) -> bao cao so sanh cuoi (scripts/run_evaluate.sh)
-#   -> goi ket qua nhe (scripts/pod/pack_results.sh). Moi file ket qua duoc giu (khong xoa gi).
+#   kiem tra moi truong -> kiem tra cho trong -> tai du lieu con thieu (scripts/pod/fetch_data.sh) -> kiem tra diem SfM
+#   khi ke hoach co luot dung loss do sau (src/training/depth_check.py; khong dat thi chi bo cac luot do tren benchmark
+#   do) -> B0 Inria cho benchmark co b0: true -> gsplat
+#   cac che do va bien the (scripts/run_train.sh <benchmark> gsplat), xen ke benchmark theo tung seed (du mot seed tren
+#   moi canh roi moi sang seed sau), sau moi seed loc Gaussian roi cham lai khi ke hoach co post_filter
+#   (src/training/prune.py) -> bao cao so sanh cuoi (scripts/run_evaluate.sh) -> goi ket qua nhe
+#   (scripts/pod/pack_results.sh). Moi file ket qua duoc giu (khong xoa gi).
 # Luon chay day du (30.000 vong); khong co che do chay thu. Chay lai an toan: du lieu da co khong tai lai, luot gsplat
-# da xong va canh B0 da co ket qua tu bo qua.
+# da xong, luot da loc voi cung nguong va canh B0 da co ket qua tu bo qua.
 #
 # Cach chay (tren pod, tu thu muc goc cua repo, sau scripts/pod/run_all.sh):
 #   VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   chay nen (viec exp_main)
@@ -23,12 +26,13 @@
 #                   bo qua ca hai
 #   AUTO_STOP=1     voi --background: dung pod khi viec cuoi cung xong (scripts/pod/job.sh; chua thu tren pod)
 #   WS=/workspace
-# Ket qua: $WS/outputs/reports/experiment_<ten>_<thoi gian>.{md,tsv}, bang tung benchmark _<benchmark>[_vs_<moc>].{md,json};
-#          goi $WS/ket_qua_*.tar.gz
+# Ket qua: $WS/outputs/reports/experiment_<ten>_<thoi gian>.{md,tsv}, bang tung benchmark _<benchmark>[_vs_<moc>].{md,json}
+#          (bien the cua ke hoach vao bang qua TAGS; luot co tag cua ke hoach khac bi de ngoai);
+#          luot loc Gaussian: <luot>/filtered/ (bang truoc / sau khi loc nam trong bang so sanh); goi $WS/ket_qua_*.tar.gz
 
 set -uo pipefail
 
-usage() { sed -n '2,27p' "$0"; exit 2; }
+usage() { sed -n '2,31p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 case "$1" in -h|--help) usage ;; esac
 NAME="$1"
@@ -51,22 +55,37 @@ export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 # ---------------------------------------------------------------------------- ke hoach (configs/experiments/<ten>.yaml)
 PLAN_TEXT="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --plan "$NAME")" || exit 2
-DESCRIPTION="" MODES="" AGAINST="" SEEDS="" GPU_HOURS="" DISK_GB=""
-BENCHES=() B0S=() SCENE_SETS=()
+DESCRIPTION="" MODES="" AGAINST="" VARIANTS="" RUNS="" DEPTH_RUNS="" TEST_EVERY="" POST_FILTER="" SEEDS=""
+GPU_HOURS="" DISK_GB=""
+BENCHES=() B0S=() SCENE_SETS=() WARNINGS=()
 while IFS='|' read -r key v1 v2 v3; do
   case "$key" in
     description) DESCRIPTION="$v1" ;;
     modes) MODES="$v1" ;;
     also_against) AGAINST="$v1" ;;
+    variants) VARIANTS="$v1" ;;
+    runs) RUNS="$v1" ;;
+    depth_runs) DEPTH_RUNS="$v1" ;;
+    depth_test_every) TEST_EVERY="$v1" ;;
+    post_filter) POST_FILTER="$v1" ;;
     seeds) SEEDS="$v1" ;;
     gpu_hours) GPU_HOURS="$v1" ;;
     disk_gb) DISK_GB="$v1" ;;
     bench) BENCHES+=("$v1"); B0S+=("$v2"); SCENE_SETS+=("$v3") ;;
+    warning) WARNINGS+=("$v1") ;;
   esac
 done <<< "$PLAN_TEXT"
 read -r -a SEED_LIST <<< "$SEEDS"
 read -r -a MODE_LIST <<< "$MODES"
 read -r -a AGAINST_LIST <<< "$AGAINST"
+read -r -a VARIANT_LIST <<< "$VARIANTS"  # <che_do>:<tag>:<khoa>=<gia_tri>[,...] (VARIANTS cua train_gsplat_modes.sh)
+read -r -a RUN_LIST <<< "$RUNS"          # ten thu muc luot (khong co _s<seed>): che do roi bien the
+VARIANT_TAGS=""  # tag cua cac bien the: bang so sanh cua ke hoach nay dua ca cac luot do vao (TAGS cua run_evaluate.sh)
+for entry in "${VARIANT_LIST[@]}"; do
+  IFS=: read -r _ vtag _ <<< "$entry"
+  VARIANT_TAGS="${VARIANT_TAGS:+$VARIANT_TAGS }$vtag"
+done
+read -r FILTER_OPACITY FILTER_SCALE <<< "$POST_FILTER"
 OTHER_MODES="${MODE_LIST[*]:1}"  # cac che do ngoai baseline: cung bang so sanh voi tung moc trong also_against
 NEEDS_B0=0
 for flag in "${B0S[@]}"; do
@@ -79,14 +98,32 @@ if ! [[ "$VOLUME" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
 fi
 
 print_plan() {
-  local i
+  local i entry vmode vtag vsets
   echo "Thực nghiệm $NAME: $DESCRIPTION"
   echo "  chế độ: $MODES | seed: $SEEDS (xen kẽ: đủ một seed trên mọi cảnh rồi mới sang seed sau) | 30.000 vòng"
+  if [ "${#VARIANT_LIST[@]}" -gt 0 ]; then
+    echo "  biến thể (thư mục <chế_độ>_<tag>_s<seed>, cùng ngân sách Gaussian với default):"
+    for entry in "${VARIANT_LIST[@]}"; do
+      IFS=: read -r vmode vtag vsets <<< "$entry"
+      echo "    ${vmode}_$vtag: $vmode, ${vsets//,/, }"
+    done
+  fi
   for i in "${!BENCHES[@]}"; do
     echo "  ${BENCHES[$i]}: ${SCENE_SETS[$i]} | B0 Inria: $([ "${B0S[$i]}" = 1 ] && echo có || echo không)"
   done
-  echo "  bảng so sánh: với ${MODE_LIST[0]}${AGAINST:+; thêm $OTHER_MODES so với $AGAINST}"
-  echo "  giữ mọi file kết quả (checkpoint, PLY, ảnh render, video) của mọi seed"
+  if [ -n "$DEPTH_RUNS" ]; then
+    echo "  loss độ sâu ($DEPTH_RUNS): kiểm tra điểm SfM của mọi ảnh train trước khi train (depth_check_<benchmark>);" \
+      "không đạt thì bỏ các lượt đó trên benchmark đó, các lượt khác vẫn train"
+  fi
+  if [ -n "$POST_FILTER" ]; then
+    echo "  sau mỗi seed: lọc Gaussian (opacity < $FILTER_OPACITY, trục lớn nhất > $FILTER_SCALE × scene_scale)" \
+      "rồi chấm lại; bảng trước / sau khi lọc trong báo cáo"
+  fi
+  echo "  bảng so sánh: với ${MODE_LIST[0]}${AGAINST:+; thêm một bảng so với $AGAINST}"
+  echo "  giữ mọi file kết quả (checkpoint, PLY, ảnh render, video${POST_FILTER:+, bản đã lọc}) của mọi seed"
+  for warning in "${WARNINGS[@]}"; do
+    echo "  CẢNH BÁO: $warning"
+  done
   echo "  ước lượng (RTX 4090, chưa phải số đo): khoảng $GPU_HOURS giờ GPU, thêm khoảng $DISK_GB GB trên volume" \
     "(VOLUME_GB=$VOLUME)"
 }
@@ -102,20 +139,29 @@ if [ "$ACTION" = plan ]; then
   echo
   echo "Các bước: env_check, space_check, ${BENCHES[*]/#/fetch_}"
   for i in "${!BENCHES[@]}"; do
+    if [ -n "$DEPTH_RUNS" ]; then
+      echo "  depth_check_${BENCHES[$i]}: python -m src.training.depth_check --test-every $TEST_EVERY" \
+        "<cảnh: ${SCENE_SETS[$i]}> (env gs-gsplat, không GPU)"
+    fi
     if [ "${B0S[$i]}" = 1 ]; then
       echo "  b0_${BENCHES[$i]}: SCENES=\"${SCENE_SETS[$i]}\" bash scripts/run_train.sh ${BENCHES[$i]} b0"
     fi
   done
   for seed in "${SEED_LIST[@]}"; do
     for i in "${!BENCHES[@]}"; do
-      echo "  gsplat_${BENCHES[$i]}_s$seed: MODES=\"$MODES\" SEEDS=$seed SCENES=\"${SCENE_SETS[$i]}\"" \
-        "bash scripts/run_train.sh ${BENCHES[$i]} gsplat"
+      echo "  gsplat_${BENCHES[$i]}_s$seed: MODES=\"$MODES\"${VARIANTS:+ VARIANTS=\"$VARIANTS\"} SEEDS=$seed" \
+        "SCENES=\"${SCENE_SETS[$i]}\" bash scripts/run_train.sh ${BENCHES[$i]} gsplat"
+      if [ -n "$POST_FILTER" ]; then
+        echo "  filter_${BENCHES[$i]}_s$seed: python -m src.training.prune --min-opacity $FILTER_OPACITY" \
+          "--max-scale $FILTER_SCALE --skip-unfinished <$RUNS × ${SCENE_SETS[$i]}, seed $seed>"
+      fi
     done
   done
   for bench in "${BENCHES[@]}"; do
-    echo "  report_$bench: MODES=\"$MODES\" bash scripts/run_evaluate.sh $bench"
+    echo "  report_$bench: MODES=\"$MODES\"${VARIANT_TAGS:+ TAGS=\"$VARIANT_TAGS\"} bash scripts/run_evaluate.sh $bench"
     for against in "${AGAINST_LIST[@]}"; do
-      echo "  report_${bench}_vs_$against: BASELINE=$against MODES=\"$OTHER_MODES\" bash scripts/run_evaluate.sh $bench"
+      echo "  report_${bench}_vs_$against: BASELINE=$against MODES=\"$OTHER_MODES\"${VARIANT_TAGS:+ TAGS=\"$VARIANT_TAGS\"}" \
+        "bash scripts/run_evaluate.sh $bench"
     done
   done
   echo "  pack"
@@ -196,13 +242,15 @@ check_envs() {
     || { echo "ERROR: no gsplat checkout in $WS/code/gsplat: run bash scripts/pod/run_all.sh first"; return 1; }
   env_ready gs-gsplat "import torch, fused_ssim; from gsplat import csrc; x = torch.rand(1, 3, 16, 16, device='cuda'); fused_ssim.fused_ssim(x, x)" \
     || return 1
-  # simple_trainer.py that nhan dung tham so cua moi che do trong ke hoach (vai giay, khong train): sai thi dung
-  # ngay, khong de cac luot cua che do do loi sau nhieu gio
+  # simple_trainer.py that nhan dung tham so cua moi che do va bien the trong ke hoach (vai giay, khong train): sai
+  # thi dung ngay, khong de cac luot cua che do do loi sau nhieu gio
+  local smoke=(--modes "${MODE_LIST[@]}")
+  if [ "${#VARIANT_LIST[@]}" -gt 0 ]; then smoke+=(--variants "${VARIANT_LIST[@]}"); fi
   # shellcheck source=/dev/null
   if ! (set +u; . "$WS/miniforge3/etc/profile.d/conda.sh" && conda activate gs-gsplat \
         && python "$REPO_DIR/scripts/setup/smoke_test_gsplat.py" --examples-dir "$WS/code/gsplat/examples" \
-           --modes "${MODE_LIST[@]}"); then
-    echo "ERROR: gsplat simple_trainer.py does not accept the arguments of a mode in the plan (see above)"
+           "${smoke[@]}"); then
+    echo "ERROR: gsplat simple_trainer.py does not accept the arguments of a mode or variant in the plan (see above)"
     return 1
   fi
   if [ "$NEEDS_B0" = 1 ]; then
@@ -234,9 +282,15 @@ own_bytes() {  # own_bytes: dung luong du lieu / ket qua cua thuc nghiem (nhanh:
   [[ "$value" =~ ^[0-9]+$ ]] && echo "$value"
 }
 
+declare -A DROPPED=()  # theo benchmark: cac luot co loss do sau bi bo vi depth_check_<benchmark> khong dat
+
 seed_space() {  # seed_space [benchmark...]: dat NEED[seed], FINISHED[seed] theo cac luot da xong tren dia
-  local text key seed need finished runs only=()  # mac dinh moi benchmark cua ke hoach
+  local text key seed need finished runs bench run only=() without=()  # mac dinh moi benchmark cua ke hoach
   [ "$#" -gt 0 ] && only=(--datasets "$@")
+  for bench in "${!DROPPED[@]}"; do  # luot bi bo vi kiem tra diem SfM: khong train, khong can cho
+    for run in ${DROPPED[$bench]}; do without+=("$bench:$run"); done
+  done
+  if [ "${#without[@]}" -gt 0 ]; then only+=(--without "${without[@]}"); fi
   text="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --space "$NAME" "${only[@]}")" \
     || return 1
   while IFS='|' read -r key seed need finished runs _; do
@@ -297,10 +351,10 @@ space_check() {
 }
 
 room_for_seed() {  # room_for_seed <seed>: con du cho cho cac luot chua xong cua seed nay (benchmark se train)
-  local own used bench active=()
+  local own used i active=()
   [ -n "$LIMIT" ] || return 0
-  for bench in "${BENCHES[@]}"; do
-    if ok "fetch_$bench"; then active+=("$bench"); fi
+  for i in "${!BENCHES[@]}"; do
+    if ready "$i"; then active+=("${BENCHES[$i]}"); fi
   done
   [ "${#active[@]}" -gt 0 ] || return 0  # khong benchmark nao se train
   if ! own="$(own_bytes)" || ! seed_space "${active[@]}"; then
@@ -315,6 +369,84 @@ room_for_seed() {  # room_for_seed <seed>: con du cho cho cac luot chua xong cua
   echo "Seed $1: ${FINISHED[$1]} lượt đã xong, cần thêm khoảng $(gb "${NEED[$1]}") GB; đang dùng $(gb "$used") GB" \
     "/ volume $VOLUME GB"
   [ $((used + NEED[$1] + MARGIN)) -le "$LIMIT" ]
+}
+
+# shellcheck disable=SC2329  # goi qua run_step
+depth_check() {  # depth_check <chi so benchmark>: moi anh train cua moi canh co diem SfM cho loss do sau
+  local i="$1" root scene scenes dirs=()
+  root="$(registry_value "${BENCHES[$i]}" root)" || return 1
+  read -r -a scenes <<< "${SCENE_SETS[$i]}"
+  for scene in "${scenes[@]}"; do dirs+=("$root/$scene"); done
+  # shellcheck source=/dev/null
+  (set +u; . "$WS/miniforge3/etc/profile.d/conda.sh" && conda activate gs-gsplat \
+    && python -m src.training.depth_check --examples-dir "$WS/code/gsplat/examples" --test-every "$TEST_EVERY" \
+      "${dirs[@]}")
+}
+
+# shellcheck disable=SC2329  # goi qua run_step
+post_filter() {  # post_filter <chi so benchmark> <seed>: loc Gaussian moi luot da train xong cua seed nay, cham lai
+  local i="$1" seed="$2" root scene run scenes dirs=()
+  root="$(registry_value "${BENCHES[$i]}" results.gsplat)" || return 1
+  read -r -a scenes <<< "${SCENE_SETS[$i]}"
+  for scene in "${scenes[@]}"; do
+    for run in "${RUN_LIST[@]}"; do dirs+=("$root/$scene/${run}_s$seed"); done
+  done
+  # luot chua train xong (gsplat loi) duoc bo qua: buoc gsplat cua seed nay da bao loi
+  # shellcheck source=/dev/null
+  (set +u; . "$WS/miniforge3/etc/profile.d/conda.sh" && conda activate gs-gsplat \
+    && python -m src.training.prune --min-opacity "$FILTER_OPACITY" --max-scale "$FILTER_SCALE" --skip-unfinished \
+      "${dirs[@]}")
+}
+
+
+drop_depth_runs() {  # drop_depth_runs <chi so benchmark>: depth_check khong dat thi bo cac luot co loss do sau
+  local bench="${BENCHES[$1]}" mode entry vmode vtag dropped=""
+  { [ -n "$DEPTH_RUNS" ] && [ -n "${RC[depth_check_$bench]:-}" ] && ! ok "depth_check_$bench"; } || return 0
+  for mode in "${MODE_LIST[@]}"; do
+    if [[ " $DEPTH_RUNS " == *" $mode "* ]]; then dropped+=" $mode"; fi
+  done
+  for entry in "${VARIANT_LIST[@]}"; do  # bien the cua mot che do bi bo cung bi bo
+    IFS=: read -r vmode vtag _ <<< "$entry"
+    if [[ " $DEPTH_RUNS$dropped " == *" ${vmode}_$vtag "* || " $dropped " == *" $vmode "* ]]; then
+      dropped+=" ${vmode}_$vtag"
+    fi
+  done
+  DROPPED[$bench]="${dropped# }"
+  if [[ " ${DROPPED[$bench]} " == *" ${MODE_LIST[0]} "* ]]; then
+    echo "depth_check_$bench không đạt và ${MODE_LIST[0]} dùng loss độ sâu: không train lượt gsplat nào trên $bench"
+  else
+    echo "depth_check_$bench không đạt: bỏ ${DROPPED[$bench]} trên $bench (lượt có loss độ sâu sẽ lỗi); các lượt khác" \
+      "vẫn train"
+  fi
+}
+
+bench_modes() {  # bench_modes <chi so benchmark>: MODES cua buoc gsplat tren benchmark nay
+  local mode out=""
+  for mode in "${MODE_LIST[@]}"; do
+    [[ " ${DROPPED[${BENCHES[$1]}]:-} " == *" $mode "* ]] || out+="${out:+ }$mode"
+  done
+  echo "$out"
+}
+
+bench_variants() {  # bench_variants <chi so benchmark>: VARIANTS cua buoc gsplat tren benchmark nay
+  local entry vmode vtag out=""
+  for entry in "${VARIANT_LIST[@]}"; do
+    IFS=: read -r vmode vtag _ <<< "$entry"
+    [[ " ${DROPPED[${BENCHES[$1]}]:-} " == *" ${vmode}_$vtag "* ]] || out+="${out:+ }$entry"
+  done
+  echo "$out"
+}
+
+ready() {  # ready <chi so benchmark>: du lieu da tai, va baseline khong bi bo vi kiem tra diem SfM
+  ok "fetch_${BENCHES[$1]}" && [[ " ${DROPPED[${BENCHES[$1]}]:-} " != *" ${MODE_LIST[0]} "* ]]
+}
+
+needs() {  # needs <chi so benchmark>: ly do bo qua khi chua san sang
+  if ! ok "fetch_${BENCHES[$1]}"; then
+    echo "cần fetch_${BENCHES[$1]} thành công"
+  else
+    echo "depth_check_${BENCHES[$1]} không đạt và ${MODE_LIST[0]} dùng loss độ sâu"
+  fi
 }
 
 write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi src.evaluation.overview) va .md
@@ -339,6 +471,20 @@ write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi sr
     echo "- $DESCRIPTION"
     echo "- Kế hoạch: \`configs/experiments/$NAME.yaml\`, bản đã dùng: \`$PLAN_JSON\`; repo $repo_commit"
     echo "- Chế độ: $MODES; seed: $SEEDS"
+    if [ "${#VARIANT_LIST[@]}" -gt 0 ]; then
+      echo "- Biến thể: ${VARIANT_LIST[*]}"
+    fi
+    if [ -n "$POST_FILTER" ]; then
+      echo "- Lọc Gaussian sau khi train: opacity < $FILTER_OPACITY, trục lớn nhất > $FILTER_SCALE × scene_scale"
+    fi
+    for i in "${!BENCHES[@]}"; do
+      if [ -n "${DROPPED[${BENCHES[$i]}]:-}" ] && ! ready "$i"; then
+        echo "- ${BENCHES[$i]}: kiểm tra điểm SfM không đạt và ${MODE_LIST[0]} dùng loss độ sâu, không train lượt" \
+          "gsplat nào"
+      elif [ -n "${DROPPED[${BENCHES[$i]}]:-}" ]; then
+        echo "- ${BENCHES[$i]}: kiểm tra điểm SfM không đạt, không train ${DROPPED[${BENCHES[$i]}]}"
+      fi
+    done
     echo
     echo "| Bước | Kết quả | Thời gian |"
     echo "|---|---|---|"
@@ -361,7 +507,7 @@ write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi sr
       fi
       for against in "${AGAINST_LIST[@]}"; do
         echo
-        echo "### $OTHER_MODES so với $against (${BENCHES[$i]})"
+        echo "### So với $against (${BENCHES[$i]})"
         echo
         if [ -f "${REPORT}_${BENCHES[$i]}_vs_$against.md" ]; then
           cat "${REPORT}_${BENCHES[$i]}_vs_$against.md"
@@ -387,12 +533,22 @@ else
     read -r -a scenes <<< "${SCENE_SETS[$i]}"
     run_step "fetch_${BENCHES[$i]}" bash "$REPO_DIR/scripts/pod/fetch_data.sh" "${BENCHES[$i]}" "${scenes[@]}"
   done
-  # bien moi truong cua nguoi dung khong duoc doi ke hoach: thu muc ket qua, cau hinh, tham so mcmc, chay thu
-  CLEAN=(env -u OUT_ROOT -u B0_ROOT -u CONFIG -u MCMC_SET -u FORCE QUICK=0)
+  if [ -n "$DEPTH_RUNS" ]; then  # truoc khi dung GPU: luot co loss do sau se loi (KeyError) neu co anh train khong co
+    for i in "${!BENCHES[@]}"; do  # diem SfM nao; khong dat thi chi bo cac luot do tren benchmark nay
+      if ok "fetch_${BENCHES[$i]}"; then
+        run_step "depth_check_${BENCHES[$i]}" depth_check "$i"
+        drop_depth_runs "$i"
+      else
+        skip_step "depth_check_${BENCHES[$i]}" "cần fetch_${BENCHES[$i]} thành công"
+      fi
+    done
+  fi
+  # bien moi truong cua nguoi dung khong duoc doi ke hoach: thu muc ket qua, cau hinh, tham so mcmc, bien the, chay thu
+  CLEAN=(env -u OUT_ROOT -u B0_ROOT -u CONFIG -u MCMC_SET -u VARIANTS -u FORCE QUICK=0)
   for i in "${!BENCHES[@]}"; do
     bench="${BENCHES[$i]}"
     [ "${B0S[$i]}" = 1 ] || continue
-    if ok "fetch_$bench"; then
+    if ok "fetch_$bench"; then  # B0 (Inria) khong dung loss do sau: khong phu thuoc depth_check
       run_step "b0_$bench" "${CLEAN[@]}" SCENES="${SCENE_SETS[$i]}" bash "$REPO_DIR/scripts/run_train.sh" "$bench" b0
     else
       skip_step "b0_$bench" "cần fetch_$bench thành công"
@@ -408,21 +564,35 @@ else
       bench="${BENCHES[$i]}"
       if [ -n "$STOP" ]; then
         skip_step "gsplat_${bench}_s$seed" "$STOP"
-      elif ok "fetch_$bench"; then
-        run_step "gsplat_${bench}_s$seed" "${CLEAN[@]}" MODES="$MODES" SEEDS="$seed" SCENES="${SCENE_SETS[$i]}" \
-          bash "$REPO_DIR/scripts/run_train.sh" "$bench" gsplat
+      elif ready "$i"; then
+        run_step "gsplat_${bench}_s$seed" "${CLEAN[@]}" MODES="$(bench_modes "$i")" VARIANTS="$(bench_variants "$i")" \
+          SEEDS="$seed" SCENES="${SCENE_SETS[$i]}" bash "$REPO_DIR/scripts/run_train.sh" "$bench" gsplat
       else
-        skip_step "gsplat_${bench}_s$seed" "cần fetch_$bench thành công"
+        skip_step "gsplat_${bench}_s$seed" "$(needs "$i")"
+      fi
+      [ -n "$POST_FILTER" ] || continue
+      if [ -n "${RC[gsplat_${bench}_s$seed]:-}" ]; then  # buoc gsplat da chay (ke ca khi co luot loi): loc luot da xong
+        run_step "filter_${bench}_s$seed" post_filter "$i" "$seed"
+      else
+        skip_step "filter_${bench}_s$seed" "gsplat_${bench}_s$seed không chạy"
       fi
     done
   done
   for i in "${!BENCHES[@]}"; do
     bench="${BENCHES[$i]}"
-    run_step "report_$bench" env -u QUICK -u BASELINE MODES="$MODES" SCENES="${SCENE_SETS[$i]}" \
+    modes="$(bench_modes "$i")"  # che do bi bo vi kiem tra diem SfM khong vao bang (khong thi moi canh deu "thieu")
+    others="${modes#"${MODE_LIST[0]}"}"  # cac che do ngoai baseline, cho bang so voi tung moc trong also_against
+    others="${others# }"
+    run_step "report_$bench" env -u QUICK -u BASELINE MODES="$modes" TAGS="$VARIANT_TAGS" SCENES="${SCENE_SETS[$i]}" \
       REPORT="${REPORT}_$bench" bash "$REPO_DIR/scripts/run_evaluate.sh" "$bench"
     for against in "${AGAINST_LIST[@]}"; do
-      run_step "report_${bench}_vs_$against" env -u QUICK BASELINE="$against" MODES="$OTHER_MODES" \
-        SCENES="${SCENE_SETS[$i]}" REPORT="${REPORT}_${bench}_vs_$against" bash "$REPO_DIR/scripts/run_evaluate.sh" "$bench"
+      if [[ " ${DROPPED[$bench]:-} " == *" $against "* ]]; then
+        skip_step "report_${bench}_vs_$against" "$against không train trên $bench (kiểm tra điểm SfM không đạt)"
+        continue
+      fi
+      run_step "report_${bench}_vs_$against" env -u QUICK BASELINE="$against" MODES="$others" \
+        TAGS="$VARIANT_TAGS" SCENES="${SCENE_SETS[$i]}" REPORT="${REPORT}_${bench}_vs_$against" \
+        bash "$REPO_DIR/scripts/run_evaluate.sh" "$bench"
     done
   done
 fi

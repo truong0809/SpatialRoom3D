@@ -487,3 +487,15 @@ def test_run_command_passes_the_gpu_lock_fd(tmp_path, monkeypatch):
         assert run_command([sys.executable, str(script)], tmp_path, {}, log) == 1
     finally:
         lock.close()
+
+
+def test_variant_tag_is_recorded_but_not_part_of_the_run_identity(env, capsys):
+    assert run(env, "--tag", "or0001", "--set", "opacity_reg=0.001", mode="default") == 0
+    meta = json.loads((env["out"] / "run_meta.json").read_text(encoding="utf-8"))
+    summary = json.loads((env["out"] / "summary.json").read_text(encoding="utf-8"))
+    assert meta["tag"] == "or0001" and summary["tag"] == "or0001" and summary["args"] == {"opacity-reg": 0.001}
+    runner = FakeRunner()
+    assert run(env, "--set", "opacity_reg=0.001", runner=runner, mode="default") == 0 and not runner.calls  # đã có
+    assert run(env, "--tag", "a b", mode="default") == 2 and "invalid --tag" in capsys.readouterr().err
+    assert run(env, "--tag", "t1", "--dry-run", out=env["out"].parent / "other") == 0
+    assert json.loads(capsys.readouterr().out)["tag"] == "t1"

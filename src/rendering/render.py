@@ -54,7 +54,7 @@ def read_meta(run: Path) -> dict:
     return meta
 
 
-def _value_after(tokens: list[str], flag: str) -> str | None:
+def value_after(tokens: list[str], flag: str) -> str | None:
     if flag in tokens:
         index = tokens.index(flag)
         if index + 1 < len(tokens):
@@ -62,7 +62,7 @@ def _value_after(tokens: list[str], flag: str) -> str | None:
     return None
 
 
-def _without_option(tokens: list[str], flag: str, has_value: bool = True) -> list[str]:
+def without_option(tokens: list[str], flag: str, has_value: bool = True) -> list[str]:
     result, skip = [], False
     for token in tokens:
         if skip:
@@ -84,22 +84,22 @@ def render_command(meta: dict, render_dir: Path, trajectory: str, python: str) -
         raise RenderError("run_meta.json has no recorded evaluation command (commands.eval)")
     cut = recorded.index("--")
     launcher, trainer = recorded[:cut], list(recorded[cut + 1:])
-    examples = _value_after(launcher, "--examples-dir")
-    ckpt = _value_after(trainer, "--ckpt")
-    data_dir = _value_after(trainer, "--data-dir")
+    examples = value_after(launcher, "--examples-dir")
+    ckpt = value_after(trainer, "--ckpt")
+    data_dir = value_after(trainer, "--data-dir")
     if not examples or not ckpt or not data_dir:
         raise RenderError("the recorded evaluation command lacks --examples-dir, --ckpt or --data-dir")
     for label, path in (("checkpoint", ckpt), ("data", data_dir), ("gsplat examples", examples)):
         if not Path(path).exists():
             raise RenderError(f"{label} not found: {path}")
-    trainer = _without_option(trainer, "--result-dir")
-    trainer = _without_option(trainer, "--render-traj-path")
+    trainer = without_option(trainer, "--result-dir")
+    trainer = without_option(trainer, "--render-traj-path")
     trainer = [token for token in trainer if token not in ("--disable-video", "--no-disable-video")]
     trainer += ["--result-dir", str(render_dir), "--render-traj-path", trajectory, "--no-disable-video"]
     cmd = [python, "-m", "src.training.gsplat_launcher", "--examples-dir", examples, "--seed", str(meta.get("seed", 42)),
            "--record-split", str(render_dir / "split_applied_render.json"),
            "--resolved-config", str(render_dir / "resolved_config_render.json")]
-    split_file = _value_after(launcher, "--split-file")
+    split_file = value_after(launcher, "--split-file")
     if split_file:
         cmd += ["--split-file", split_file]
     return cmd + ["--", *trainer]

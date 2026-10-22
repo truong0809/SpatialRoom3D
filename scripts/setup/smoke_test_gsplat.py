@@ -6,10 +6,12 @@ Kiểm tra:
 3. fused_ssim: SSIM(x, x) ~ 1 và có gradient.
 4. LPIPS (VGG, như Inria) tính được; lần đầu sẽ tải trọng số.
 5. examples/simple_trainer.py import được và phân giải đúng tham số của mọi chế độ trong configs/base.yaml (strategy,
-   protocol, cap_max, tham số riêng của chế độ), không train.
+   protocol, cap_max, tham số riêng của chế độ), và của các biến thể tham số (`--variants`, mục variants của một kế
+   hoạch thực nghiệm), không train.
 
     python scripts/setup/smoke_test_gsplat.py --examples-dir /workspace/code/gsplat/examples
     python scripts/setup/smoke_test_gsplat.py --examples-dir ... --modes default mcmc   # chỉ mục 5, vài giây
+    python scripts/setup/smoke_test_gsplat.py --examples-dir ... --modes default mcmc --variants mcmc:rbg:random_bkgd=true
 """
 
 from __future__ import annotations
@@ -150,16 +152,19 @@ def resolved_value(cfg: dict, flag: str):
 
 
 @check("simple_trainer.py arguments of the training modes")
-def check_trainer_cli(examples_dir: Path, modes: list[str] | None = None):
+def check_trainer_cli(examples_dir: Path, modes: list[str] | None = None, variants: list[str] | None = None):
     sys.path.insert(0, str(REPO_DIR))
-    from src.training.profiles import load_config, resolve_cap_max, resolve_mode, trainer_args
+    from src.training.profiles import load_config, parse_assignments, resolve_cap_max, resolve_mode, trainer_args
 
     config = load_config(REPO_DIR / "configs" / "base.yaml")
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_DIR), env.get("PYTHONPATH")]))
+    specs = [(mode, resolve_mode(config, mode)) for mode in modes or list(config["modes"])]
+    for entry in variants or []:  # <chế_độ>:<tag>:<khóa>=<giá_trị>[,...], như VARIANTS của train_gsplat_modes.sh
+        mode, tag, sets = entry.split(":", 2)
+        specs.append((f"{mode}_{tag}", resolve_mode(config, mode, parse_assignments(sets.split(",")))))
     with tempfile.TemporaryDirectory() as tmp:
-        for mode in modes or list(config["modes"]):
-            spec = resolve_mode(config, mode)
+        for mode, spec in specs:
             cap = None
             if spec.preset == "mcmc":
                 # 1_234_567 khác giá trị mặc định của MCMCStrategy.cap_max (1_000_000): kiểm tra được tham số có tác dụng
@@ -193,17 +198,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--examples-dir", required=True, type=Path)
     parser.add_argument("--modes", nargs="+", help="chỉ kiểm tra tham số của các chế độ này (mục 5, không train)")
+    parser.add_argument("--variants", nargs="*", default=[], metavar="CHẾ_ĐỘ:TAG:KHÓA=GIÁ_TRỊ[,...]",
+                        help="kiểm tra thêm tham số của các biến thể này (mục 5)")
     args = parser.parse_args()
     if not torch.cuda.is_available():
         print("FAIL: PyTorch cannot see a GPU")
         return 1
     print("torch", torch.__version__, "| CUDA", torch.version.cuda, "|", torch.cuda.get_device_name(0))
-    if not args.modes:
+    if not args.modes and not args.variants:
         check_extension()
         check_strategies()
         check_fused_ssim()
         check_lpips()
-    check_trainer_cli(args.examples_dir.resolve(), args.modes)
+    check_trainer_cli(args.examples_dir.resolve(), args.modes, args.variants)
     print("\n===== SUMMARY =====")
     for name, ok in RESULTS:
         print(f"{'PASS' if ok else 'FAIL'}  {name}")

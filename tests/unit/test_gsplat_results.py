@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.evaluation.gsplat_results import latest_stats, load_run, load_summary
+from src.evaluation.gsplat_results import latest_stats, load_filtered, load_run, load_summary
 
 PROTOCOL = {"data_factor": 1, "test_every": 8, "max_steps": 30000, "lpips_net": "vgg",
             "antialiased": False, "save_ply": True, "disable_video": False}
@@ -94,3 +94,36 @@ def test_non_finite_metrics_are_not_ok(tmp_path):
     (run_dir / "stats" / "val_step0009.json").write_text('{"psnr": NaN, "ssim": 0.5, "lpips": 0.3}', encoding="utf-8")
     result = load_run(run_dir)
     assert result.status == "FAILED" and "non-finite" in result.problem
+
+
+def write_filtered(run, *, status="OK", num_gs=1_200_000, psnr=24.9, kept=1_200_000):
+    folder = run / "filtered"
+    (folder / "stats").mkdir(parents=True)
+    meta = {"status": status, "thresholds": {"min_opacity": 0.02, "max_scale": 0.1}, "scene_scale": 3.3,
+            "counts": {"input": 2_000_000, "removed": {"non_finite": 0, "opacity": 800_000, "max_scale": 0},
+                       "kept": kept, "kept_fraction": 0.6}}
+    (folder / "filter_meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    stats = {"psnr": psnr, "ssim": 0.79, "lpips": 0.31, "ellipse_time": 0.003, "num_GS": num_gs}
+    (folder / "stats" / "val_step29999.json").write_text(json.dumps(stats), encoding="utf-8")
+    return folder
+
+
+def test_filtered_copies_are_read_from_their_own_folder(tmp_path):
+    run = make_run(tmp_path)
+    assert load_run(run).filtered is None  # chưa lọc
+    write_filtered(run)
+    result = load_run(run)
+    assert result.status == "OK" and result.metrics["PSNR"] == pytest.approx(27.9999)  # bảng chính: chưa lọc
+    assert result.filtered["status"] == "OK" and result.filtered["metrics"]["PSNR"] == 24.9
+    assert result.filtered["num_gaussians"] == 1_200_000 and result.filtered["kept_fraction"] == 0.6
+    assert result.filtered["eval_step"] == 29999 and result.filtered["ply_size_mb"] is None  # chưa có PLY
+    (run / "filtered" / "stats" / "val_step29999.json").write_text(
+        json.dumps({"psnr": 24.9, "ssim": 0.79, "lpips": 0.31, "num_GS": 7}), encoding="utf-8")
+    assert load_filtered(run)["status"] == "FAILED" and "saw 7 Gaussians" in load_filtered(run)["problem"]
+    (run / "filtered" / "stats" / "val_step29999.json").write_text(
+        json.dumps({"psnr": float("nan"), "ssim": 0.79, "lpips": 0.31, "num_GS": 1_200_000}), encoding="utf-8")
+    assert load_filtered(run)["status"] == "FAILED"
+    (run / "filtered" / "stats" / "val_step29999.json").unlink()
+    assert load_filtered(run)["problem"] == "no evaluation stats in filtered/stats"
+    (run / "filtered" / "filter_meta.json").write_text(json.dumps({"status": "RUNNING"}), encoding="utf-8")
+    assert load_filtered(run)["status"] == "RUNNING" and "metrics" not in load_filtered(run)

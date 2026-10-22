@@ -9,8 +9,11 @@ Thư mục kết quả (`--result-dir` của simple_trainer.py) sau khi `src.tra
     stats/train_step<N>_rank0.json    gsplat: mem (GiB, max_memory_allocated), ellipse_time, num_GS
     stats/val_step<N>.json            gsplat: psnr, ssim, lpips, ellipse_time (giây/ảnh), num_GS
     ckpts/ckpt_<N>_rank0.pt, ply/point_cloud_<N>.ply
+    filtered/                         (tùy chọn) bản đã lọc Gaussian và lượt chấm lại của nó (src.training.prune):
+                                      filter_meta.json, stats/val_step<N>.json, ckpts/, ply/, renders/, videos/
 
-Số liệu trong summary.json chỉ lấy từ các file trên, không ước lượng.
+Số liệu trong summary.json chỉ lấy từ các file trên, không ước lượng. Phần `filtered` luôn được đọc lại từ thư mục
+`filtered/` (lọc chạy sau khi summary.json đã ghi).
 """
 
 from __future__ import annotations
@@ -26,6 +29,8 @@ from src.evaluation.compare_reference import SceneResult, peak_gpu_memory_mib, r
 
 _VAL = re.compile(r"^val_step(\d+)\.json$")
 _TRAIN = re.compile(r"^train_step(\d+)_rank0\.json$")
+FILTER_DIR = "filtered"  # <lượt>/filtered/: bản đã lọc Gaussian (src/training/prune.py)
+FILTER_META = "filter_meta.json"
 
 
 def latest_stats(stats_dir: Path, kind: str) -> tuple[int, dict] | None:
@@ -92,6 +97,8 @@ class RunResult:
     gpu: str | None = None
     lpips_net: str | None = None
     scene_fingerprint: str | None = None  # SHA-256 của sparse/0 (src.training.run.scene_fingerprint)
+    tag: str | None = None  # biến thể của chế độ trong kế hoạch thực nghiệm (src.training.run --tag)
+    filtered: dict | None = None  # bản đã lọc Gaussian, xem load_filtered; None khi chưa lọc
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -148,6 +155,8 @@ def load_run(run_dir: Path) -> RunResult:
         gpu=meta.get("gpu"),
         lpips_net=protocol.get("lpips_net"),
         scene_fingerprint=(meta.get("scene_info") or {}).get("fingerprint"),
+        tag=meta.get("tag"),
+        filtered=load_filtered(run_dir),
     )
     final_step = int(protocol["max_steps"]) - 1 if "max_steps" in protocol else None
 
@@ -205,5 +214,40 @@ def load_summary(run_dir: Path) -> RunResult:
         known = {f for f in RunResult.__dataclass_fields__}
         result = RunResult(**{key: value for key, value in data.items() if key in known})
         result.run_dir = os.path.abspath(run_dir)
+        result.filtered = load_filtered(Path(run_dir))
         return result
     return load_run(Path(run_dir))
+
+
+def load_filtered(run_dir: Path) -> dict | None:
+    """Bản đã lọc Gaussian của một lượt (`<lượt>/filtered/`, src.training.prune); None khi lượt chưa được lọc.
+
+    Ngưỡng và số Gaussian bỏ đi lấy từ filter_meta.json; chỉ số, số Gaussian còn lại và thời gian render lấy từ stats của
+    lượt chấm lại (gsplat ghi), dung lượng từ file PLY đã lọc. `status` khác OK (đang chạy, lỗi, hoặc số Gaussian trong
+    stats không khớp số đã giữ lại) thì không có chỉ số."""
+    folder = Path(run_dir) / FILTER_DIR
+    meta = read_json_or_none(folder / FILTER_META)
+    if meta is None:
+        return None
+    counts = meta.get("counts") or {}
+    info = {"status": meta.get("status") or "MISSING", "thresholds": meta.get("thresholds"),
+            "scene_scale": meta.get("scene_scale"), "num_gaussians_input": counts.get("input"),
+            "removed": counts.get("removed"), "kept_fraction": counts.get("kept_fraction"), "dir": str(folder)}
+    if info["status"] != "OK":
+        info["problem"] = meta.get("error")
+        return info
+    val = latest_stats(folder / "stats", "val")
+    stats = val[1] if val is not None else {}
+    if not all(key in stats for key in ("psnr", "ssim", "lpips")):
+        return {**info, "status": "FAILED", "problem": "no evaluation stats in filtered/stats"}
+    metrics = {"PSNR": float(stats["psnr"]), "SSIM": float(stats["ssim"]), "LPIPS": float(stats["lpips"])}
+    if not all(math.isfinite(value) for value in metrics.values()):
+        return {**info, "status": "FAILED", "problem": "non-finite metrics after filtering"}
+    if stats.get("num_GS") is not None and stats["num_GS"] != counts.get("kept"):
+        return {**info, "status": "FAILED",
+                "problem": f"the evaluation saw {stats['num_GS']} Gaussians, the filter kept {counts.get('kept')}"}
+    info.update(metrics=metrics, num_gaussians=counts.get("kept"), eval_step=val[0],
+                render_ms_per_image=(round(float(stats["ellipse_time"]) * 1000, 3)
+                                     if stats.get("ellipse_time") is not None else None),
+                ply_size_mb=_size_mb(folder / "ply" / f"point_cloud_{val[0]}.ply"))
+    return info

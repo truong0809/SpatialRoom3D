@@ -1,0 +1,46 @@
+# Dò tham số mcmc trên một cảnh trong nhà (room của Mip-NeRF 360), một seed, 30.000 vòng: default, mcmc và 10 biến thể
+# của mcmc, mỗi biến thể chỉ đổi một tham số so với mcmc; sau khi train, mọi lượt được lọc Gaussian rồi chấm lại.
+# Mục đích: chọn bộ tham số cho một chế độ mới (mcmc_indoor trong configs/base.yaml), rồi so nó với mcmc trên 6 cảnh ×
+# 3 seed của thực nghiệm chính; room là cảnh dùng để chọn tham số, nên kết luận dựa trên 5 cảnh còn lại. Một cảnh, một
+# seed: chỉ để sàng lọc, không đủ để kết luận "cải thiện" (docs/design/experiments.md mục 3).
+# Chạy trên pod (một việc nền; dữ liệu còn thiếu thì tự tải; lượt đã xong tự bỏ qua; mọi file kết quả được giữ):
+#   VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background
+# Lượt default_s42 và mcmc_s42 của room nằm cùng thư mục với thực nghiệm chính (configs/experiments/main.yaml): chạy
+# main sau đó thì hai lượt này được dùng lại, không train lại. 10 biến thể có tag: bảng của main không lẫn chúng.
+
+name: tune_mcmc
+description: "Dò tham số mcmc trên room (Mip-NeRF 360): default, mcmc, 10 biến thể mcmc; seed 42; 30.000 vòng; lọc Gaussian sau khi train"
+modes: [default, mcmc]
+also_against: [mcmc]     # thêm bảng: mỗi biến thể so với mcmc (ngoài bảng so với default)
+# Mỗi biến thể đổi đúng một tham số của simple_trainer.py (gsplat @6e8c837) so với preset mcmc
+# (opacity_reg 0.01, scale_reg 0.01, strategy.noise_lr 5e5, strategy.min_opacity 0.005, random_bkgd false,
+# depth_loss false). or005 và mo002 nhắm vào lớp mờ / floater (docs/design/experiments.md mục 3.2).
+variants:
+  - {mode: mcmc, tag: or0001, set: {opacity_reg: 0.001}, description: "opacity_reg 0.001 (giá trị paper 3DGS-MCMC dùng cho Deep Blending)"}
+  - {mode: mcmc, tag: or0005, set: {opacity_reg: 0.005}, description: "opacity_reg 0.005"}
+  - {mode: mcmc, tag: or005, set: {opacity_reg: 0.05}, description: "opacity_reg 0.05 (gấp 5 preset: phạt opacity mạnh hơn)"}
+  - {mode: mcmc, tag: sr0001, set: {scale_reg: 0.001}, description: "scale_reg 0.001"}
+  - {mode: mcmc, tag: sr005, set: {scale_reg: 0.05}, description: "scale_reg 0.05"}
+  - {mode: mcmc, tag: nlr250k, set: {strategy.noise_lr: 250000}, description: "noise_lr 2,5e5 (nửa mặc định)"}
+  - {mode: mcmc, tag: nlr1m, set: {strategy.noise_lr: 1000000}, description: "noise_lr 1e6 (gấp đôi mặc định)"}
+  - {mode: mcmc, tag: mo002, set: {strategy.min_opacity: 0.02}, description: "min_opacity 0.02 (MCMC dời cả Gaussian có opacity đến 0,02; bằng ngưỡng lọc)"}
+  - {mode: mcmc, tag: rbg, set: {random_bkgd: true}, description: "nền ngẫu nhiên khi train (chống vùng trong suốt)"}
+  - {mode: mcmc, tag: depth, set: {depth_loss: true}, description: "loss độ sâu theo điểm SfM, depth_lambda mặc định 0,01"}
+seeds: [42]
+benchmarks:
+  - dataset: mipnerf360
+    scenes: [room]
+    b0: false
+# Lọc mỗi lượt đã xong (src/training/prune.py): bỏ Gaussian có opacity < 0,02 hoặc trục lớn nhất > 0,1 × scene_scale của
+# gsplat, rồi chấm lại bản đã lọc trên đúng ảnh test; báo cáo có bảng trước / sau khi lọc.
+post_filter: {min_opacity: 0.02, max_scale: 0.1}
+
+# Ước lượng trên RTX 4090, chỉ để in ra và kiểm tra chỗ trống (không phải kết quả, chưa đo trên room):
+#   - Thời gian: 12 lượt × khoảng 19 phút (train 30.000 vòng, chấm, video; cùng giả định với Mip-NeRF 360 trong main.yaml:
+#     2,5 giờ cho 4 cảnh × 2 chế độ) + lọc và chấm lại khoảng 4 phút mỗi lượt: khoảng 4,6 giờ.
+#   - Dung lượng thêm vào volume, giữ mọi file: khoảng 1,8 GB mỗi lượt (checkpoint và PLY mỗi file 236 byte mỗi
+#     Gaussian, ảnh render, video, cộng bản đã lọc trong filtered/), cộng khoảng 2 GB dữ liệu room và ảnh PNG thu nhỏ.
+#     Lúc tải, 360_v2.zip (khoảng 12,5 GB) nằm tạm trên volume rồi bị xóa sau khi giải nén.
+estimate:
+  gpu_hours: 5
+  disk_gb: 24

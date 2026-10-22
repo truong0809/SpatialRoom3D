@@ -1,6 +1,6 @@
 # Kiến trúc repository và dữ liệu
 
-_Cập nhật: 19/10/2026_
+_Cập nhật: 21/10/2026_
 
 Tài liệu này ghi:
 - cây thư mục của repo và vai trò từng phần;
@@ -25,7 +25,8 @@ SpatialRoom3D/
 │   │                              frames.py: frame nét từ video; ảnh chụp → input/ (không chọn frame)
 │   ├── reconstruction/            colmap_runner.py, colmap_model.py, report.py (kiểm tra trước khi train)
 │   ├── training/                  profiles.py, split.py, gsplat_launcher.py, run.py (một lượt train / đánh giá),
-│   │                              experiment.py (kế hoạch thực nghiệm, configs/experiments/)
+│   │                              experiment.py (kế hoạch thực nghiệm, configs/experiments/),
+│   │                              depth_check.py (điểm SfM cho depth_loss), prune.py (lọc Gaussian, chấm lại)
 │   ├── rendering/                 render.py: render lại từ checkpoint, xuất PLY
 │   ├── evaluation/                gsplat_results.py, compare_modes.py, compare_reference.py, overview.py
 │   ├── datasets/                  registry.py: đọc configs/*.yaml, kiểm tra dữ liệu từng luồng; fetch.py: tải benchmark
@@ -36,7 +37,8 @@ SpatialRoom3D/
 │   ├── custom_scene.yaml          cảnh tự chụp: nguồn, nơi lưu COLMAP và kết quả
 │   ├── mipnerf360.yaml            Mip-NeRF 360: dữ liệu, nguồn tải, kết quả, mục benchmark (protocol, số liệu công bố, ngưỡng)
 │   ├── deep_blending.yaml         Deep Blending: như trên
-│   ├── experiments/               kế hoạch thực nghiệm (main.yaml: default / mcmc, 3 seed, 6 cảnh)
+│   ├── experiments/               kế hoạch thực nghiệm (main.yaml: default / mcmc, 3 seed, 6 cảnh;
+│   │                              tune_mcmc.yaml: 10 biến thể của mcmc trên room, 1 seed, lọc Gaussian)
 │   ├── environment/               phiên bản ghim của 3 env conda (gs-inria, gs-tools, gs-gsplat)
 │   └── local.yaml                 (không vào Git) ghi đè đường dẫn trên một pod, mục 5
 ├── scripts/
@@ -44,6 +46,7 @@ SpatialRoom3D/
 │   ├── run_train.sh               huấn luyện: custom <cảnh> [chế độ ...] | <benchmark> [gsplat|b0]
 │   ├── run_render.sh              render ảnh / video, xuất PLY
 │   ├── run_evaluate.sh            bảng so sánh các chế độ / B0 / số liệu công bố
+│   ├── run_filter.sh              lọc Gaussian của các lượt đã train xong rồi chấm lại (tùy chọn)
 │   ├── pipeline/                  phần thực thi: prepare_scene, prepare_benchmark, train_scene, train_gsplat_modes, train_inria_b0
 │   ├── pod/                       run_all, run_scene (cả luồng một cảnh), run_experiment (thực nghiệm trọn vẹn),
 │   │                              fetch_data (tải benchmark), job (chạy nền, xếp hàng GPU), results, pack_results,
@@ -75,6 +78,7 @@ Luồng chính và nơi mỗi bước nằm:
 | Prepare Dataset (kiểm tra trước khi train) | `src/reconstruction/report.py` | như trên; benchmark: `scripts/prepare_data.sh <benchmark>` |
 | Train 3DGS | `src/training/` | `scripts/run_train.sh` |
 | Export PLY / Checkpoint | `src/rendering/render.py` | `scripts/run_render.sh` |
+| Lọc Gaussian, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
 | Evaluate (PSNR / SSIM / LPIPS) | `src/evaluation/` | `scripts/run_evaluate.sh` |
 
 Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` (script tự đặt), ví dụ `python -m src.training.run`, `python -m src.reconstruction.colmap_runner`, `python -m src.datasets.registry`.
@@ -94,10 +98,11 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 ├── outputs/                        mọi thứ sinh ra
 │   ├── custom_scenes/<cảnh>/
 │   │   ├── colmap/                   ảnh đã chuẩn hóa (input/), COLMAP (images/, sparse/0/), frames_report.json, sfm_report.json
-│   │   └── <chế_độ>_s<seed>/         các lượt train (default_s42, mcmc_s42, ...); render_<quỹ_đạo>_<thời_gian>/ khi render lại
+│   │   └── <chế_độ>_s<seed>/         các lượt train (default_s42, mcmc_s42, ...); render_<quỹ_đạo>_<thời_gian>/ khi render lại,
+│   │                                 filtered/ khi đã lọc Gaussian
 │   ├── benchmarks/<benchmark>/
 │   │   ├── inria_b0/<cảnh>/          B0 Inria
-│   │   ├── gsplat/<cảnh>/<chế_độ>_s<seed>/
+│   │   ├── gsplat/<cảnh>/<chế_độ>[_<tag>]_s<seed>/   tag: biến thể tham số của một kế hoạch (vd. mcmc_or0001_s42)
 │   │   └── gsplat_quick/<cảnh>/<chế_độ>_s<seed>/   chạy thử 3.000 vòng
 │   ├── checkpoints/<luồng>/<cảnh>/<lượt>.ply   PLY đã xuất để tải về / xem 3D (liên kết cứng tới PLY của lượt)
 │   ├── reports/                      báo cáo; reports/configs/: bản JSON của cấu hình benchmark đã dùng
@@ -128,7 +133,7 @@ Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipne
 - gsplat với Mip-NeRF 360 (`data_factor` 2 / 4) đọc một bản xem dữ liệu gồm các liên kết, ghi ảnh PNG thu nhỏ vào `outputs/benchmarks/mipnerf360/gsplat/<cảnh>/.images_<N>_png_<dấu mô hình>/`, không ghi gì vào `data/`.
 - `run_all.sh` chỉ cài / kiểm tra môi trường: không train, không chạy benchmark, không đọc luồng dữ liệu nào. Chạy luồng nào là do người dùng chọn.
 - Mỗi lượt train có thư mục riêng `<cảnh>/<chế_độ>_s<seed>`. Lượt cũ khác cấu hình không bị ghi đè: báo lỗi, hoặc đổi tên thành `.prev_<thời_gian>` khi được phép thay. Riêng B0: cảnh đã có `results.json` thì bỏ qua (không so cấu hình); `FORCE=1` chạy lại, lượt cũ được đổi tên `<cảnh>.prev_<thời_gian>`.
-- Render lại (`run_render.sh`) thêm một thư mục mới `render_<quỹ_đạo>_<thời_gian>/` trong lượt đó, không sửa file nào của lượt; dừng nếu mô hình COLMAP của cảnh đã đổi sau khi train. Xuất PLY không ghi đè: tên đã là một PLY khác thì xuất thành `<lượt>_<thời điểm train xong>.ply`; lượt chạy thử của benchmark xuất vào `checkpoints/<benchmark>_quick/`.
+- Render lại (`run_render.sh`) thêm một thư mục mới `render_<quỹ_đạo>_<thời_gian>/` trong lượt đó, không sửa file nào của lượt; dừng nếu mô hình COLMAP của cảnh đã đổi sau khi train. Lọc Gaussian (`run_filter.sh`) cũng vậy, với thư mục `filtered/` (checkpoint và PLY đã lọc, lượt chấm lại, `filter_meta.json`); lọc lại với ngưỡng khác thì `filtered/` cũ đổi tên `filtered.prev_<thời_gian>`. Xuất PLY không ghi đè: tên đã là một PLY khác thì xuất thành `<lượt>_<thời điểm train xong>.ply`; lượt chạy thử của benchmark xuất vào `checkpoints/<benchmark>_quick/`.
 
 ## 4. Dữ liệu nằm ở đâu
 
@@ -180,7 +185,7 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
 Repo này bắt đầu ngày 19/10/2026 bằng một commit duy nhất, từ bản cấu trúc hoàn chỉnh của repo trước `truong0809/3D-Indoor-Scene-Reconstruction-from-Images` (commit `8037a66` cùng các thay đổi chưa commit ngày 17–19/10/2026). Lịch sử trước đó nằm ở repo cũ; repo cũ và volume cũ không bị sửa.
 
 - Phần đã chạy trên pod ngày 17/10/2026 (cài 3 env, B0 Inria, gsplat `default` / `mcmc` trên Deep Blending, chạy nền và khóa GPU) được dời chỗ và đổi tên gói, không viết lại thuật toán. Hai chế độ, protocol và phiên bản CUDA / PyTorch / gsplat không đổi. Lệnh huấn luyện sinh ra cho Deep Blending giống lệnh đã chạy ngày 17/10/2026, chỉ khác đường dẫn và tên module (`tests/unit/test_benchmarks.py`).
-- Phần viết sau ngày 17/10/2026, **chưa chạy trên pod**: đầu vào thư mục ảnh và các kiểm tra trước khi train, kết luận FAIL khi mô hình COLMAP không có điểm 3D, cấu hình YAML, bản xem dữ liệu cho `data_factor` > 1 (Mip-NeRF 360), render lại / xuất PLY, CLI, notebook cho volume trống. Các phần này chỉ được kiểm thử trên CPU (stub, runner giả, COLMAP bản CPU trên dữ liệu tổng hợp).
+- Phần viết sau ngày 17/10/2026, **chưa chạy trên pod**: đầu vào thư mục ảnh và các kiểm tra trước khi train, kết luận FAIL khi mô hình COLMAP không có điểm 3D, cấu hình YAML, bản xem dữ liệu cho `data_factor` > 1 (Mip-NeRF 360), render lại / xuất PLY, CLI, notebook cho volume trống, tải dữ liệu và thực nghiệm trọn vẹn, biến thể tham số, kiểm tra điểm SfM, lọc Gaussian. Các phần này chỉ được kiểm thử trên CPU (stub, runner giả, COLMAP bản CPU trên dữ liệu tổng hợp).
 - Đã bỏ: phần dời dữ liệu của volume cũ, mọi phần tương thích bố cục cũ, lấy code từ file ZIP. Repo này dùng volume mới, trống.
 
 Đối chiếu tên khi đọc báo cáo / log cũ:

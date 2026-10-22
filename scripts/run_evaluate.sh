@@ -17,11 +17,13 @@
 #   MODES="default mcmc"   chi cac che do nay (mac dinh: moi che do co luot chay)
 #   SCENES="room counter"  benchmark: chi cac canh nay; mot phan cac canh thi doi chieu so cong bo ghi SKIPPED
 #   BASELINE=default       che do lam moc so sanh; khac default thi khong doi chieu voi Inria (chi danh cho default)
+#   TAGS="or0001 rbg"      dua ca cac luot co tag nay vao bang (bien the cua mot ke hoach thuc nghiem, vd. tune_mcmc);
+#                          mac dinh luot co tag bi de ngoai, bang chi co cac luot chuan
 #   REPORT=<duong dan>     ten file bao cao, khong co duoi (mac dinh nhu tren)
 
 set -euo pipefail
 
-usage() { sed -n '2,20p' "$0"; exit 2; }
+usage() { sed -n '2,22p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 WHAT="$1"
 shift
@@ -45,6 +47,13 @@ if [ -n "${MODES:-}" ]; then
 fi
 if [ "$BASELINE" != default ]; then
   ARGS+=(--baseline "$BASELINE")
+fi
+if [ -n "${TAGS:-}" ]; then
+  read -r -a TAG_LIST <<< "$TAGS"
+  for tag in "${TAG_LIST[@]}"; do
+    [[ "$tag" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "ERROR: invalid tag in TAGS: $tag"; exit 2; }
+  done
+  ARGS+=(--tags "${TAG_LIST[@]}")
 fi
 
 case "$WHAT" in
