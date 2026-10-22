@@ -8,6 +8,7 @@ Gaussian, tùy chọn) -> render, xuất PLY -> đánh giá (PSNR / SSIM / LPIPS
     python -m app.cli render custom phong1 default_s42                             # = bash scripts/run_render.sh ...
     python -m app.cli filter custom phong1 mcmc_s42                                # = bash scripts/run_filter.sh ...
     python -m app.cli evaluate custom phong1                                       # = bash scripts/run_evaluate.sh ...
+    python -m app.cli panels mipnerf360 counter                                    # = bash scripts/run_panels.sh ...
     python -m app.cli scene /workspace/data/custom_scenes/phong1 phong1 --background   # cả luồng, chạy nền
     python -m app.cli --dry-run train deep_blending gsplat                         # chỉ in lệnh bash sẽ chạy
 
@@ -32,6 +33,8 @@ COMMANDS: dict[str, tuple[str, list[str], str]] = {
     "filter": ("scripts/run_filter.sh", [],
                "lọc Gaussian rồi chấm lại: custom <cảnh> [lượt ...] | <benchmark> <cảnh> [lượt ...]"),
     "evaluate": ("scripts/run_evaluate.sh", [], "đánh giá, so sánh các chế độ và B0: <benchmark> | custom [cảnh ...]"),
+    "panels": ("scripts/run_panels.sh", [],
+               "ảnh so sánh các lượt trên cùng ảnh test, video xếp chồng: <benchmark> <cảnh> [lượt ...] | custom <cảnh>"),
     "scene": ("scripts/pod/run_scene.sh", [], "cả luồng cho một cảnh tự chụp: <ảnh|video|-> <cảnh> [--background]"),
     "fetch": ("scripts/pod/fetch_data.sh", [], "tải dữ liệu benchmark về volume: <benchmark> [cảnh ...] [--dry-run]"),
     "experiment": ("scripts/pod/run_experiment.sh", [],

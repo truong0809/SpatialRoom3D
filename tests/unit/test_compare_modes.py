@@ -378,3 +378,177 @@ def test_filtered_rows_name_their_thresholds_when_rows_differ(tmp_path):
     rows = [line for line in text.splitlines() if line.startswith("| room |") and "→" in line]
     assert rows[0].endswith("| bỏ opacity < 0.0123456789 hoặc trục lớn nhất > 0.1 × scene_scale |")  # default
     assert rows[1].endswith("| bỏ opacity < 0.02 hoặc trục lớn nhất > 0.1 × scene_scale |")  # mcmc
+
+
+def update_summary(run, **fields):
+    """Sửa summary.json của một lượt giả: SSIM / LPIPS vào metrics, các khóa khác vào gốc."""
+    path = run / "summary.json"
+    data = json.loads(path.read_text())
+    for key, value in fields.items():
+        if key in ("SSIM", "LPIPS"):
+            data["metrics"][key] = value
+        else:
+            data[key] = value
+    path.write_text(json.dumps(data))
+
+
+def write_splat_stats(run, **change):
+    """splat_stats.json như src.evaluation.splat_stats ghi (rút gọn), khớp một PLY giả của lượt."""
+    ply = run / "ply" / "point_cloud_29999.ply"
+    ply.parent.mkdir(exist_ok=True)
+    ply.write_bytes(b"\0" * 100)
+    st = ply.stat()
+    stats = {"version": 1, "status": "OK", "ply": "ply/point_cloud_29999.ply", "ply_bytes": st.st_size,
+             "ply_mtime_ns": st.st_mtime_ns, "num_gaussians": 2_000_000, "bytes_per_gaussian": 236, "sh_degree": 3,
+             "opacity": {"p50": 0.6, "below": {"0.005": 0.01, "0.02": 0.05, "0.1": 0.2}},
+             "largest_axis_relative": {"p50": 0.002, "above": {"0.01": 0.03, "0.1": 0.001}}, **change}
+    (run / "splat_stats.json").write_text(json.dumps(stats))
+    return ply
+
+
+def test_wins_count_scene_seed_pairs(tmp_path):
+    for scene, offsets in (("drjohnson", (0.2, -0.1, 0.3)), ("playroom", (0.1, 0.05, -0.02))):
+        for seed, offset in zip((42, 43, 44), offsets):
+            write_run(tmp_path, scene, "default", seed, 29.0)
+            mcmc = write_run(tmp_path, scene, "mcmc", seed, 29.0 + offset)
+            update_summary(mcmc, LPIPS=0.24 if offset > 0 else 0.26)
+    write_run(tmp_path, "playroom", "mcmc", 45, 40.0)  # không có baseline cùng seed: không thành cặp
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    w = report["wins"]["mcmc"]
+    assert w["pairs"] == 6 and w["scenes"] == ["drjohnson", "playroom"] and len(report["pairs"]["mcmc"]) == 6
+    assert w["better"] == {"PSNR": 4, "SSIM": 0, "LPIPS": 4}  # SSIM bằng nhau: không tính là hơn; LPIPS thấp là hơn
+    assert w["scene_count"] == 2 and w["scenes_better"] == {"PSNR": 2, "SSIM": 0, "LPIPS": 2}
+    assert w["mean"]["PSNR"] == pytest.approx(0.53 / 6)
+    assert w["not_fair"] == {"playroom": ["seeds=DIFF"]}  # seed 45 chỉ có ở mcmc: như cột điều kiện của bảng chênh lệch
+    assert {"scene": "drjohnson", "seed": 43, "PSNR": pytest.approx(-0.1), "SSIM": 0.0,
+            "LPIPS": pytest.approx(0.01)} in report["pairs"]["mcmc"]
+    text = format_markdown(report)
+    assert "Số cặp (cảnh, seed) và số cảnh tốt hơn `default`" in text
+    assert "| mcmc | 4/6 · 0/6 · 4/6 | 2/2 · 0/2 · 2/2 | +0.088 ± 0.146 | +0.0000 ± 0.0000 | -0.0033 ± 0.0103 " \
+           "| chưa đủ: playroom (seeds=DIFF) |" in text
+
+
+def test_wins_name_the_scenes_that_are_not_comparable(tmp_path):
+    for seed in (42, 43):
+        write_run(tmp_path, "room", "default", seed, 29.0)
+        write_run(tmp_path, "room", "mcmc", seed, 29.5, count=3_000_000)  # ngân sách Gaussian khác
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    assert report["wins"]["mcmc"]["not_fair"] == {"room": ["seeds=FEW", "gaussian_budget=UNEQUAL"]}
+    assert "| chưa đủ: room (seeds=FEW, gaussian_budget=UNEQUAL) |" in format_markdown(report)
+
+
+def test_size_quality_uses_the_common_seeds_of_a_scene(tmp_path):
+    base = write_run(tmp_path, "room", "default", 42, 30.0)
+    update_summary(write_run(tmp_path, "room", "default", 43, 31.0), ply_size_mb=500.0)  # seed 43 chỉ có default
+    mcmc = write_run(tmp_path, "room", "mcmc", 42, 30.4)
+    update_summary(base, ply_size_mb=500.0, render_ms_per_image=4.0)
+    update_summary(mcmc, ply_size_mb=500.0)
+    write_filtered(mcmc, 30.35)  # PLY 3 MB
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    table = report["size_quality"]["room"]
+    assert table["seeds"] == [42] and table["filtered_left_out"] == []
+    rows = table["rows"]
+    assert [row["version"] for row in rows] == ["mcmc + đã lọc", "default", "mcmc"]
+    assert rows[1]["metrics"]["PSNR"] == pytest.approx(30.0)  # chỉ seed chung 42, không lấy seed 43 của default
+    assert [row["not_dominated"] for row in rows] == [True, False, True]  # default: mcmc cùng dung lượng, PSNR cao hơn
+    assert rows[1]["bytes_per_gaussian"] == pytest.approx(500 * 2**20 / 2_000_000) and "fps" not in rows[1]
+    text = format_markdown(report)
+    assert "Chất lượng theo dung lượng" in text and "| FPS |" not in text  # không có cột FPS
+    assert "| room | mcmc + đã lọc | 42 | 3 | 2 | 1,500,000 | 30.350 | 0.8900 | 0.2600 | ✓ |" in text
+    assert "| room | default | 42 | 500 | 262 | 2,000,000 | 30.000 | 0.9000 | 0.2500 |  |" in text
+    assert "`Render (ms/ảnh)` ở mọi bảng: thời gian gsplat đo khi chấm ảnh test" in text
+
+
+def test_size_quality_leaves_out_partly_filtered_versions_and_marks_missing_values(tmp_path):
+    for seed, psnr in ((42, 30.0), (43, 30.2)):
+        update_summary(write_run(tmp_path, "room", "default", seed, psnr - 0.4), ply_size_mb=500.0)
+        mcmc = write_run(tmp_path, "room", "mcmc", seed, psnr)  # không ghi dung lượng PLY
+        if seed == 42:
+            write_filtered(mcmc, psnr - 0.05)  # chỉ seed 42 đã lọc
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    table = report["size_quality"]["room"]
+    assert table["seeds"] == [42, 43]
+    assert table["filtered_left_out"] == [{"variant": "mcmc", "total": 2, "ok": 1, "failed": 0, "outside": 0}]
+    assert [row["version"] for row in table["rows"]] == ["default", "mcmc"]  # không có "mcmc + đã lọc"
+    assert [row["not_dominated"] for row in table["rows"]] == [True, None]  # mcmc thiếu dung lượng: không xếp được
+    text = format_markdown(report)
+    assert "| room | mcmc | 42,43 | - | - | 2,000,000 | 30.100 | 0.9000 | 0.2500 | - |" in text
+    assert "- room: bản đã lọc của mcmc không đưa vào bảng này (1/2 lượt trên các seed 42,43 đã lọc xong)" in text
+
+
+def test_size_quality_and_structure_say_why_rows_are_missing(tmp_path):
+    for seed in (42, 43, 44):
+        update_summary(write_run(tmp_path, "room", "default", seed, 29.0), ply_size_mb=500.0)
+    mcmc = write_run(tmp_path, "room", "mcmc", 42, 29.5)
+    indoor = write_run(tmp_path, "room", "mcmc_indoor", 43, 29.6)  # mcmc và mcmc_indoor không có seed chung
+    write_splat_stats(mcmc)
+    write_splat_stats(indoor)
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc", "mcmc_indoor"])
+    assert report["size_quality"]["room"] == {"seeds": [], "rows": [], "filtered_left_out": []}
+    assert report["structure"]["room"]["seeds"] == [] and report["structure"]["room"]["variants"] == {}
+    text = format_markdown(report)
+    assert "- room: các biến thể không có seed chung, không có dòng nào" in text
+    assert "- room: các biến thể có thống kê (mcmc, mcmc_indoor) không có seed chung, không có dòng nào" in text
+
+
+def test_filtered_versions_left_out_name_the_cause(tmp_path):
+    for seed in (42, 43):
+        write_run(tmp_path, "room", "default", seed, 29.0)
+        update_summary(write_run(tmp_path, "room", "default", seed + 10, 29.0), ply_size_mb=500.0)
+        mcmc = write_run(tmp_path, "room", "mcmc", seed, 29.5)
+        update_summary(mcmc, ply_size_mb=500.0)
+        write_filtered(mcmc, 29.4, status="FAILED")  # lọc lỗi ở mọi seed chung
+    outside = write_run(tmp_path, "room", "mcmc", 99, 29.5)  # đã lọc, nhưng seed 99 không chung với default
+    write_filtered(outside, 29.4)
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    assert report["size_quality"]["room"]["filtered_left_out"] == [
+        {"variant": "mcmc", "total": 2, "ok": 0, "failed": 2, "outside": 1}]
+    assert ("- room: bản đã lọc của mcmc không đưa vào bảng này (0/2 lượt trên các seed 42,43 đã lọc xong, 2 lượt lọc "
+            "lỗi, 1 lượt đã lọc ở seed ngoài các seed chung)") in format_markdown(report)
+
+
+def test_filtered_size_survives_without_the_ply(tmp_path):
+    mcmc = write_run(tmp_path, "room", "mcmc", 42, 30.0)
+    write_run(tmp_path, "room", "default", 42, 29.0)
+    write_filtered(mcmc, 29.9)
+    meta_path = mcmc / "filtered" / "filter_meta.json"
+    meta = json.loads(meta_path.read_text())
+    meta["files"] = {"ply_size_mb": 123.45}
+    meta_path.write_text(json.dumps(meta))
+    (mcmc / "filtered" / "ply" / "point_cloud_29999.ply").unlink()  # gói kết quả nhẹ không có PLY
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    assert report["scenes"]["room"]["mcmc"]["filtered"]["ply_size_mb"] == pytest.approx(123.45)
+
+
+def test_structure_table_reads_splat_stats_on_common_seeds(tmp_path):
+    write_run(tmp_path, "room", "default", 42, 30.0)  # chưa có thống kê: không có dòng
+    first = write_run(tmp_path, "room", "mcmc", 42, 30.4)
+    second = write_run(tmp_path, "room", "mcmc", 43, 30.5)
+    write_splat_stats(first)
+    write_splat_stats(second, opacity={"p50": 0.8, "below": {"0.005": 0.03, "0.02": 0.07, "0.1": 0.3}})
+    write_run(tmp_path, "room", "mcmc", 44, 30.6)  # chưa có thống kê: không tính
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    shape = report["structure"]["room"]
+    assert shape["seeds"] == [42, 43] and list(shape["variants"]) == ["mcmc"]
+    splat = shape["variants"]["mcmc"]
+    assert splat["n"] == 2 and splat["sh_degree"] == [3] and splat["unchecked"] == 0
+    assert splat["opacity_below"]["0.02"] == pytest.approx(0.06) and splat["opacity_p50"] == pytest.approx(0.7)
+    assert splat["largest_rel_above"]["0.1"] == pytest.approx(0.001)
+    assert report["scenes"]["room"]["mcmc"]["bytes_per_gaussian"] == 236  # lấy từ thống kê, không ước lượng
+    text = format_markdown(report)
+    assert "Cấu trúc mô hình, đọc từ PLY cuối" in text
+    assert "| room | mcmc | 42,43 | 3 | 2.0% | 6.0% | 25.0% | 0.700 | 0.10% | 0.0020 |" in text
+    write_splat_stats(write_run(tmp_path, "room", "mcmc_x", 42, 30.0))  # biến thể khác chỉ có seed 42
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc", "mcmc_x"])
+    assert report["structure"]["room"]["seeds"] == [42]  # cùng seed cho mọi dòng
+    assert report["structure"]["room"]["variants"]["mcmc"]["n"] == 1
+    ply = write_splat_stats(first, largest_axis_relative=None)  # lượt không có scene_scale: mục đó để trống
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    assert report["structure"]["room"]["variants"]["mcmc"]["largest_rel_above"]["0.1"] is None
+    ply.unlink()  # không còn PLY (gói kết quả nhẹ): vẫn dùng, ghi là chưa kiểm lại
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    assert report["structure"]["room"]["variants"]["mcmc"]["unchecked"] == 1
+    assert "1 lượt có thống kê nhưng không còn file PLY để kiểm lại" in format_markdown(report)
+    ply.write_bytes(b"\0" * 200)  # PLY khác lúc tính: thống kê cũ không dùng
+    report = build_report(discover([tmp_path]), "default", ["default", "mcmc"])
+    assert report["structure"]["room"]["seeds"] == [43]

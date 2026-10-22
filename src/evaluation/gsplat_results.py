@@ -11,9 +11,11 @@ Thư mục kết quả (`--result-dir` của simple_trainer.py) sau khi `src.tra
     ckpts/ckpt_<N>_rank0.pt, ply/point_cloud_<N>.ply
     filtered/                         (tùy chọn) bản đã lọc Gaussian và lượt chấm lại của nó (src.training.prune):
                                       filter_meta.json, stats/val_step<N>.json, ckpts/, ply/, renders/, videos/
+    splat_stats.json                  (tùy chọn) thống kê PLY cuối (src.evaluation.splat_stats): byte mỗi Gaussian,
+                                      bậc SH, phân bố opacity và kích thước
 
-Số liệu trong summary.json chỉ lấy từ các file trên, không ước lượng. Phần `filtered` luôn được đọc lại từ thư mục
-`filtered/` (lọc chạy sau khi summary.json đã ghi).
+Số liệu trong summary.json chỉ lấy từ các file trên, không ước lượng. Phần `filtered` và `splat_stats` luôn được đọc lại
+(lọc và thống kê chạy sau khi summary.json đã ghi).
 """
 
 from __future__ import annotations
@@ -31,6 +33,8 @@ _VAL = re.compile(r"^val_step(\d+)\.json$")
 _TRAIN = re.compile(r"^train_step(\d+)_rank0\.json$")
 FILTER_DIR = "filtered"  # <lượt>/filtered/: bản đã lọc Gaussian (src/training/prune.py)
 FILTER_META = "filter_meta.json"
+SPLAT_STATS = "splat_stats.json"  # <lượt>/splat_stats.json: thống kê PLY cuối (src/evaluation/splat_stats.py)
+SPLAT_STATS_VERSION = 1
 
 
 def latest_stats(stats_dir: Path, kind: str) -> tuple[int, dict] | None:
@@ -99,6 +103,7 @@ class RunResult:
     scene_fingerprint: str | None = None  # SHA-256 của sparse/0 (src.training.run.scene_fingerprint)
     tag: str | None = None  # biến thể của chế độ trong kế hoạch thực nghiệm (src.training.run --tag)
     filtered: dict | None = None  # bản đã lọc Gaussian, xem load_filtered; None khi chưa lọc
+    splat_stats: dict | None = None  # thống kê PLY cuối, xem load_splat_stats; None khi chưa tính hoặc PLY đã đổi
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -157,6 +162,7 @@ def load_run(run_dir: Path) -> RunResult:
         scene_fingerprint=(meta.get("scene_info") or {}).get("fingerprint"),
         tag=meta.get("tag"),
         filtered=load_filtered(run_dir),
+        splat_stats=load_splat_stats(run_dir),
     )
     final_step = int(protocol["max_steps"]) - 1 if "max_steps" in protocol else None
 
@@ -215,8 +221,25 @@ def load_summary(run_dir: Path) -> RunResult:
         result = RunResult(**{key: value for key, value in data.items() if key in known})
         result.run_dir = os.path.abspath(run_dir)
         result.filtered = load_filtered(Path(run_dir))
+        result.splat_stats = load_splat_stats(Path(run_dir))
         return result
     return load_run(Path(run_dir))
+
+
+def load_splat_stats(run_dir: Path) -> dict | None:
+    """Thống kê PLY cuối của lượt (`<lượt>/splat_stats.json`, src.evaluation.splat_stats); None khi chưa tính, tính lỗi,
+    hoặc PLY đã đổi (khác kích thước hay thời điểm sửa). `ply_checked`: False khi không còn file PLY để kiểm lại (vd. gói
+    kết quả nhẹ không có PLY): thống kê vẫn là của PLY lúc tính."""
+    data = read_json_or_none(Path(run_dir) / SPLAT_STATS)
+    if not data or data.get("version") != SPLAT_STATS_VERSION or data.get("status") != "OK" or not data.get("ply"):
+        return None
+    ply = Path(run_dir) / str(data["ply"])
+    if not ply.is_file():
+        return {**data, "ply_checked": False}
+    st = ply.stat()
+    if st.st_size != data.get("ply_bytes") or st.st_mtime_ns != data.get("ply_mtime_ns"):
+        return None
+    return {**data, "ply_checked": True}
 
 
 def load_filtered(run_dir: Path) -> dict | None:
@@ -249,5 +272,6 @@ def load_filtered(run_dir: Path) -> dict | None:
     info.update(metrics=metrics, num_gaussians=counts.get("kept"), eval_step=val[0],
                 render_ms_per_image=(round(float(stats["ellipse_time"]) * 1000, 3)
                                      if stats.get("ellipse_time") is not None else None),
-                ply_size_mb=_size_mb(folder / "ply" / f"point_cloud_{val[0]}.ply"))
+                ply_size_mb=(_size_mb(folder / "ply" / f"point_cloud_{val[0]}.ply")  # gói kết quả nhẹ: không có PLY
+                             or (meta.get("files") or {}).get("ply_size_mb")))
     return info

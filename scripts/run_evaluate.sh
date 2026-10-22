@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # run_evaluate.sh - Danh gia chat luong (PSNR / SSIM / LPIPS) tu cac luot da chay: bang so sanh default (DefaultStrategy)
-# voi cac che do khac (mcmc, che do tu them...), doi chieu B0 Inria va so lieu cong bo. CHI DOC ket qua, khong train,
-# khong dung GPU.
+# voi cac che do khac (mcmc, che do tu them...), doi chieu B0 Inria va so lieu cong bo. Khong train, khong dung GPU, khong
+# sua file nao cua luot: chi ghi them <luot>/splat_stats.json (thong ke PLY cuoi cho bang cau truc mo hinh,
+# src.evaluation.splat_stats; luot da co va PLY khong doi thi bo qua).
 # Goi src.evaluation.compare_modes voi dung thu muc ket qua cua tung luong (configs/<luong>.yaml); bang kiem tra dieu
 # kien cong bang (cung canh / mo hinh COLMAP / tap test / protocol / so Gaussian / so seed) nam trong bao cao.
 #
@@ -20,10 +21,13 @@
 #   TAGS="or0001 rbg"      dua ca cac luot co tag nay vao bang (bien the cua mot ke hoach thuc nghiem, vd. tune_mcmc);
 #                          mac dinh luot co tag bi de ngoai, bang chi co cac luot chuan
 #   REPORT=<duong dan>     ten file bao cao, khong co duoi (mac dinh nhu tren)
+#   SPLAT_STATS=0          khong tinh thong ke PLY (bang cau truc mo hinh chi co cac luot da tinh truoc do);
+#   SPLAT_STATS=force      tinh lai ca khi da co (lan dau doc moi PLY cuoi: vai phut voi thuc nghiem chinh)
+#   ENV_NAME=gs-gsplat     env co numpy de tinh thong ke PLY (khong co thi python3 cua may neu co numpy)
 
 set -euo pipefail
 
-usage() { sed -n '2,22p' "$0"; exit 2; }
+usage() { sed -n '2,26p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 WHAT="$1"
 shift
@@ -41,6 +45,8 @@ if [ "$BASELINE" != default ] && [ "${QUICK:-0}" = 1 ]; then
   exit 2
 fi
 ARGS=()
+ROOTS=()
+STATS_ROOTS=()  # thong ke PLY: cung thu muc voi bang, hoac chi cac canh trong SCENES
 if [ -n "${MODES:-}" ]; then
   read -r -a MODE_LIST <<< "$MODES"
   ARGS+=(--modes "${MODE_LIST[@]}")
@@ -61,12 +67,14 @@ case "$WHAT" in
     ROOT="$(registry_value custom_scene results.gsplat)"
     if [ "$#" -eq 0 ]; then
       [ -d "$ROOT" ] || { echo "ERROR: no results of your own scenes in $ROOT"; exit 1; }
-      ARGS+=(--root "$ROOT")
+      ROOTS+=("$ROOT")
+      STATS_ROOTS+=("$ROOT")
     else
       for scene in "$@"; do
         [[ "$scene" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "ERROR: invalid scene name: $scene"; exit 2; }
         [ -d "$ROOT/$scene" ] || { echo "ERROR: no results for scene $scene in $ROOT"; exit 1; }
-        ARGS+=(--root "$ROOT/$scene")
+        ROOTS+=("$ROOT/$scene")
+        STATS_ROOTS+=("$ROOT/$scene")
       done
     fi
     NAME="custom"
@@ -84,10 +92,15 @@ case "$WHAT" in
       ARGS+=(--baseline "default{max_steps=3000}" --include-deviating)
     fi
     [ -d "$ROOT" ] || { echo "ERROR: no results in $ROOT (run bash scripts/run_train.sh $WHAT gsplat first)"; exit 1; }
-    ARGS+=(--root "$ROOT")
+    ROOTS+=("$ROOT")
     if [ -n "${SCENES:-}" ]; then
       read -r -a SCENE_LIST <<< "$SCENES"
       ARGS+=(--scenes "${SCENE_LIST[@]}")
+      for scene in "${SCENE_LIST[@]}"; do
+        [ ! -d "$ROOT/$scene" ] || STATS_ROOTS+=("$ROOT/$scene")
+      done
+    else
+      STATS_ROOTS+=("$ROOT")
     fi
     if [ "$BASELINE" = default ]; then
       CONFIG="$WS/outputs/reports/configs/${WHAT}_$STAMP.json"  # cau hinh benchmark da dung, de doi chieu sau nay
@@ -104,6 +117,28 @@ case "$WHAT" in
     fi
     ;;
 esac
+
+for root in "${ROOTS[@]}"; do ARGS+=(--root "$root"); done
+
+if [ "${SPLAT_STATS:-1}" != 0 ] && [ "${#STATS_ROOTS[@]}" -gt 0 ]; then
+  # thong ke PLY cuoi cua moi luot (can numpy): python cua env gs-gsplat, khong co thi python3 cua may
+  STATS_PY=""
+  for py in "$WS/miniforge3/envs/${ENV_NAME:-gs-gsplat}/bin/python" "$PY"; do
+    if [ -x "$py" ] && "$py" -c 'import numpy' 2> /dev/null; then
+      STATS_PY="$py"
+      break
+    fi
+  done
+  if [ -z "$STATS_PY" ]; then
+    echo "NOTE: no Python with numpy: model-structure statistics skipped (src.evaluation.splat_stats)"
+  else
+    STATS_ARGS=()
+    for root in "${STATS_ROOTS[@]}"; do STATS_ARGS+=(--root "$root"); done
+    [ "${SPLAT_STATS:-1}" != force ] || STATS_ARGS+=(--force)
+    PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" "$STATS_PY" -m src.evaluation.splat_stats "${STATS_ARGS[@]}" \
+      || echo "WARN: some PLY files could not be read (see above): their model-structure rows are missing"
+  fi
+fi
 
 REPORT="${REPORT:-$WS/outputs/reports/compare_${NAME}_$STAMP}"
 PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m src.evaluation.compare_modes \

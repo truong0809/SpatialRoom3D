@@ -22,6 +22,13 @@
   tag), để bảng của một kế hoạch khác không lẫn chúng.
 - Lượt đã lọc Gaussian (`<lượt>/filtered/`, src.training.prune): thêm bảng chỉ số sau khi lọc, chênh lệch so với chính
   lượt đó trước khi lọc, số Gaussian giữ lại và dung lượng PLY. Mọi bảng khác là mô hình chưa lọc.
+- Ngoài chỉ số: số cặp (cảnh, seed) và số cảnh mà mỗi biến thể hơn baseline, kèm chênh lệch trung bình ± độ lệch chuẩn
+  theo cặp và các cảnh chưa đủ điều kiện; chất lượng theo dung lượng (mỗi bản của mô hình, gồm bản đã lọc, xếp theo dung
+  lượng PLY, kèm byte mỗi Gaussian; đánh dấu bản không bị bản nào nhẹ hơn mà tốt hơn vượt); cấu trúc mô hình từ
+  `<lượt>/splat_stats.json` (src.evaluation.splat_stats: tỉ lệ Gaussian gần trong suốt, rất to, bậc SH) khi đã tính. Hai
+  bảng sau tính trên các seed chung của mọi dòng trong cảnh.
+- `Render (ms/ảnh)` là thời gian gsplat đo khi chấm, trong tiến trình chấm riêng, gồm cả lần gọi đầu (nạp CUDA): không
+  phải tốc độ render của mô hình, không đổi ra FPS.
 - Chênh lệch giữa hai biến thể chỉ tính trên các seed chung của hai bên; trung bình trên các cảnh chỉ tính
   trên các seed chung của mọi biến thể trong cảnh đó.
 - Đối chiếu với số liệu Inria (công bố hoặc B0 tự chạy) chỉ thực hiện khi mọi lượt baseline dùng cùng điều kiện
@@ -109,6 +116,41 @@ def _ratio(a, b):
     return a / b if a and b else None
 
 
+def _bytes_per_gaussian(run: RunResult):
+    if run.splat_stats and run.splat_stats.get("bytes_per_gaussian"):
+        return run.splat_stats["bytes_per_gaussian"]
+    if run.ply_size_mb and run.num_gaussians:
+        return run.ply_size_mb * 2**20 / run.num_gaussians  # gần đúng: dung lượng đã làm tròn, gồm cả header
+    return None
+
+
+def _nested(data, *keys):
+    for key in keys:
+        data = data.get(key) if isinstance(data, dict) else None
+    return data
+
+
+def aggregate_splat(runs: list[RunResult]) -> dict | None:
+    """Thống kê PLY cuối (splat_stats.json) trung bình theo seed; None khi chưa lượt nào có. Một mục chỉ có giá trị khi
+    mọi lượt có thống kê đều có mục đó (vd. tỉ lệ theo scene_scale cần scene_scale của mọi lượt)."""
+    done = [run.splat_stats for run in runs if run.splat_stats]
+    if not done:
+        return None
+
+    def mean(*keys):
+        values = [_nested(stats, *keys) for stats in done]
+        return _mean(values) if all(value is not None for value in values) else None
+    return {
+        "n": len(done),
+        "unchecked": sum(stats.get("ply_checked") is False for stats in done),
+        "sh_degree": sorted({stats["sh_degree"] for stats in done if stats.get("sh_degree") is not None}),
+        "opacity_below": {t: mean("opacity", "below", t) for t in ("0.005", "0.02", "0.1")},
+        "opacity_p50": mean("opacity", "p50"),
+        "largest_rel_above": {t: mean("largest_axis_relative", "above", t) for t in ("0.01", "0.1")},
+        "largest_rel_p50": mean("largest_axis_relative", "p50"),
+    }
+
+
 def filtered_ok(run: RunResult) -> bool:
     return (run.filtered or {}).get("status") == "OK"
 
@@ -155,9 +197,106 @@ def aggregate(runs: list[RunResult]) -> dict:
         "torch_peak_gib": _mean(run.torch_peak_gib for run in runs),
         "render_ms_per_image": _mean(run.render_ms_per_image for run in runs),
         "ply_size_mb": _mean(run.ply_size_mb for run in runs),
+        "bytes_per_gaussian": _mean(_bytes_per_gaussian(run) for run in runs),
         "run_dirs": [run.run_dir for run in runs],
         "filtered": aggregate_filtered(runs),
     }
+
+
+def _per_seed(runs: list[RunResult]) -> dict:
+    groups: dict = {}
+    for run in runs:
+        groups.setdefault(run.seed, []).append(run)
+    return {seed: {name: _mean(run.metrics.get(name) for run in group) for name in METRICS}
+            for seed, group in groups.items()}
+
+
+def seed_pairs(scene: str, base_runs: list[RunResult], runs: list[RunResult], seeds: set) -> list[dict]:
+    """Chênh lệch chỉ số theo từng seed chung (biến thể trừ baseline); seed lặp lại thì lấy trung bình."""
+    base, current = _per_seed(base_runs), _per_seed(runs)
+    pairs = []
+    for seed in sorted(seeds):
+        pairs.append({"scene": scene, "seed": seed,
+                      **{name: (None if current[seed][name] is None or base[seed][name] is None
+                                else current[seed][name] - base[seed][name]) for name in METRICS}})
+    return pairs
+
+
+def _better(name: str, delta) -> bool:
+    return delta is not None and (delta < 0 if name == "LPIPS" else delta > 0)
+
+
+def wins(pairs: list[dict], scene_deltas: dict, fairness_checks: dict) -> dict:
+    """Cặp (cảnh, seed) và cảnh (chênh lệch trung bình trên các seed chung của cảnh, như bảng chênh lệch) mà biến thể
+    tốt hơn baseline; bằng nhau không tính. `not_fair`: các cảnh có mục điều kiện chưa đạt."""
+    not_fair = {scene: [f"{c['check']}={c['status']}" for c in checks if c["status"] not in GOOD_STATUSES]
+                for scene, checks in fairness_checks.items()}
+    return {"pairs": len(pairs), "scenes": sorted({pair["scene"] for pair in pairs}),
+            "better": {name: sum(_better(name, pair[name]) for pair in pairs) for name in METRICS},
+            "scene_count": len(scene_deltas),
+            "scenes_better": {name: sum(_better(name, delta[name]) for delta in scene_deltas.values())
+                              for name in METRICS},
+            "mean": {name: _mean(pair[name] for pair in pairs) for name in METRICS},
+            "std": {name: _std([pair[name] for pair in pairs]) for name in METRICS},
+            "not_fair": {scene: bad for scene, bad in sorted(not_fair.items()) if bad}}
+
+
+def _dominates(a: dict, b: dict) -> bool:
+    """a nhẹ hơn hoặc bằng b, PSNR và LPIPS tốt hơn hoặc bằng, và hơn hẳn ở ít nhất một mục."""
+    values = (a["ply_size_mb"], b["ply_size_mb"], a["metrics"]["PSNR"], b["metrics"]["PSNR"], a["metrics"]["LPIPS"],
+              b["metrics"]["LPIPS"])
+    if any(value is None for value in values):
+        return False
+    size_a, size_b, psnr_a, psnr_b, lpips_a, lpips_b = values
+    return (size_a <= size_b and psnr_a >= psnr_b and lpips_a <= lpips_b
+            and (size_a < size_b or psnr_a > psnr_b or lpips_a < lpips_b))
+
+
+def size_quality(by_variant: dict[str, list[RunResult]], seeds: set) -> dict:
+    """Mỗi bản của mô hình trong một cảnh (mỗi biến thể, và bản đã lọc của nó), xếp theo dung lượng PLY. Mọi dòng tính
+    trên cùng `seeds` (các seed chung của cảnh); bản đã lọc chỉ có khi mọi lượt trên các seed đó đã lọc xong.
+    `not_dominated` là None khi dòng thiếu dung lượng hoặc chỉ số."""
+    rows, left_out = [], []
+    for variant, runs in by_variant.items():
+        chosen = _with_seeds(runs, seeds)
+        agg = aggregate(chosen)
+        rows.append({"version": variant, "variant": variant, "filtered": False, "n": agg["n"],
+                     "ply_size_mb": agg["ply_size_mb"], "num_gaussians": agg["num_gaussians"],
+                     "bytes_per_gaussian": agg["bytes_per_gaussian"], "metrics": dict(agg["metrics"])})
+        ok = sum(filtered_ok(run) for run in chosen)
+        if ok < len(chosen):  # chưa lọc hết, hoặc lọc lỗi, trên các seed chung: không so được trên cùng seed
+            failed = sum(run.filtered is not None and not filtered_ok(run) for run in chosen)
+            outside = sum(filtered_ok(run) for run in runs if run.seed not in seeds)
+            if ok or failed or outside:
+                left_out.append({"variant": variant, "total": len(chosen), "ok": ok, "failed": failed,
+                                 "outside": outside})
+        elif agg["filtered"]:
+            f = agg["filtered"]
+            rows.append({"version": f"{variant} + đã lọc", "variant": variant, "filtered": True, "n": f["n"],
+                         "ply_size_mb": f["ply_size_mb"], "num_gaussians": f["num_gaussians"],
+                         "bytes_per_gaussian": (f["ply_size_mb"] * 2**20 / f["num_gaussians"]
+                                                if f["ply_size_mb"] and f["num_gaussians"] else None),
+                         "metrics": dict(f["metrics"])})
+    for row in rows:
+        if row["ply_size_mb"] is None or row["metrics"]["PSNR"] is None or row["metrics"]["LPIPS"] is None:
+            row["not_dominated"] = None
+        else:
+            row["not_dominated"] = not any(_dominates(other, row) for other in rows if other is not row)
+    rows.sort(key=lambda row: (row["ply_size_mb"] is None, row["ply_size_mb"] or 0, row["version"]))
+    return {"seeds": sorted(seeds), "rows": rows, "filtered_left_out": left_out}
+
+
+def structure(by_variant: dict[str, list[RunResult]]) -> dict | None:
+    """Cấu trúc mô hình (splat_stats.json) của các biến thể có thống kê, trên các seed mà mọi biến thể đó đều có thống
+    kê; None khi không biến thể nào có, hoặc không có seed chung."""
+    with_stats = {variant: [run for run in runs if run.splat_stats] for variant, runs in by_variant.items()}
+    with_stats = {variant: runs for variant, runs in with_stats.items() if runs}
+    if not with_stats:
+        return None
+    seeds = set.intersection(*(_seed_set(runs) for runs in with_stats.values()))
+    return {"seeds": sorted(seeds), "variants": {variant: aggregate_splat(_with_seeds(runs, seeds))
+                                                 for variant, runs in with_stats.items()} if seeds else {},
+            "with_stats": sorted(with_stats)}
 
 
 def _same(values) -> bool:
@@ -319,7 +458,7 @@ def build_report(runs: list[RunResult], baseline: str, modes: list[str] | None,
     grouped: dict[str, dict[str, list[RunResult]]] = {}
     report = {"baseline": baseline, "modes": modes, "variants": [], "scenes": {}, "deltas": {}, "fairness": {},
               "incomplete": [], "excluded": [], "mean_over_scenes": {}, "mean_over_scenes_seeds": {},
-              "complete_scenes": [], "warnings": []}
+              "complete_scenes": [], "warnings": [], "pairs": {}, "wins": {}, "size_quality": {}, "structure": {}}
     selected = [run for run in runs if run.mode in modes]
     keys = _scene_keys(selected)
     for scene in sorted({key for key in keys.values() if "@" in key}):
@@ -346,6 +485,13 @@ def build_report(runs: list[RunResult], baseline: str, modes: list[str] | None,
         by_variant = grouped[scene]
         report["scenes"][scene] = {variant: aggregate(by_variant[variant]) for variant in variants
                                    if variant in by_variant}
+        ordered = {variant: by_variant[variant] for variant in variants if variant in by_variant}
+        scene_seeds = set.intersection(*(_seed_set(runs) for runs in ordered.values()))
+        report["size_quality"][scene] = (size_quality(ordered, scene_seeds) if scene_seeds
+                                         else {"seeds": [], "rows": [], "filtered_left_out": []})
+        shape = structure(ordered)
+        if shape:
+            report["structure"][scene] = shape
         missing = [variant for variant in variants if variant not in by_variant]
         # chế độ được yêu cầu nhưng không có lượt OK nào (ở bất kỳ biến thể nào) cũng là thiếu
         missing += [mode for mode in modes
@@ -373,11 +519,17 @@ def build_report(runs: list[RunResult], baseline: str, modes: list[str] | None,
                 "num_gaussians_ratio": _ratio(current["num_gaussians"], base["num_gaussians"]),
                 "train_time_ratio": _ratio(current["train_minutes"], base["train_minutes"]),
             }
+            report["pairs"].setdefault(variant, []).extend(
+                seed_pairs(scene, by_variant[baseline], by_variant[variant], common))
         scene_common = set.intersection(*(_seed_set(by_variant[v]) for v in by_variant))
         if not missing and scene_common:
             report["complete_scenes"].append(scene)
             report["mean_over_scenes_seeds"][scene] = sorted(scene_common)
 
+    for variant, pairs in report["pairs"].items():
+        scene_deltas = {scene: deltas[variant] for scene, deltas in report["deltas"].items() if variant in deltas}
+        report["wins"][variant] = wins(pairs, scene_deltas,
+                                       {scene: report["fairness"][scene][variant] for scene in scene_deltas})
     for scene, by_variant in report["scenes"].items():
         for variant, agg in by_variant.items():
             if agg["filtered"] and len(agg["filtered"]["thresholds"]) > 1:
@@ -466,6 +618,104 @@ def filtered_lines(report: dict) -> list[str]:
     return lines
 
 
+def _pct(value, digits=1):
+    return "-" if value is None else f"{value * 100:.{digits}f}%"
+
+
+def _plus_minus(mean, std, digits):
+    return _signed(mean, digits) + ("" if std is None else f" ± {std:.{digits}f}")
+
+
+def wins_lines(report: dict) -> list[str]:
+    """Số cặp (cảnh, seed) và số cảnh mà mỗi biến thể tốt hơn baseline, kèm điều kiện so sánh."""
+    if not report["wins"]:
+        return []
+    lines = ["", f"Số cặp (cảnh, seed) và số cảnh tốt hơn `{report['baseline']}` (PSNR / SSIM cao hơn, LPIPS thấp hơn; "
+                 "bằng nhau không tính). Cặp: cùng cảnh, cùng seed. Cảnh: chênh lệch trung bình trên các seed chung của "
+                 "cảnh, như bảng chênh lệch ở trên. Δ: trung bình ± độ lệch chuẩn theo cặp. Đọc cùng độ lệch chuẩn và cột "
+                 "điều kiện: nhiều cặp tốt hơn với chênh lệch nhỏ hơn độ lệch chuẩn chưa phải \"cải thiện\".", "",
+             "| Biến thể | Cặp tốt hơn: PSNR · SSIM · LPIPS | Cảnh tốt hơn: PSNR · SSIM · LPIPS | ΔPSNR | ΔSSIM | ΔLPIPS "
+             "| Điều kiện |",
+             "|---|---|---|---|---|---|---|"]
+    for variant, w in report["wins"].items():
+        n, better = w["pairs"], w["better"]
+        k, scenes = w["scene_count"], w["scenes_better"]
+        fair = ("đủ điều kiện" if not w["not_fair"] else "chưa đủ: " + "; ".join(
+            f"{scene} ({', '.join(bad)})" for scene, bad in w["not_fair"].items()))
+        lines.append(f"| {variant} | {better['PSNR']}/{n} · {better['SSIM']}/{n} · {better['LPIPS']}/{n} "
+                     f"| {scenes['PSNR']}/{k} · {scenes['SSIM']}/{k} · {scenes['LPIPS']}/{k} "
+                     f"| {_plus_minus(w['mean']['PSNR'], w['std']['PSNR'], 3)} "
+                     f"| {_plus_minus(w['mean']['SSIM'], w['std']['SSIM'], 4)} "
+                     f"| {_plus_minus(w['mean']['LPIPS'], w['std']['LPIPS'], 4)} | {fair} |")
+    return lines
+
+
+def size_quality_lines(report: dict) -> list[str]:
+    """Chất lượng theo dung lượng: mọi bản của mô hình trong từng cảnh, trên các seed chung, xếp theo dung lượng PLY."""
+    items = report["size_quality"]
+    has_rows = any(row["ply_size_mb"] is not None for table in items.values() for row in table["rows"])
+    if not has_rows and all(table["seeds"] for table in items.values()):
+        return []
+    lines = ["", "Chất lượng theo dung lượng: mỗi bản của mô hình trong từng cảnh (gồm bản đã lọc), xếp theo dung lượng PLY; "
+                 "mọi dòng của một cảnh tính trên cùng các seed chung (cột Seed). Bản đã lọc chỉ có khi mọi lượt trên các "
+                 "seed đó đã lọc xong. Không bị vượt: ✓ khi không có bản nào nhẹ hơn hoặc bằng mà PSNR và LPIPS đều tốt hơn "
+                 "hoặc bằng (hơn hẳn ở ít nhất một mục); - khi dòng thiếu dung lượng hoặc chỉ số.", "",
+             "| Cảnh | Bản | Seed | PLY (MB) | Byte/Gaussian | Số Gaussian | PSNR ↑ | SSIM ↑ | LPIPS ↓ | Không bị vượt |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
+    if not has_rows:
+        lines = lines[:2]  # không dòng nào có dung lượng: chỉ còn ghi chú
+    notes = []
+    for scene, table in items.items():
+        seeds = ",".join(str(seed) for seed in table["seeds"])
+        if not table["seeds"]:
+            notes.append(f"- {scene}: các biến thể không có seed chung, không có dòng nào")
+        for row in table["rows"] if has_rows else []:
+            count = "-" if row["num_gaussians"] is None else f"{row['num_gaussians']:,.0f}"
+            mark = "-" if row["not_dominated"] is None else ("✓" if row["not_dominated"] else "")
+            metrics = row["metrics"]
+            lines.append(f"| {scene} | {row['version']} | {seeds} | {_f(row['ply_size_mb'], 0)} "
+                         f"| {_f(row['bytes_per_gaussian'], 0)} | {count} | {_f(metrics['PSNR'], 3)} "
+                         f"| {_f(metrics['SSIM'], 4)} | {_f(metrics['LPIPS'], 4)} | {mark} |")
+        for item in table["filtered_left_out"]:
+            reason = f"{item['ok']}/{item['total']} lượt trên các seed {seeds} đã lọc xong"
+            if item["failed"]:
+                reason += f", {item['failed']} lượt lọc lỗi"
+            if item["outside"]:
+                reason += f", {item['outside']} lượt đã lọc ở seed ngoài các seed chung"
+            notes.append(f"- {scene}: bản đã lọc của {item['variant']} không đưa vào bảng này ({reason})")
+    return lines + ([""] + notes if notes else [])
+
+
+def structure_lines(report: dict) -> list[str]:
+    """Cấu trúc mô hình từ splat_stats.json, chỉ khi có lượt đã tính."""
+    if not report["structure"]:
+        return []
+    rows, notes, unchecked = [], [], 0
+    for scene, shape in report["structure"].items():
+        if not shape["seeds"]:
+            notes.append(f"- {scene}: các biến thể có thống kê ({', '.join(shape['with_stats'])}) không có seed chung, "
+                         "không có dòng nào")
+        seeds = ",".join(str(seed) for seed in shape["seeds"])
+        for variant, s in shape["variants"].items():
+            degree = ",".join(str(d) for d in s["sh_degree"]) or "-"
+            below, above = s["opacity_below"], s["largest_rel_above"]
+            rows.append(f"| {scene} | {variant} | {seeds} | {degree} | {_pct(below['0.005'])} | {_pct(below['0.02'])} "
+                        f"| {_pct(below['0.1'])} | {_f(s['opacity_p50'], 3)} | {_pct(above['0.1'], 2)} "
+                        f"| {_f(s['largest_rel_p50'], 4)} |")
+            unchecked += s["unchecked"]
+    lines = ["", "Cấu trúc mô hình, đọc từ PLY cuối (src.evaluation.splat_stats), trung bình trên các seed mà mọi biến thể "
+                 "có thống kê của cảnh đều có (cột Seed). Đây là thước đo gián tiếp: Gaussian gần trong suốt hay rất to chưa "
+                 "chắc là floater; floater thật xem ở ảnh so sánh và video độ sâu (scripts/run_panels.sh)."]
+    if rows:
+        lines += ["", "| Cảnh | Biến thể | Seed | Bậc SH | opacity < 0,005 | opacity < 0,02 | opacity < 0,1 | opacity trung vị "
+                      "| trục lớn nhất > 0,1 × scene_scale | trục lớn nhất trung vị (× scene_scale) |",
+                  "|---|---|---|---|---|---|---|---|---|---|"] + rows
+    if unchecked:
+        notes.append(f"- {unchecked} lượt có thống kê nhưng không còn file PLY để kiểm lại (vd. gói kết quả nhẹ): thống kê "
+                     "là của PLY lúc tính.")
+    return lines + ([""] + notes if notes else [])
+
+
 def _conditions_cell(checks: list[dict]) -> str:
     bad = [f"{c['check']}={c['status']}" for c in checks if c["status"] not in GOOD_STATUSES]
     return "đủ điều kiện" if not bad else "chưa đủ điều kiện: " + ", ".join(bad)
@@ -484,6 +734,8 @@ def format_markdown(report: dict) -> str:
                          f"| {_metric(agg, 'LPIPS', 4)} | {count} | {_f(agg['train_minutes'], 1)} "
                          f"| {_f(agg['peak_vram_gib'], 1)} | {_f(agg['render_ms_per_image'], 2)} "
                          f"| {_f(agg['ply_size_mb'], 0)} |")
+    lines += ["", "`Render (ms/ảnh)` ở mọi bảng: thời gian gsplat đo khi chấm ảnh test, trong tiến trình chấm riêng, gồm cả "
+                  "lần gọi đầu (nạp CUDA). Không phải tốc độ render của mô hình; không đổi ra FPS."]
     if report["deltas"]:
         lines += ["", f"Chênh lệch so với `{baseline}`, tính trên các seed chung "
                       "(dương ở PSNR/SSIM và âm ở LPIPS là tốt hơn):", "",
@@ -502,7 +754,10 @@ def format_markdown(report: dict) -> str:
                               for scene in report["complete_scenes"]), ""]
         for variant, m in report["mean_over_scenes"].items():
             lines.append(f"- `{variant}`: PSNR {_f(m['PSNR'])}, SSIM {_f(m['SSIM'])}, LPIPS {_f(m['LPIPS'])}")
+    lines += wins_lines(report)
     lines += filtered_lines(report)
+    lines += size_quality_lines(report)
+    lines += structure_lines(report)
     if report.get("reference_check"):
         ref = report["reference_check"]
         lines += ["", f"Đối chiếu `{ref['mode']}` với số liệu công bố ({', '.join(ref['scenes'])}): "

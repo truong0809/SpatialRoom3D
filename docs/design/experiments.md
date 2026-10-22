@@ -119,8 +119,10 @@ Kiểm tra:
 
 Các lượt train nằm ở `$WS/outputs/benchmarks/<benchmark>/gsplat/<cảnh>/<chế_độ>_s<seed>/` (mục 5).
 
+Ngoài PSNR / SSIM / LPIPS, mỗi bảng so sánh có số cặp (cảnh, seed) và số cảnh tốt hơn, chất lượng theo dung lượng (byte mỗi Gaussian, bản đã lọc) và cấu trúc mô hình đọc từ PLY (tỉ lệ Gaussian gần trong suốt / rất to); ảnh so sánh và video xếp chồng của các lượt: `scripts/run_panels.sh` (`docs/design/comparisons.md`). Cột `Render (ms/ảnh)` gồm cả thời gian khởi động của lượt chấm, không phải tốc độ render. `main.yaml` chưa có `post_filter`, nên bảng của thực nghiệm chính không có bản đã lọc; thêm `post_filter` vào kế hoạch thì mỗi lượt tốn thêm khoảng 4 phút GPU để lọc và chấm lại (ước lượng như `tune_mcmc`).
+
 Chỉ gọi là "cải thiện" theo mục 6, và thêm:
-- chênh lệch so với `default` cùng dấu trên phần lớn cảnh, trên cùng 3 seed;
+- chênh lệch so với `default` cùng dấu trên phần lớn cảnh, trên cùng 3 seed (cột "Cảnh tốt hơn" của bảng số cặp thắng);
 - chênh lệch lớn hơn độ dao động giữa các seed (độ lệch chuẩn trong bảng).
 
 Nếu chỉ một benchmark cải thiện, hoặc chỉ một chỉ số, thì ghi đúng như vậy.
@@ -193,7 +195,9 @@ Hoặc ô 7 của notebook với `WHAT = "experiment"`, `EXP = "tune_mcmc"`. Cá
 
 ### 3.5 Kết quả và cách đọc
 
-`experiment_tune_mcmc_<thời_gian>.md`: bảng các bước, bảng so với `default`, bảng so với `mcmc` (mỗi biến thể là một dòng `mcmc[<tham số>]`, kèm ΔPSNR / ΔSSIM / ΔLPIPS so với `mcmc` và tỉ lệ thời gian train), và bảng sau khi lọc (mục 4). Đọc theo mục 3.1: một seed chỉ để chọn ứng viên cho `mcmc_indoor`.
+`experiment_tune_mcmc_<thời_gian>.md`: bảng các bước, bảng so với `default`, bảng so với `mcmc` (mỗi biến thể là một dòng `mcmc[<tham số>]`, kèm ΔPSNR / ΔSSIM / ΔLPIPS so với `mcmc` và tỉ lệ thời gian train), bảng sau khi lọc (mục 4), chất lượng theo dung lượng và cấu trúc mô hình (`docs/design/comparisons.md`). Đọc theo mục 3.1: một seed chỉ để chọn ứng viên cho `mcmc_indoor`.
+
+Với các biến thể nhắm vào floater (`or005`, `mo002`, `rbg`, `depth`), chỉ số trên ảnh test chưa đủ: xem thêm bảng cấu trúc mô hình (tỉ lệ Gaussian gần trong suốt, rất to) và ảnh so sánh với `mcmc`, nhất là nửa độ sâu của video: `VIDEO=1 bash scripts/run_panels.sh mipnerf360 room mcmc_s42 mcmc_or005_s42 mcmc_mo002_s42` (ô 7: `WHAT = "panels"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `PANEL_RUNS`).
 
 ## 4. Lọc Gaussian sau khi train
 
@@ -235,7 +239,7 @@ Bảng tự kiểm tra các điều kiện này.
 
 **Chỉ gọi là "cải thiện" khi** có ít nhất 3 seed và mọi điều kiện đều đạt (`docs/design/training_modes.md` mục 4.3).
 
-Biến thể của một kế hoạch (mục 3.2) là một dòng riêng `<chế_độ>[<tham số>]`, cùng các kiểm tra công bằng như một chế độ. Bảng sau khi lọc (mục 4) chỉ có khi có lượt đã lọc.
+Biến thể của một kế hoạch (mục 3.2) là một dòng riêng `<chế_độ>[<tham số>]`, cùng các kiểm tra công bằng như một chế độ. Bảng sau khi lọc (mục 4) chỉ có khi có lượt đã lọc. Số cặp thắng, chất lượng theo dung lượng, cấu trúc mô hình và ảnh so sánh: `docs/design/comparisons.md`.
 
 ## 7. Đã chạy / mới cấu hình
 

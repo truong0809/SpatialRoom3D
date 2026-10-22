@@ -28,7 +28,8 @@ SpatialRoom3D/
 │   │                              experiment.py (kế hoạch thực nghiệm, configs/experiments/),
 │   │                              depth_check.py (điểm SfM cho depth_loss), prune.py (lọc Gaussian, chấm lại)
 │   ├── rendering/                 render.py: render lại từ checkpoint, xuất PLY
-│   ├── evaluation/                gsplat_results.py, compare_modes.py, compare_reference.py, overview.py
+│   ├── evaluation/                gsplat_results.py, compare_modes.py, compare_reference.py, overview.py,
+│   │                              splat_stats.py (thống kê PLY), panels.py (ảnh so sánh các lượt)
 │   ├── datasets/                  registry.py: đọc configs/*.yaml, kiểm tra dữ liệu từng luồng; fetch.py: tải benchmark
 │   ├── utils/                     gpu_lock.py: khóa GPU dùng chung với script bash
 │   └── __init__.py
@@ -47,6 +48,7 @@ SpatialRoom3D/
 │   ├── run_render.sh              render ảnh / video, xuất PLY
 │   ├── run_evaluate.sh            bảng so sánh các chế độ / B0 / số liệu công bố
 │   ├── run_filter.sh              lọc Gaussian của các lượt đã train xong rồi chấm lại (tùy chọn)
+│   ├── run_panels.sh              ảnh so sánh các lượt trên cùng ảnh test, video quỹ đạo xếp chồng
 │   ├── pipeline/                  phần thực thi: prepare_scene, prepare_benchmark, train_scene, train_gsplat_modes, train_inria_b0
 │   ├── pod/                       run_all, run_scene (cả luồng một cảnh), run_experiment (thực nghiệm trọn vẹn),
 │   │                              fetch_data (tải benchmark), job (chạy nền, xếp hàng GPU), results, pack_results,
@@ -80,6 +82,7 @@ Luồng chính và nơi mỗi bước nằm:
 | Export PLY / Checkpoint | `src/rendering/render.py` | `scripts/run_render.sh` |
 | Lọc Gaussian, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
 | Evaluate (PSNR / SSIM / LPIPS) | `src/evaluation/` | `scripts/run_evaluate.sh` |
+| Ảnh so sánh các lượt | `src/evaluation/panels.py` | `scripts/run_panels.sh` |
 
 Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` (script tự đặt), ví dụ `python -m src.training.run`, `python -m src.reconstruction.colmap_runner`, `python -m src.datasets.registry`.
 
@@ -105,6 +108,7 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 │   │   ├── gsplat/<cảnh>/<chế_độ>[_<tag>]_s<seed>/   tag: biến thể tham số của một kế hoạch (vd. mcmc_or0001_s42)
 │   │   └── gsplat_quick/<cảnh>/<chế_độ>_s<seed>/   chạy thử 3.000 vòng
 │   ├── checkpoints/<luồng>/<cảnh>/<lượt>.ply   PLY đã xuất để tải về / xem 3D (liên kết cứng tới PLY của lượt)
+│   ├── panels/<luồng>_<cảnh>_<thời_gian>/       ảnh so sánh các lượt, video xếp chồng (scripts/run_panels.sh)
 │   ├── reports/                      báo cáo; reports/configs/: bản JSON của cấu hình benchmark đã dùng
 │   ├── logs/                         log; logs/jobs/: log của việc chạy nền
 │   └── jobs/                         trạng thái việc chạy nền

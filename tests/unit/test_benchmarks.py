@@ -349,6 +349,37 @@ def test_missing_dataset_stops_before_training_and_nothing_is_downloaded(sh):
     assert not (sh.ws / "data" / "downloads").exists()
 
 
+def test_evaluate_writes_model_structure_statistics(sh):
+    """run_evaluate.sh tính thống kê PLY cuối (splat_stats.json) trước khi lập bảng; SPLAT_STATS=0 bỏ bước này."""
+    run = out_dir(sh, "deep_blending", "gsplat") / "playroom" / "mcmc_s42"
+    (run / "ply").mkdir(parents=True)
+    (run / "run_meta.json").write_text(json.dumps({"spec": {"protocol": {"max_steps": 30000}}}), encoding="utf-8")
+    names = ["x", "y", "z", "opacity", "scale_0", "scale_1", "scale_2"]
+    header = ("ply\nformat binary_little_endian 1.0\nelement vertex 2\n"
+              + "".join(f"property float {name}\n" for name in names) + "end_header\n")
+    ply = run / "ply" / "point_cloud_29999.ply"
+    ply.write_bytes(header.encode("ascii") + bytes(4 * len(names) * 2))
+    out = evaluate(sh, "deep_blending", SPLAT_STATS=0)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert not (run / "splat_stats.json").exists()
+    out = evaluate(sh, "deep_blending")
+    assert out.returncode == 0, out.stdout + out.stderr
+    stats = json.loads((run / "splat_stats.json").read_text(encoding="utf-8"))
+    assert stats["status"] == "OK" and stats["num_gaussians"] == 2 and stats["bytes_per_gaussian"] == 28
+    stats_file = run / "splat_stats.json"
+    before = stats_file.stat().st_mtime_ns
+    assert evaluate(sh, "deep_blending", SCENES="drjohnson").returncode == 0  # cảnh khác: không đọc PLY của playroom
+    assert evaluate(sh, "deep_blending").returncode == 0 and stats_file.stat().st_mtime_ns == before  # dùng lại
+    assert evaluate(sh, "deep_blending", SPLAT_STATS="force").returncode == 0
+    assert stats_file.stat().st_mtime_ns != before  # tính lại
+    stats_file.unlink()
+    assert evaluate(sh, "deep_blending", SCENES="drjohnson").returncode == 0 and not stats_file.exists()
+    ply.write_bytes(b"ply\nformat ascii 1.0\nend_header\n")  # PLY hỏng: báo, bảng vẫn được lập
+    out = evaluate(sh, "deep_blending")
+    assert out.returncode == 0 and "WARN: some PLY files could not be read" in out.stdout
+    assert "unsupported format" in out.stderr and "Report:" in out.stdout
+
+
 def test_evaluate_picks_the_result_folder(sh):
     out = evaluate(sh, "deep_blending")
     assert out.returncode == 1 and "no results in" in out.stdout

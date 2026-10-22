@@ -44,6 +44,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
 | Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `EXP = "main"`, `CHAY = True`), theo dõi ở ô 5 |
 | Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 5 giờ) | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, `CHAY = True`), theo dõi ở ô 5 |
+| Ảnh so sánh các lượt trên cùng ảnh test và video xếp chồng (mục 4; không cần GPU) | 7 (`WHAT = "panels"`) hoặc 9 (`SO_SANH = True`) |
 | Đưa dữ liệu của bạn lên (mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
 | Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
 | Cảnh tự chụp: thư mục ảnh hoặc video (tốn GPU) | 8 (`CHAY = True`), theo dõi ở ô 5, kết quả ở ô 9 |
@@ -220,6 +221,17 @@ bash scripts/run_evaluate.sh custom phong1                     # bảng có thê
 - Trong notebook: ô 9 với `LOC = True` lọc lượt `RUN` (chạy nền). Khi việc xong, chạy lại ô 9: dòng `+ đã lọc` ngay dưới lượt đó có chỉ số sau khi lọc và tỉ lệ Gaussian giữ lại.
 - Bỏ Gaussian lớn có thể làm thủng tường hay trần ở xa: xem cột Δ của bảng (chỉ số sau so với trước khi lọc) và video trước khi dùng bản đã lọc cho demo.
 
+**Ảnh so sánh** các lượt trên cùng ảnh test (ảnh gốc, render, vùng cắt phóng to, bản đồ sai số) và video quỹ đạo của các lượt xếp chồng (`docs/design/comparisons.md`). Không cần GPU:
+
+```bash
+bash scripts/run_panels.sh custom phong1                                   # các lượt seed 42 của cảnh
+VIDEO=1 bash scripts/run_panels.sh mipnerf360 counter default_s42 mcmc_s42   # chọn lượt, thêm video xếp chồng
+```
+
+- Kết quả: `/workspace/outputs/panels/<luồng>[_quick]_<cảnh>_<thời gian>/`; `panels.md` liệt kê panel, vùng cắt và PSNR (tính lại từ PNG) của mọi ảnh test. Thư mục này không nằm trong gói kết quả nhẹ: tải ảnh và video qua thanh file của Jupyter.
+- So một lượt với bản đã lọc của nó: `bash scripts/run_panels.sh custom phong1 mcmc_s42 mcmc_s42/filtered`.
+- Trong notebook: ô 9 với `SO_SANH = True` (cảnh tự chụp), ô 7 với `WHAT = "panels"`, `SCENES`, `PANEL_RUNS` (benchmark).
+
 ## 5. Benchmark: Deep Blending, Mip-NeRF 360
 
 Chạy benchmark nào, lúc nào là do bạn quyết định; chỉ chạy khi đã duyệt chi phí GPU. Lệnh train cần dữ liệu có sẵn: thiếu thì dừng trước khi train. Protocol, số liệu đối chiếu và lệnh từng benchmark: `experiments/deep_blending/README.md`, `experiments/mipnerf360/README.md`; quy tắc so sánh: `docs/design/experiments.md`.
@@ -286,6 +298,7 @@ Một lệnh cho mọi bước; mỗi lệnh gọi đúng một script trong `sc
 | `render` | `scripts/run_render.sh` | `custom <cảnh> [lượt]` hoặc `<benchmark> <cảnh> [lượt]` |
 | `filter` | `scripts/run_filter.sh` | Lọc Gaussian rồi chấm lại: `custom <cảnh> [lượt ...]` hoặc `<benchmark> <cảnh> [lượt ...]` (mục 4) |
 | `evaluate` | `scripts/run_evaluate.sh` | `<benchmark>` hoặc `custom [cảnh ...]` |
+| `panels` | `scripts/run_panels.sh` | Ảnh so sánh các lượt, video xếp chồng: `<benchmark> <cảnh> [lượt ...]` hoặc `custom <cảnh> [lượt ...]` (mục 4) |
 | `fetch` | `scripts/pod/fetch_data.sh` | Tải dữ liệu benchmark: `<benchmark> [cảnh ...] [--dry-run]` |
 | `experiment` | `scripts/pod/run_experiment.sh` | Thực nghiệm trọn vẹn: `<tên> --plan` hoặc `<tên> --background` (`main`: mục 5.1, `tune_mcmc`: mục 5.2) |
 | `scene` | `scripts/pod/run_scene.sh` | Cả luồng cho một cảnh tự chụp: `<ảnh\|video\|-> <cảnh> [--background]` |
@@ -354,6 +367,7 @@ Sự cố môi trường đã biết: `docs/ENVIRONMENT_AUDIT.md` mục 6.
 | Notebook `runpod.ipynb` | Đã mô phỏng trên `/workspace` giả: GitHub thay bằng repo Git cục bộ, `ssh` / `curl` giả, không GPU, không conda (các việc cần GPU dừng sớm) | `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox" |
 | Tải dữ liệu benchmark, thực nghiệm chính | Đã kiểm thử với curl giả, file zip tổng hợp và các bước giả (stub); **chưa tải thật, chưa chạy trên pod** | `tests/unit/test_fetch.py`, `tests/unit/test_experiment.py` |
 | Dò tham số `tune_mcmc` (biến thể, kiểm tra điểm SfM), lọc Gaussian | Đã kiểm thử với các bước giả, runner giả; checkpoint PyTorch và PLY của gsplat kiểm tra trên CPU; **chưa chạy trên GPU** | `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py`, `test_prune.py` |
+| Bảng so sánh mở rộng (số cặp và số cảnh tốt hơn, chất lượng theo dung lượng, cấu trúc mô hình), ảnh so sánh và video xếp chồng | Đã kiểm thử trên CPU với PLY, ảnh render và video tổng hợp; **chưa chạy trên kết quả thật** | `tests/unit/test_compare_modes.py`, `tests/unit/test_splat_stats.py`, `tests/unit/test_panels.py` |
 | Trên pod (COLMAP 4.2.1, GPU) bằng repo này | **Chưa chạy** | — |
 
 Tóm tắt các ca với COLMAP thật (sandbox):
