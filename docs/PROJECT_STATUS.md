@@ -10,10 +10,9 @@ _Cập nhật: 19/10/2026_
 2. **Thực nghiệm chính** (D12, `docs/design/experiments.md` mục 2): ô 7 với `WHAT = "experiment"`.
    - Một việc nền: tự tải Deep Blending và 4 cảnh trong nhà của Mip-NeRF 360, B0 trên Deep Blending, rồi `default` / `mcmc` × seed 42, 43, 44 trên 6 cảnh, rồi bảng so sánh.
    - Ước lượng: khoảng 12 giờ GPU trên RTX 4090 và thêm khoảng 56 GB trên volume (volume 100 GB đủ theo ước lượng). **Chỉ chạy khi đã duyệt chi phí.**
-   - Chế độ cải tiến thứ ba theo Opt3DGS (D13): đã chọn hướng, kế hoạch cài đặt chờ duyệt; khi xong chỉ cần thêm vào `modes` của kế hoạch và chạy lại, các lượt `default` / `mcmc` đã xong được dùng lại.
 3. Cảnh tự chụp (thư mục ảnh hoặc video): bạn tự đưa lên (`docs/USAGE_GUIDE.md` mục 2.1), chạy qua ô 8 của notebook.
 
-**Repo này:** bắt đầu ngày 19/10/2026 (D7–D13). **Chưa chạy trên pod nào.** Mọi số liệu GPU dưới đây là của repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`), chạy ngày 17/10/2026 trên volume cũ.
+**Repo này:** bắt đầu ngày 19/10/2026 (D7–D12). **Chưa chạy trên pod nào.** Mọi số liệu GPU dưới đây là của repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`), chạy ngày 17/10/2026 trên volume cũ.
 
 ## Quy ước trạng thái
 
@@ -30,20 +29,19 @@ Chỉ mức cuối cùng mới được tính là hoàn thành.
 | D4 | 09/10/2026 | Dùng `src/reconstruction/colmap_runner.py` thay cho `convert.py` của Inria | `convert.py` dùng tên tùy chọn GPU cũ, không chạy với COLMAP 4.x (`docs/ENVIRONMENT_AUDIT.md` mục 4.1) |
 | D5 | 09/10/2026 | Pipeline hỗ trợ hai chế độ huấn luyện trên gsplat: 3DGS với Default Strategy làm baseline; 3DGS với MCMC Strategy dựa trên notebook demo của nhóm | Theo yêu cầu. B0 (Inria) giữ làm mốc đối chiếu cho Default. Thiết kế: `docs/design/training_modes.md` |
 | D6 | 18/10/2026 | Đầu vào: video, hoặc thư mục nhiều ảnh JPG/JPEG/PNG chụp cùng một căn phòng. Ảnh dùng thẳng, không chọn frame; chung bước COLMAP và huấn luyện với video. Một ảnh luôn bị từ chối, không có chế độ dựng từ một ảnh | Theo yêu cầu. Không đổi thuật toán huấn luyện, chế độ, baseline hay phiên bản thư viện |
-| D7 | 19/10/2026 | Cấu trúc repo theo sơ đồ "SpatialRoom3D_v2": `app/{cli,web,notebooks}`, package `src/{input,reconstruction,training,rendering,evaluation,datasets,utils}`, `configs/{base,custom_scene,mipnerf360,deep_blending}.yaml`, bốn lệnh chính `scripts/{prepare_data,run_train,run_render,run_evaluate}.sh` (phần thực thi trong `scripts/{pipeline,pod,setup,lib}/`), `tests/{test_dataset,test_pipeline}.py` + `tests/unit/`, `docs/{README,ENVIRONMENT_AUDIT,USAGE_GUIDE,PROJECT_PLAN}.md`, `experiments/{deep_blending,mipnerf360}/` (chỉ README). Code dùng chung, mỗi luồng dữ liệu một file cấu hình và thư mục riêng | Theo sơ đồ và các lựa chọn của bạn ngày 19/10/2026 ("đủ như ảnh, giữ phần cần chạy", "src/ là package", "YAML như ảnh"). Phần đã chạy trên pod ngày 17/10/2026 được dời chỗ, không viết lại; thuật toán, chế độ, protocol, phiên bản không đổi. Phần viết sau ngày đó chưa chạy trên pod (`docs/design/architecture.md` mục 7) |
+| D7 | 19/10/2026 | Cấu trúc repo theo sơ đồ "SpatialRoom3D_v2": `app/{cli,web,notebooks}`, package `src/{input,reconstruction,training,rendering,evaluation,datasets,utils}`, `configs/{base,custom_scene,mipnerf360,deep_blending}.yaml`, bốn lệnh chính `scripts/{prepare_data,run_train,run_render,run_evaluate}.sh` (phần thực thi trong `scripts/{pipeline,pod,setup,lib}/`), `tests/{test_dataset,test_pipeline}.py` + `tests/unit/`, `README.md` (giới thiệu) và `docs/{README,ENVIRONMENT_AUDIT,USAGE_GUIDE,PROJECT_PLAN}.md`, `experiments/{deep_blending,mipnerf360}/` (chỉ README). Code dùng chung, mỗi luồng dữ liệu một file cấu hình và thư mục riêng | Theo sơ đồ và các lựa chọn của bạn ngày 19/10/2026 ("đủ như ảnh, giữ phần cần chạy", "src/ là package", "YAML như ảnh"). Phần đã chạy trên pod ngày 17/10/2026 được dời chỗ, không viết lại; thuật toán, chế độ, protocol, phiên bản không đổi. Phần viết sau ngày đó chưa chạy trên pod (`docs/design/architecture.md` mục 7) |
 | D8 | 19/10/2026 | Bố cục `/workspace`: code ở `SpatialRoom3D/`; `data/` chỉ chứa dữ liệu gốc (`custom_scenes/<cảnh>/`, `benchmarks/{deep_blending,mipnerf360}/`); `outputs/` chứa mọi thứ sinh ra (`custom_scenes/<cảnh>/{colmap,<chế_độ>_s<seed>}/`, `benchmarks/<benchmark>/{inria_b0,gsplat,gsplat_quick}/`, `checkpoints/`, `logs/`, `reports/`, `jobs/`) | Theo sơ đồ của bạn. `docs/design/architecture.md` mục 2 |
 | D9 | 19/10/2026 | Repo GitHub mới `truong0809/SpatialRoom3D` (private), lịch sử bắt đầu bằng một commit; repo cũ giữ làm lưu trữ, không sửa. Pod mới + volume mới: cài lại từ đầu, dữ liệu benchmark tải về pod (D11), chạy lại B0 + gsplat bằng code mới khi được duyệt GPU. Bỏ phần dời dữ liệu của volume cũ và mọi phần tương thích bố cục cũ | Theo ba lựa chọn của bạn ngày 19/10/2026 |
 | D10 | 19/10/2026 | `scripts/pod/run_all.sh` (ô 4) chỉ cài / kiểm tra môi trường: không train, không tải dữ liệu. Chạy với dữ liệu nào do người dùng chọn (ô 7, ô 8). Lệnh train không tự tải: thiếu dữ liệu thì dừng trước khi train và báo chỗ cần đặt. Không luồng dữ liệu nào bắt buộc | Theo yêu cầu của bạn ngày 19/10/2026 ("base cài set up môi trường thôi, còn chạy với data nào để t tự quyết"). Ô 6 chỉ kiểm tra bố cục và số ảnh |
 | D11 | 19/10/2026 | Dữ liệu benchmark tải thẳng về pod bằng một bước riêng, chỉ khi người dùng gọi: `scripts/pod/fetch_data.sh` (ô 7 `WHAT = "fetch"`, hoặc thực nghiệm chính). Nguồn trong mục `download` của `configs/<benchmark>.yaml`; kiểm SHA-256 khi có; chỉ tải cảnh còn thiếu, chỉ giải nén thư mục cần dùng, xóa file zip sau đó; không sửa dữ liệu đã có. Ảnh / video tự chụp vẫn do người dùng tự đưa lên | Theo yêu cầu của bạn ngày 19/10/2026 ("chuẩn bị để setup runpod tải data về vì ổ trên runpod t có 100gb") |
 | D12 | 19/10/2026 | Thực nghiệm chính: `default` / `mcmc` (cùng số Gaussian) trên Deep Blending (2 cảnh, kèm B0) và 4 cảnh trong nhà của Mip-NeRF 360; seed 42, 43, 44; 30.000 vòng, không chạy thử; một việc nền (`configs/experiments/main.yaml`, `scripts/pod/run_experiment.sh`); giữ mọi file kết quả của mọi seed | Theo các lựa chọn của bạn ngày 19/10/2026: "Deep Blending + 4 cảnh M360", "3 seed", "chạy đầy đủ ko chạy test", "giữ lại hết" (seed 43, 44) |
-| D13 | 19/10/2026 | Chế độ cải tiến thứ ba theo Opt3DGS (Huang et al., AAAI 2026): tinh chỉnh quá trình tối ưu của 3DGS-MCMC, cùng số Gaussian. Cài lại theo mô tả của paper (paper chưa công bố code), không phải thuật toán mới. **Chưa cài**: kế hoạch cài đặt chờ duyệt | Theo lựa chọn của bạn ngày 19/10/2026 ("opt 3dgs") sau khảo sát các cải tiến của 3DGS-MCMC (`docs/research/reading_list.md`, mục C) |
 
 ## Đề xuất chờ xác nhận
 
 | Hạng mục | Đề xuất | Lý do |
 |---|---|---|
 | Loại cloud | Secure Cloud | Network volume chỉ dùng được với pod trên Secure Cloud |
-| Lưu trữ | Network volume ≥ 100 GB, cùng data center với GPU; thực nghiệm chính (D12) giữ mọi file: khoảng 56 GB cộng môi trường; thêm chế độ thứ ba (D13) thì cần thêm chỗ | Dữ liệu tồn tại độc lập với pod. Volume mới: chọn data center có sẵn loại GPU ở dòng dưới. Volume hiện có: 100 GB, EU-RO-1; tăng được, không giảm được |
+| Lưu trữ | Network volume ≥ 100 GB, cùng data center với GPU; thực nghiệm chính (D12) giữ mọi file: khoảng 56 GB cộng môi trường | Dữ liệu tồn tại độc lập với pod. Volume mới: chọn data center có sẵn loại GPU ở dòng dưới. Volume hiện có: 100 GB, EU-RO-1; tăng được, không giảm được |
 | GPU | RTX A6000 48 GB (thay thế: A40 48 GB, RTX 4090 24 GB) | Xem tiêu chí bên dưới. RTX 4090 đã chạy được cả luồng hai lần ngày 17/10/2026 (repo trước) |
 | Bản gsplat | Commit `6e8c837` (v1.5.3 + 4 commit), không dùng v1.3.0 của demo hay bản phát hành v1.5.3 | v1.5.3 có lỗi khiến `DefaultStrategy` không reset opacity; v1.3.0 reset cả ở bước 0 (`docs/research/demo_review.md`, mục 3.2) |
 | So sánh MCMC với Default | Cùng protocol; `cap_max` của MCMC bằng số Gaussian cuối của Default trên cùng cảnh; ≥ 3 seed trước khi kết luận | Giao thức của paper 3DGS-MCMC; chất lượng MCMC phụ thuộc trực tiếp vào `cap_max` |
@@ -202,7 +200,7 @@ Số điểm 3D lệch nhẹ giữa các lượt vì COLMAP chạy nhiều luồ
 
 Phương án, bố cục `/workspace`, sự cố đã biết: `docs/ENVIRONMENT_AUDIT.md`. Pod và phiên bản thực tế của các lượt chạy 17/10/2026 (repo trước): `docs/ENVIRONMENT_AUDIT.md` mục 7 (RTX 4090, EU-RO-1, image `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`; driver CUDA 12.8 ở lượt đầu, 13.0 ở lượt thứ hai).
 
-Lệnh chính: `docs/README.md` mục "Chạy trên pod Runpod"; từng bước và notebook: `docs/USAGE_GUIDE.md`; benchmark: `docs/design/experiments.md`.
+Lệnh chính: `README.md` ở gốc repo, mục "Chạy trên Runpod"; từng bước và notebook: `docs/USAGE_GUIDE.md`; benchmark: `docs/design/experiments.md`.
 
 ## Dữ liệu, checkpoint, kết quả
 
@@ -237,7 +235,6 @@ Lưu trên network volume của Runpod tại `/workspace`, không đưa lên Git
 
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
-| — | Chế độ thứ ba theo Opt3DGS (D13): kế hoạch cài đặt, rồi cài trong sandbox | Bạn duyệt kế hoạch (công thức lấy từ paper, giá trị chọn cho các siêu tham số paper không công bố); test CPU qua; chạy thử ngắn trên pod: loss giảm, không NaN, số Gaussian bằng `cap_max`; sau đó mới thêm vào `modes` của kế hoạch |
 | — | Chọn trình xem 3DGS cho file PLY, rồi viewer web bản thô (`app/web/`, giai đoạn 5) | Mở được mô hình mẫu trên trình duyệt; có số đo thời gian tải; có kiểm thử chuyển đổi định dạng |
 | — | Thu thử 1 cảnh: quay video theo `docs/data/capture_protocol.md` (video chính + đoạn quay kiểm tra), hoặc chụp ≥ 30 ảnh theo mục 8 | Đặt tên và ghi metadata đúng quy ước; ảnh cùng chiều máy, cùng ống kính, dùng file gốc |
 | — | Chọn LICENSE; quyết định chế độ hiển thị của repo cũ | Có file LICENSE; repo cũ private hoặc archive |

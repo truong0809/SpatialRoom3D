@@ -46,7 +46,6 @@ Kế hoạch: `configs/experiments/main.yaml` (kiểm tra bởi `src/training/ex
 ### 2.1 Câu hỏi
 
 - `mcmc` (3DGS-MCMC) có tốt hơn `default` ở cùng số Gaussian trên cảnh trong nhà không, với 3 seed trên 6 cảnh? Lượt 17/10/2026 của repo trước mới có một seed (`docs/design/training_modes.md` mục 8).
-- Chế độ cải tiến thứ ba: đang chọn hướng (`docs/PROJECT_STATUS.md`, mục "Đề xuất chờ xác nhận"). Khi thêm chế độ vào `modes` của kế hoạch rồi chạy lại, chỉ các lượt của chế độ đó được train; lượt `default` / `mcmc` đã xong được dùng lại. `also_against` (vd. `[mcmc]`) thêm một bảng so chế độ mới với `mcmc`.
 - Kết quả không cải thiện vẫn được báo cáo đầy đủ (`docs/PROJECT_PLAN.md`, rủi ro R13).
 
 ### 2.2 Thiết kế
@@ -61,6 +60,8 @@ Kế hoạch: `configs/experiments/main.yaml` (kiểm tra bởi `src/training/ex
 | Quy ước `mcmc` của benchmark | Deep Blending: `opacity_reg` 0,001; Mip-NeRF 360: giá trị mặc định của preset |
 | Kiểm chứng baseline | B0 Inria trên Deep Blending (từng cảnh) và số Inria công bố (trung bình 2 cảnh). Mip-NeRF 360: chỉ 4/9 cảnh nên không đối chiếu được với trung bình công bố (ghi SKIPPED); không chạy B0 |
 | Chỉ số | PSNR, SSIM, LPIPS (VGG) trên ảnh test; kèm số Gaussian, thời gian train, VRAM đỉnh, thời gian render mỗi ảnh, dung lượng PLY |
+
+Thêm một chế độ vào thực nghiệm: khai báo chế độ trong `configs/base.yaml` (`docs/design/training_modes.md` mục 3), thêm tên vào `modes` của kế hoạch rồi chạy lại. Chỉ các lượt của chế độ đó được train; lượt `default` / `mcmc` đã xong được dùng lại. `also_against` (vd. `[mcmc]`) thêm một bảng so chế độ mới với `mcmc`.
 
 ### 2.3 Chạy
 
@@ -92,7 +93,7 @@ Luôn chạy đầy đủ, không có chế độ chạy thử. Biến môi trư
   - Deep Blending khoảng 19 GB;
   - Mip-NeRF 360 khoảng 22–30 GB (số Gaussian chưa đo);
   - B0 và dữ liệu khoảng 7 GB.
-- Môi trường conda cũng nằm trên volume (khoảng 15–20 GB, chưa đo). Theo ước lượng, volume 100 GB đủ. Thêm chế độ thứ ba thì cần thêm chỗ: tăng volume trên trang Runpod (tăng được, không giảm được) rồi đặt `VOLUME_GB` bằng dung lượng mới.
+- Môi trường conda cũng nằm trên volume (khoảng 15–20 GB, chưa đo). Theo ước lượng, volume 100 GB đủ. Thêm chế độ vào kế hoạch thì cần thêm chỗ: tăng volume trên trang Runpod (tăng được, không giảm được) rồi đặt `VOLUME_GB` bằng dung lượng mới.
 
 `df` trên network volume của Runpod không đọc được quota, nên script tự đo bằng `du` và so với `VOLUME_GB`. Chỗ cần cho một seed là tổng các lượt gsplat chưa xong của seed đó (`python -m src.training.experiment --space main`):
 - lượt đã xong (`summary.json` OK) không cần thêm gì, kể cả khi chạy lại sau khi pod dừng giữa chừng;

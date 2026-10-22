@@ -20,10 +20,10 @@ benchmarks:
     b0: false   # không bắt buộc; số Inria công bố là trung bình 9 cảnh nên không đối chiếu được với 4 cảnh
 
 # Ước lượng trên RTX 4090, chỉ để in ra và kiểm tra chỗ trống trước khi chạy (không phải kết quả):
-#   - Thời gian: Deep Blending từ số đo ngày 17/10/2026 của repo trước (B0 49,5 phút; default + mcmc 74 phút mỗi seed);
-#     Mip-NeRF 360 chưa đo (giả định khoảng 2,5 giờ mỗi seed cho 4 cảnh × 2 chế độ).
+#   - Thời gian: Deep Blending theo số đo ở docs/ENVIRONMENT_AUDIT.md mục 7 (B0 49,5 phút; default + mcmc 74 phút
+#     mỗi seed); Mip-NeRF 360 chưa đo (giả định khoảng 2,5 giờ mỗi seed cho 4 cảnh × 2 chế độ).
 #   - Dung lượng thêm vào volume, giữ mọi file: Deep Blending khoảng 19 GB (checkpoint và PLY mỗi file 236 byte mỗi Gaussian,
-#     số Gaussian đo ngày 17/10/2026, cộng ảnh render và video); Mip-NeRF 360 khoảng 22–30 GB (số Gaussian chưa đo, cộng ảnh
+#     số Gaussian theo cùng số đo, cộng ảnh render và video); Mip-NeRF 360 khoảng 22–30 GB (số Gaussian chưa đo, cộng ảnh
 #     PNG thu nhỏ gsplat ghi một lần cho mỗi cảnh); B0 và dữ liệu khoảng 7 GB. File zip tải về bị xóa sau khi giải nén.
 #   Kiểm tra chỗ trống (scripts/pod/run_experiment.sh): lượt chưa xong tính theo dung lượng thật của lượt cùng cảnh,
 #   cùng chế độ đã xong ở seed khác; chưa có thì theo disk_gb chia đều cho mọi lượt (src/training/experiment.py).

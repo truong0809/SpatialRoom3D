@@ -238,7 +238,7 @@ VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # chạy n�
 
 Trong notebook: ô 7 với `WHAT = "experiment"`, `VOLUME_GB` = dung lượng thật của volume, rồi `CHAY = True`. Gửi được ngay sau ô 4: việc xếp hàng và tự chạy khi cài xong.
 
-- Ước lượng (chưa đo trên Mip-NeRF 360): khoảng 12 giờ GPU trên RTX 4090; thêm khoảng 56 GB trên volume, cộng môi trường conda khoảng 15–20 GB, nên volume 100 GB đủ. Thêm chế độ thứ ba thì cần thêm chỗ: tăng volume rồi đặt `VOLUME_GB` bằng dung lượng mới.
+- Ước lượng (chưa đo trên Mip-NeRF 360): khoảng 12 giờ GPU trên RTX 4090; thêm khoảng 56 GB trên volume, cộng môi trường conda khoảng 15–20 GB, nên volume 100 GB đủ. Thêm chế độ vào kế hoạch thì cần thêm chỗ: tăng volume rồi đặt `VOLUME_GB` bằng dung lượng mới.
 - Chỗ trống được kiểm tra trước khi chạy và trước mỗi seed, chỉ cho các lượt chưa xong: mỗi lượt tính theo dung lượng thật của lượt cùng cảnh, cùng chế độ đã xong ở seed khác (chưa có thì theo ước lượng). Không đủ thì dừng train, các lượt đã xong vẫn giữ; tăng volume rồi chạy lại để làm nốt. `SPACE_CHECK=0` bỏ qua.
 - Pod vẫn tính tiền suốt lượt chạy. `AUTO_STOP = True` ở ô 7 (`AUTO_STOP=1` khi chạy lệnh) dừng pod khi việc cuối cùng xong; chưa thử trên pod.
 - Kết quả: `/workspace/outputs/reports/experiment_main_<thời_gian>.md` (các bước, bảng so với `default` của từng benchmark); ô 10 cũng in các bước của lượt gần nhất.

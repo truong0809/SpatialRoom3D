@@ -1,134 +1,27 @@
-# SpatialRoom3D — Tái tạo không gian nội thất 3D bằng ảnh chụp
+# Tài liệu
 
-**3D Indoor Scene Reconstruction from Images** — Đồ án tốt nghiệp
+Giới thiệu dự án, luồng xử lý và cách chạy nhanh: [README](../README.md) ở gốc repo.
 
-Hệ thống nhận ảnh hoặc video quay không gian nội thất bằng camera thông thường (không yêu cầu LiDAR), tái tạo cảnh 3D bằng **3D Gaussian Splatting (3DGS)**, xuất mô hình để xem và tương tác trên trình xem 3D, và đánh giá chất lượng bằng thực nghiệm.
+## Mục lục
 
-> **Trạng thái (19/10/2026):** repo mới, bắt đầu từ bản cấu trúc hoàn chỉnh; **chưa chạy trên pod**, chưa có kết quả nào do repo này tạo ra.
-> - Ngày 17/10/2026, repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`, commit `8037a66` kèm bản vá chưa commit) đã tái lập B0 (3DGS gốc của Inria) trên Deep Blending bằng RTX 4090, khớp số liệu Inria công bố trong ngưỡng, và chạy hai chế độ gsplat (Default / MCMC, seed 42). Các lượt đó nằm trên volume cũ; repo này sẽ chạy lại trên volume mới.
-> - Chi tiết: [PROJECT_STATUS.md](PROJECT_STATUS.md).
+| Tài liệu | Nội dung |
+|---|---|
+| [USAGE_GUIDE.md](USAGE_GUIDE.md) | Hướng dẫn sử dụng trên Runpod: chuẩn bị volume và pod, notebook, cảnh tự chụp, xuất PLY, benchmark, giao diện dòng lệnh, xử lý lỗi |
+| [PROJECT_STATUS.md](PROJECT_STATUS.md) | Trạng thái hiện tại, quyết định đã chốt, việc đã làm kèm bằng chứng, việc còn mở, việc tiếp theo |
+| [PROJECT_PLAN.md](PROJECT_PLAN.md) | Đề bài, phạm vi, phương pháp, giao thức đánh giá, mốc nghiệm thu, rủi ro |
+| [ENVIRONMENT_AUDIT.md](ENVIRONMENT_AUDIT.md) | Môi trường trên pod, phiên bản ghim, cài đặt và kiểm tra, sự cố đã biết; số đo GPU tham khảo ở mục 7 (chưa phải lượt chạy của repo này) |
+| [design/architecture.md](design/architecture.md) | Cây thư mục, bố cục `/workspace`, ba luồng dữ liệu, khai báo đường dẫn, nguồn gốc mã nguồn |
+| [design/training_modes.md](design/training_modes.md) | Hai chế độ huấn luyện `default` và `mcmc`: protocol, giao thức so sánh, thành phần |
+| [design/experiments.md](design/experiments.md) | Benchmark (Deep Blending, Mip-NeRF 360) và thực nghiệm chính |
+| [design/comparisons.md](design/comparisons.md) | Bảng so sánh các chế độ (`scripts/run_evaluate.sh`) |
+| [data/capture_protocol.md](data/capture_protocol.md) | Quy trình quay video và chụp ảnh không gian nội thất |
+| [research/reading_list.md](research/reading_list.md) | Danh sách tài liệu khảo sát |
+| [research/demo_review.md](research/demo_review.md) | Kiểm tra notebook demo 3DGS-MCMC của nhóm và repo SpatialScene3D (bản gốc của notebook: [research/references/demo_3dgs_mcmc/](research/references/demo_3dgs_mcmc/README.md)) |
 
-## Luồng xử lý chính (baseline)
-
-```
-Ảnh / Video (RGB) → Validate Input → Extract Frames (video) → COLMAP (SfM) → Prepare Dataset → Train 3DGS → Export PLY / Checkpoint → Evaluate (PSNR / SSIM / LPIPS)
-   data/custom_scenes/   src/input/        src/input/frames      src/reconstruction/          src/training/       src/rendering/            src/evaluation/
-   scripts/prepare_data.sh ────────────────────────────────────────────────┘   scripts/run_train.sh   scripts/run_render.sh   scripts/run_evaluate.sh
-```
-
-- Ảnh chụp dùng thẳng (một camera chung); video được chọn frame nét. Trước khi train có bước kiểm tra: số ảnh, tỉ lệ ảnh COLMAP ghép được, tách nhóm, độ phủ góc nhìn.
-- Hai chế độ huấn luyện trên gsplat, so sánh cùng điều kiện: `default` (Default Strategy, baseline) và `mcmc` (3DGS-MCMC, MCMC Strategy, cùng số Gaussian). Thực nghiệm chính trên 6 cảnh trong nhà của hai benchmark, 3 seed: [design/experiments.md](design/experiments.md) mục 2.
-- B0: 3DGS gốc của Inria, chỉ để đối chiếu số liệu công bố trên benchmark.
-
-Phương pháp và kế hoạch: [PROJECT_PLAN.md](PROJECT_PLAN.md). Thiết kế các chế độ: [design/training_modes.md](design/training_modes.md). Kiến trúc, bố cục `/workspace`, ba luồng dữ liệu: [design/architecture.md](design/architecture.md).
-
-## Cấu trúc repository
-
-```
-SpatialRoom3D/
-├── app/                      ứng dụng
-│   ├── cli/                  giao diện dòng lệnh: python -m app.cli <lệnh>
-│   ├── web/                  giao diện web (chưa làm, giai đoạn 5)
-│   ├── notebooks/            runpod.ipynb: chạy trên pod Runpod
-│   └── __init__.py
-├── src/                      mã nguồn chính (package `src`)
-│   ├── input/                ảnh / video đầu vào: kiểm tra, chọn frame
-│   ├── reconstruction/       COLMAP (SfM), kiểm tra trước khi train
-│   ├── training/             huấn luyện 3DGS trên gsplat (default / mcmc), kế hoạch thực nghiệm
-│   ├── rendering/            render ảnh / video từ checkpoint, xuất PLY
-│   ├── evaluation/           chỉ số, so sánh, xem nhanh kết quả
-│   ├── datasets/             đọc configs/*.yaml, kiểm tra dữ liệu từng luồng, tải dữ liệu benchmark
-│   ├── utils/                khóa GPU dùng chung với script bash
-│   └── __init__.py
-├── configs/                  cấu hình (đổi tham số không cần sửa code)
-│   ├── base.yaml             phần chung: thư mục code, các chế độ huấn luyện và protocol
-│   ├── custom_scene.yaml     cảnh tự chụp
-│   ├── mipnerf360.yaml       Mip-NeRF 360
-│   ├── deep_blending.yaml    Deep Blending
-│   ├── experiments/          kế hoạch thực nghiệm (main.yaml)
-│   └── environment/          phiên bản ghim của các env conda
-├── scripts/                  script chạy trên Runpod
-│   ├── prepare_data.sh       chuẩn bị dữ liệu đầu vào
-│   ├── run_train.sh          huấn luyện
-│   ├── run_render.sh         render ảnh / video, xuất PLY
-│   ├── run_evaluate.sh       đánh giá chất lượng
-│   ├── pipeline/             phần thực thi của các bước trên
-│   ├── pod/                  chạy cả luồng, thực nghiệm, tải dữ liệu benchmark, chạy nền / xếp hàng GPU, xem / đóng gói kết quả
-│   ├── setup/                cài và kiểm tra môi trường
-│   └── lib/                  hàm bash dùng chung
-├── tests/
-│   ├── test_dataset.py       kiểm tra cấu hình và dữ liệu
-│   ├── test_pipeline.py      kiểm tra luồng chính của cảnh tự chụp
-│   ├── unit/                 kiểm thử chi tiết từng phần
-│   └── helpers/              tiện ích cho test
-├── docs/
-│   ├── README.md             (file này)
-│   ├── ENVIRONMENT_AUDIT.md  môi trường, phiên bản, kiểm tra trên pod
-│   ├── USAGE_GUIDE.md        hướng dẫn sử dụng
-│   ├── PROJECT_PLAN.md       kế hoạch phát triển
-│   ├── PROJECT_STATUS.md     trạng thái hiện tại, bằng chứng, việc tiếp theo
-│   ├── design/, data/, research/
-├── experiments/
-│   ├── deep_blending/        protocol, lệnh và kết quả của benchmark (dữ liệu không đưa lên Git)
-│   └── mipnerf360/
-├── .gitignore
-└── requirements.txt
-```
-
-Dữ liệu và kết quả nằm trên network volume, ngoài repo, không đưa lên Git:
-
-```
-/workspace/
-├── SpatialRoom3D/            repo này
-├── data/                     custom_scenes/<cảnh>/ (ảnh, video tự chụp), benchmarks/{deep_blending,mipnerf360}/
-└── outputs/                  custom_scenes/, benchmarks/, checkpoints/ (PLY đã xuất), logs/, reports/, jobs/
-```
-
-Ảnh / video tự chụp do bạn tự đưa lên `data/` ([USAGE_GUIDE.md](USAGE_GUIDE.md) mục 2.1). Dữ liệu benchmark (Deep Blending, Mip-NeRF 360) tải thẳng về pod bằng `scripts/pod/fetch_data.sh`, hoặc tự đưa lên. Chạy với dữ liệu nào là do bạn chọn.
-
-## Chạy trên pod Runpod
-
-Cách dễ nhất: notebook `app/notebooks/runpod.ipynb`, các bước trong [USAGE_GUIDE.md](USAGE_GUIDE.md). Bằng lệnh, từ `/workspace/SpatialRoom3D`:
-
-```bash
-bash scripts/pod/run_all.sh --background                      # pod mới: chỉ cài / kiểm tra môi trường (không train)
-bash scripts/pod/job.sh status                                # theo dõi việc chạy nền (log: bash scripts/pod/job.sh log <tên>)
-bash scripts/pod/check_datasets.sh                            # dữ liệu và kết quả của mọi luồng (chỉ đọc)
-bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong1 phong1 --background   # cả luồng cho một cảnh tự chụp
-bash scripts/prepare_data.sh custom /workspace/data/custom_scenes/phong1 phong1          # từng bước: chuẩn bị
-bash scripts/run_train.sh custom phong1                                                  #             train default, mcmc
-bash scripts/run_render.sh custom phong1 default_s42                                     #             render, xuất PLY
-bash scripts/run_evaluate.sh custom phong1                                               #             so sánh
-bash scripts/pod/fetch_data.sh deep_blending                  # benchmark: tải dữ liệu (không dùng GPU)
-bash scripts/prepare_data.sh deep_blending                    #            kiểm tra dữ liệu (không dùng GPU)
-bash scripts/run_train.sh deep_blending gsplat                #            train (experiments/deep_blending/README.md)
-VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background         # thực nghiệm chính: một việc nền
-bash scripts/pod/results.sh [cảnh]                            # xem nhanh kết quả
-bash scripts/pod/job.sh stop --all                            # dừng mọi việc chạy nền
-python3 -m app.cli --help                                     # cùng các lệnh trên, qua một giao diện dòng lệnh
-```
-
-- Chạy lại an toàn: phần đã xong tự bỏ qua. Mỗi lúc chỉ một việc dùng GPU; việc mới tự xếp hàng.
-- Kết quả nhẹ để tải về (báo cáo, log, chỉ số; không có checkpoint / PLY / video): `/workspace/ket_qua_*.tar.gz` (`bash scripts/pod/pack_results.sh`).
-- Môi trường, cấu hình pod, sự cố đã biết: [ENVIRONMENT_AUDIT.md](ENVIRONMENT_AUDIT.md).
-
-## Kiểm thử trên máy không có GPU
-
-```bash
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
-python -m pytest            # vài test tích hợp cần ffmpeg / colmap; tự bỏ qua nếu thiếu
-```
-
-Test các script bash (chạy nền, `run_all.sh`, `run_scene.sh`, script benchmark, bước kiểm tra của script cài đặt) chạy bash thật với stub thay cho GPU / conda, cần Linux có `flock`, `setsid` và `/proc`.
-
-## Lịch sử
-
-Repo này bắt đầu ngày 19/10/2026 từ bản cấu trúc hoàn chỉnh của repo trước `truong0809/3D-Indoor-Scene-Reconstruction-from-Images` (commit `8037a66` cùng các thay đổi chưa commit ngày 17–19/10/2026). Lịch sử trước đó nằm ở repo cũ.
+Protocol và lệnh của từng benchmark: [experiments/deep_blending/](../experiments/deep_blending/README.md), [experiments/mipnerf360/](../experiments/mipnerf360/README.md).
 
 ## Quy ước
 
-- Không đưa dataset, checkpoint, file `.ply`, video, ảnh hay log thô lên Git.
-- Không đưa token, mật khẩu, API key hoặc file `.env` lên Git.
-- Mọi số liệu trong báo cáo phải truy được về file kết quả, cấu hình và commit tương ứng.
-- Dữ liệu trong `tests/` là dữ liệu tổng hợp để kiểm tra logic, không phải kết quả thực nghiệm.
+- Trạng thái một hạng mục đi theo bốn mức: `Đã viết` → `Đã chạy` → `Đã kiểm thử` → `Đã xác nhận đạt mục tiêu`. Chỉ mức cuối mới gọi là hoàn thành.
+- Số liệu luôn kèm nguồn (file kết quả, cấu hình, commit); số công bố và số tự chạy ghi tách bạch.
+- Tài liệu mô tả hiện trạng của repo. Quyết định và lý do được ghi ở [PROJECT_STATUS.md](PROJECT_STATUS.md), mục "Quyết định đã chốt".

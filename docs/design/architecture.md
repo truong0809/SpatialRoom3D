@@ -56,10 +56,11 @@ SpatialRoom3D/
 │   ├── unit/                      từng phần: input, COLMAP, huấn luyện, render, đánh giá, job, run_all, CLI, ...
 │   ├── helpers/                   ShellEnv (bash thật + stub), viết mô hình COLMAP giả
 │   └── conftest.py
-├── docs/                        README, ENVIRONMENT_AUDIT, USAGE_GUIDE, PROJECT_PLAN, PROJECT_STATUS; design/, data/, research/
+├── docs/                        README (mục lục), ENVIRONMENT_AUDIT, USAGE_GUIDE, PROJECT_PLAN, PROJECT_STATUS; design/, data/, research/
 ├── experiments/
 │   ├── deep_blending/README.md    protocol, lệnh, kết quả đã ghi nhận (dữ liệu và kết quả không vào Git)
 │   └── mipnerf360/README.md
+├── README.md                    giới thiệu dự án, chạy nhanh, kiểm thử
 ├── .gitignore, .gitattributes
 └── requirements.txt             phụ thuộc để chạy test trên máy không có GPU (env GPU: scripts/setup/ + configs/environment/)
 ```

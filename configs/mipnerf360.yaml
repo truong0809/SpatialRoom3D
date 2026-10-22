@@ -1,4 +1,4 @@
-# Mip-NeRF 360: 4 cảnh trong nhà, 5 cảnh ngoài trời. ĐÃ CẤU HÌNH, CHƯA CHẠY.
+# Mip-NeRF 360: 4 cảnh trong nhà, 5 cảnh ngoài trời.
 # Dữ liệu và kết quả nằm trên volume, không đưa lên Git. Chạy và protocol: experiments/mipnerf360/README.md.
 
 kind: benchmark
@@ -52,7 +52,7 @@ status: "đã cấu hình, chưa chạy; chưa xác minh dữ liệu trên pod"
 # Quy ước benchmark chính chủ của mỗi bên: Inria đọc images_<N>/, gsplat dùng data_factor N.
 benchmark:
   name: baseline_inria_mipnerf360
-  description: "Mip-NeRF 360 (4 cảnh trong nhà, 5 cảnh ngoài trời): B0 = 3DGS gốc của Inria (54c035f) theo full_eval.py; các chế độ gsplat theo examples/benchmarks/basic.sh (6e8c837). ĐÃ CẤU HÌNH, CHƯA CHẠY"
+  description: "Mip-NeRF 360 (4 cảnh trong nhà, 5 cảnh ngoài trời): B0 = 3DGS gốc của Inria (54c035f) theo full_eval.py; các chế độ gsplat theo examples/benchmarks/basic.sh (6e8c837)"
   tag: mipnerf360
   image_factor: {room: 2, counter: 2, kitchen: 2, bonsai: 2, bicycle: 4, garden: 4, stump: 4, flowers: 4, treehill: 4}
   image_factor_source: "Inria full_eval.py @54c035f: -i images_2 cho room, counter, kitchen, bonsai; -i images_4 cho bicycle, flowers, garden, stump, treehill. gsplat examples/benchmarks/basic.sh @6e8c837: data_factor 2 / 4 cho cùng các nhóm cảnh"

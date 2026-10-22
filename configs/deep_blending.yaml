@@ -14,7 +14,7 @@ layout: [images, sparse/0]
 download:
   - url: https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip
     sha256: 816e62f22a161abbfe841d2a6b10cdf036e297c9fa289b3bfeee9c6ec526d7e1
-    source: "README của Inria gaussian-splatting @54c035f: \"T&T+DB COLMAP (650MB)\"; SHA-256 đo trên pod ngày 17/10/2026 (repo trước), file của lượt B0 đạt ngưỡng"
+    source: "README của Inria gaussian-splatting @54c035f: \"T&T+DB COLMAP (650MB)\"; SHA-256 đo trên pod ngày 17/10/2026, của đúng file đã dùng cho lượt B0 đạt ngưỡng (docs/ENVIRONMENT_AUDIT.md mục 7)"
     folder: db                 # các cảnh nằm trong db/<cảnh>/ của file zip (tandt/ không dùng)
     scenes: [drjohnson, playroom]
     keep: [images, sparse]     # chỉ giải nén các thư mục này của mỗi cảnh
@@ -42,7 +42,7 @@ commands:
   main_experiment: bash scripts/pod/run_experiment.sh main --background   # configs/experiments/main.yaml
   evaluate: bash scripts/run_evaluate.sh deep_blending
 
-status: "chưa chạy bằng repo này; ngày 17/10/2026 repo trước (3D-Indoor-Scene-Reconstruction-from-Images @8037a66) đã chạy B0 Inria và gsplat default/mcmc 30.000 vòng, seed 42, trên volume cũ (docs/PROJECT_STATUS.md)"
+status: "chưa chạy bằng repo này; số đo tham khảo của B0 và default / mcmc (30.000 vòng, seed 42, RTX 4090): docs/ENVIRONMENT_AUDIT.md mục 7"
 
 # Quy ước benchmark: B0 = 3DGS gốc của Inria; mọi chế độ gsplat cùng tập test.
 benchmark:
@@ -57,7 +57,7 @@ benchmark:
   iteration: 30000
   gsplat:
     mcmc_set: opacity_reg=0.001
-    mcmc_set_source: "paper 3DGS-MCMC dùng lambda_o = 0.001 cho Deep Blending (config chính chủ chỉ đặt cho drjohnson; ở đây dùng cho cả hai cảnh, như lượt 17/10/2026)"
+    mcmc_set_source: "paper 3DGS-MCMC dùng lambda_o = 0.001 cho Deep Blending (config chính chủ chỉ đặt cho drjohnson; ở đây dùng cho cả hai cảnh, như lượt đã đo ở docs/ENVIRONMENT_AUDIT.md mục 7)"
   reference:
     metrics: {PSNR: 29.690, SSIM: 0.906, LPIPS: 0.238}
     source: "Inria gaussian-splatting results.md, charts assets/charts/base_{PSNR,SSIM,LPIPS}.png: default rasterizer, ORIGINAL configuration, Deep Blending mean (checked 2026-10-09)"

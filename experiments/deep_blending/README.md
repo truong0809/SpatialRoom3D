@@ -4,7 +4,7 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
 
 - **Cấu hình:** `configs/deep_blending.yaml` (dữ liệu, nguồn tải, nơi lưu kết quả, mục `benchmark`: protocol, số liệu công bố, ngưỡng).
 - **Dữ liệu:** `$WS/data/benchmarks/deep_blending/{drjohnson,playroom}` (263 và 225 ảnh), mỗi cảnh có `images/` và `sparse/0/`: thư mục `db/` trong `tandt_db.zip` mà Inria cung cấp.
-  - Tải về pod: `bash scripts/pod/fetch_data.sh deep_blending` (file 650 MB của Inria; kiểm SHA-256 với giá trị đo ngày 17/10/2026; chỉ giải nén `db/<cảnh>/images` và `sparse`, bỏ `tandt/`; xóa file zip sau khi giải nén).
+  - Tải về pod: `bash scripts/pod/fetch_data.sh deep_blending` (file 650 MB của Inria; kiểm SHA-256 với giá trị trong cấu hình; chỉ giải nén `db/<cảnh>/images` và `sparse`, bỏ `tandt/`; xóa file zip sau khi giải nén).
   - Hoặc tự đưa hai cảnh lên chỗ trên, hoặc trỏ cấu hình tới chỗ đã có (`configs/local.yaml` hoặc `SR3D_DATA_DEEP_BLENDING`, `docs/design/architecture.md` mục 5).
   - Thiếu thì lệnh train dừng trước khi train, báo `dataset not found` kèm lệnh tải.
 - **Kết quả:** `$WS/outputs/benchmarks/deep_blending/{inria_b0,gsplat,gsplat_quick}/`; báo cáo `$WS/outputs/reports/{baseline_db_summary,modes_db,compare_db}_<thời_gian>.*`.
@@ -13,7 +13,7 @@ Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết 
   - ảnh có sẵn của bộ dữ liệu, không thu nhỏ thêm (`data_factor 1`);
   - 30.000 vòng; LPIPS VGG.
 - **Số liệu đối chiếu:** trung bình Inria công bố cho Deep Blending (PSNR 29,690, SSIM 0,906, LPIPS 0,238; nguồn ghi trong cấu hình); ngưỡng 0,5 dB / 0,01 / 0,01.
-- **MCMC:** `opacity_reg=0.001` cho mọi chế độ preset `mcmc` (`mcmc` và chế độ tự thêm cùng preset). Paper 3DGS-MCMC dùng giá trị này cho Deep Blending; config chính chủ chỉ đặt cho drjohnson, ở đây dùng cho cả hai cảnh như lượt 17/10/2026. Cần ghi rõ khi báo cáo.
+- **MCMC:** `opacity_reg=0.001` cho mọi chế độ preset `mcmc` (`mcmc` và chế độ tự thêm cùng preset). Paper 3DGS-MCMC dùng giá trị này cho Deep Blending; config chính chủ chỉ đặt cho drjohnson, ở đây dùng cho cả hai cảnh như lượt đã đo (`docs/ENVIRONMENT_AUDIT.md` mục 7). Cần ghi rõ khi báo cáo.
 - **Thực nghiệm chính** (`default` / `mcmc`, 3 seed, cùng 4 cảnh trong nhà của Mip-NeRF 360): `docs/design/experiments.md` mục 2.
 
 ```bash
@@ -42,6 +42,4 @@ python -m src.training.run --mode mcmc --scene $DB/drjohnson \
 
 Bỏ `--set opacity_reg=0.001` thì cấu hình khác lượt đã có, nên bị báo lỗi chứ không ghi đè.
 
-**Kết quả:**
-- Repo này: **chưa chạy** trên pod.
-- Repo trước, ngày 17/10/2026 (RTX 4090, seed 42; cùng lệnh huấn luyện, chỉ khác đường dẫn, `tests/unit/test_benchmarks.py`): `docs/ENVIRONMENT_AUDIT.md` mục 7.
+**Kết quả:** chưa chạy bằng repo này. Số đo tham khảo (RTX 4090, seed 42; cùng lệnh huấn luyện, chỉ khác đường dẫn, `tests/unit/test_benchmarks.py`): `docs/ENVIRONMENT_AUDIT.md` mục 7.

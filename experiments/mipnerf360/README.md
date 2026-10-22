@@ -51,11 +51,11 @@ SCENES="room counter kitchen bonsai" bash scripts/run_train.sh mipnerf360 gsplat
 bash scripts/run_evaluate.sh mipnerf360
 ```
 
-Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất khoảng 13–20 phút mỗi cảnh mỗi chế độ (repo trước, `docs/ENVIRONMENT_AUDIT.md` mục 7). Mip-NeRF 360 chưa chạy nên chưa có số đo thời gian (9 cảnh).
+Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất khoảng 13–20 phút mỗi cảnh mỗi chế độ (số đo ở `docs/ENVIRONMENT_AUDIT.md` mục 7). Mip-NeRF 360 chưa chạy nên chưa có số đo thời gian (9 cảnh).
 
 ## Đã kiểm tra những gì
 
 - Lệnh sinh ra (hệ số ảnh theo cảnh, không có tham số mcmc riêng, dừng khi thiếu `images_N/`, báo cáo khi chỉ có một phần cảnh): `tests/unit/test_benchmarks.py`, chạy với stub.
 - Tải và giải nén (chỉ cảnh và thư mục cần dùng, bỏ file ẩn / symlink, dừng khi đường dẫn không an toàn hoặc thiếu thư mục): `tests/unit/test_fetch.py`, với curl giả và file zip tổng hợp; **chưa tải file thật**.
-- Bản xem dữ liệu, cache PNG dùng chung, cache dở dang hoặc có file lạ bị xóa, hai cảnh không dùng chung cache, cùng cấu hình thì bỏ qua: `tests/unit/test_train_run.py`, với runner giả ghép ảnh đúng như gsplat 6e8c837 (bắt được lỗi dấu `.complete` nằm trong thư mục PNG mà lượt rà soát độc lập ngày 18/10/2026 chỉ ra).
+- Bản xem dữ liệu, cache PNG dùng chung, cache dở dang hoặc có file lạ bị xóa, hai cảnh không dùng chung cache, cùng cấu hình thì bỏ qua: `tests/unit/test_train_run.py`, với runner giả ghép ảnh đúng như gsplat 6e8c837 (bắt được lỗi khi dấu `.complete` nằm trong thư mục PNG).
 - **Chưa chạy** với gsplat thật hay dữ liệu thật.
