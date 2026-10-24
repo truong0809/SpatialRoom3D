@@ -1,20 +1,24 @@
-# Dò tham số mcmc trên một cảnh trong nhà (room của Mip-NeRF 360), một seed, 30.000 vòng: default, mcmc và 10 biến thể
+# Dò tham số mcmc trên một cảnh trong nhà (room của Mip-NeRF 360), một seed, 30.000 vòng: default, mcmc và 12 biến thể
 # của mcmc, mỗi biến thể chỉ đổi một tham số so với mcmc; sau khi train, mọi lượt được lọc Gaussian rồi chấm lại.
-# Mục đích: chọn bộ tham số cho một chế độ mới (mcmc_indoor trong configs/base.yaml), rồi so nó với mcmc trên 6 cảnh ×
-# 3 seed của thực nghiệm chính; room là cảnh dùng để chọn tham số, nên kết luận dựa trên 5 cảnh còn lại. Một cảnh, một
-# seed: chỉ để sàng lọc, không đủ để kết luận "cải thiện" (docs/design/experiments.md mục 3).
+# Mục đích: sàng lọc tham số cho một chế độ mới (mcmc_indoor trong configs/base.yaml). Các tham số có ích được ghép
+# thành vài cấu hình, chạy 2 seed mới (43, 44) trên room (vòng ghép, docs/design/experiments.md mục 3.6); cấu hình được
+# chọn thành mcmc_indoor và được so với mcmc trên 6 cảnh × 3 seed của thực nghiệm chính. room là cảnh dùng để chọn tham
+# số, nên kết luận dựa trên 5 cảnh còn lại. Một cảnh, một seed: chỉ để sàng lọc, không đủ để kết luận "cải thiện" (mục 3
+# của tài liệu đó).
 # Chạy trên pod (một việc nền; dữ liệu còn thiếu thì tự tải; lượt đã xong tự bỏ qua; mọi file kết quả được giữ):
 #   VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background
 # Lượt default_s42 và mcmc_s42 của room nằm cùng thư mục với thực nghiệm chính (configs/experiments/main.yaml): chạy
-# main sau đó thì hai lượt này được dùng lại, không train lại. 10 biến thể có tag: bảng của main không lẫn chúng.
+# main sau đó thì hai lượt này được dùng lại, không train lại (main chạy trước thì ngược lại). 12 biến thể có tag: bảng
+# của main không lẫn chúng.
 
 name: tune_mcmc
-description: "Dò tham số mcmc trên room (Mip-NeRF 360): default, mcmc, 10 biến thể mcmc; seed 42; 30.000 vòng; lọc Gaussian sau khi train"
+description: "Dò tham số mcmc trên room (Mip-NeRF 360): default, mcmc, 12 biến thể mcmc; seed 42; 30.000 vòng; lọc Gaussian sau khi train"
 modes: [default, mcmc]
 also_against: [mcmc]     # thêm bảng: mỗi biến thể so với mcmc (ngoài bảng so với default)
 # Mỗi biến thể đổi đúng một tham số của simple_trainer.py (gsplat @6e8c837) so với preset mcmc
 # (opacity_reg 0.01, scale_reg 0.01, strategy.noise_lr 5e5, strategy.min_opacity 0.005, random_bkgd false,
-# depth_loss false). or005 và mo002 nhắm vào lớp mờ / floater (docs/design/experiments.md mục 3.2).
+# depth_loss false, strategy.refine_stop_iter 25000, sh_degree 3). or005 và mo002 nhắm vào lớp mờ / floater; rs30k thử
+# lựa chọn của notebook demo; sh2 thử file nhẹ hơn (docs/design/experiments.md mục 3.2).
 variants:
   - {mode: mcmc, tag: or0001, set: {opacity_reg: 0.001}, description: "opacity_reg 0.001 (giá trị paper 3DGS-MCMC dùng cho Deep Blending)"}
   - {mode: mcmc, tag: or0005, set: {opacity_reg: 0.005}, description: "opacity_reg 0.005"}
@@ -26,6 +30,8 @@ variants:
   - {mode: mcmc, tag: mo002, set: {strategy.min_opacity: 0.02}, description: "min_opacity 0.02 (MCMC dời cả Gaussian có opacity đến 0,02; bằng ngưỡng lọc)"}
   - {mode: mcmc, tag: rbg, set: {random_bkgd: true}, description: "nền ngẫu nhiên khi train (chống vùng trong suốt)"}
   - {mode: mcmc, tag: depth, set: {depth_loss: true}, description: "loss độ sâu theo điểm SfM, depth_lambda mặc định 0,01"}
+  - {mode: mcmc, tag: rs30k, set: {strategy.refine_stop_iter: 30000}, description: "refine_stop_iter 30000 (mặc định 25000): MCMC dời Gaussian gần trong suốt đến vòng 29.900 thay vì 24.900, như giá trị 35000 của notebook demo khi chạy 30.000 vòng"}
+  - {mode: mcmc, tag: sh2, set: {sh_degree: 2}, description: "SH bậc 2 (mặc định 3): PLY 152 thay vì 236 byte mỗi Gaussian, cùng số Gaussian"}
 seeds: [42]
 benchmarks:
   - dataset: mipnerf360
@@ -36,11 +42,12 @@ benchmarks:
 post_filter: {min_opacity: 0.02, max_scale: 0.1}
 
 # Ước lượng trên RTX 4090, chỉ để in ra và kiểm tra chỗ trống (không phải kết quả, chưa đo trên room):
-#   - Thời gian: 12 lượt × khoảng 19 phút (train 30.000 vòng, chấm, video; cùng giả định với Mip-NeRF 360 trong main.yaml:
-#     2,5 giờ cho 4 cảnh × 2 chế độ) + lọc và chấm lại khoảng 4 phút mỗi lượt: khoảng 4,6 giờ.
+#   - Thời gian: 14 lượt × khoảng 19 phút (train 30.000 vòng, chấm, video; cùng giả định với Mip-NeRF 360 trong main.yaml:
+#     2,5 giờ cho 4 cảnh × 2 chế độ) + lọc và chấm lại khoảng 4 phút mỗi lượt: khoảng 5,4 giờ. Chạy sau main thì
+#     default_s42, mcmc_s42 đã có: 12 lượt train, 14 lượt lọc, khoảng 4,7 giờ.
 #   - Dung lượng thêm vào volume, giữ mọi file: khoảng 1,8 GB mỗi lượt (checkpoint và PLY mỗi file 236 byte mỗi
-#     Gaussian, ảnh render, video, cộng bản đã lọc trong filtered/), cộng khoảng 2 GB dữ liệu room và ảnh PNG thu nhỏ.
-#     Lúc tải, 360_v2.zip (khoảng 12,5 GB) nằm tạm trên volume rồi bị xóa sau khi giải nén.
+#     Gaussian, sh2 152 byte; ảnh render, video, cộng bản đã lọc trong filtered/), cộng khoảng 2 GB dữ liệu room và ảnh
+#     PNG thu nhỏ. Lúc tải, 360_v2.zip (khoảng 12,5 GB) nằm tạm trên volume rồi bị xóa sau khi giải nén.
 estimate:
-  gpu_hours: 5
-  disk_gb: 24
+  gpu_hours: 6
+  disk_gb: 27

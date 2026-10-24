@@ -45,7 +45,7 @@ commands:
   gsplat_default_and_mcmc: bash scripts/run_train.sh mipnerf360 gsplat
   gsplat_quick_check: QUICK=1 bash scripts/run_train.sh mipnerf360 gsplat
   main_experiment: bash scripts/pod/run_experiment.sh main --background   # 4 cảnh trong nhà, configs/experiments/main.yaml
-  tune_mcmc: bash scripts/pod/run_experiment.sh tune_mcmc --background   # room, 10 biến thể mcmc, configs/experiments/tune_mcmc.yaml
+  tune_mcmc: bash scripts/pod/run_experiment.sh tune_mcmc --background   # room, 12 biến thể mcmc, configs/experiments/tune_mcmc.yaml
   filter: bash scripts/run_filter.sh mipnerf360 room mcmc_s42             # lọc Gaussian một lượt rồi chấm lại
   evaluate: bash scripts/run_evaluate.sh mipnerf360
 

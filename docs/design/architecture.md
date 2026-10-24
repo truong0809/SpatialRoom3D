@@ -1,6 +1,6 @@
 # Kiến trúc repository và dữ liệu
 
-_Cập nhật: 21/10/2026_
+_Cập nhật: 24/10/2026_
 
 Tài liệu này ghi:
 - cây thư mục của repo và vai trò từng phần;
@@ -39,7 +39,7 @@ SpatialRoom3D/
 │   ├── mipnerf360.yaml            Mip-NeRF 360: dữ liệu, nguồn tải, kết quả, mục benchmark (protocol, số liệu công bố, ngưỡng)
 │   ├── deep_blending.yaml         Deep Blending: như trên
 │   ├── experiments/               kế hoạch thực nghiệm (main.yaml: default / mcmc, 3 seed, 6 cảnh;
-│   │                              tune_mcmc.yaml: 10 biến thể của mcmc trên room, 1 seed, lọc Gaussian)
+│   │                              tune_mcmc.yaml: 12 biến thể của mcmc trên room, 1 seed, lọc Gaussian)
 │   ├── environment/               phiên bản ghim của 3 env conda (gs-inria, gs-tools, gs-gsplat)
 │   └── local.yaml                 (không vào Git) ghi đè đường dẫn trên một pod, mục 5
 ├── scripts/

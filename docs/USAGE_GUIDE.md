@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng: ảnh chụp hoặc video → mô hình 3DGS
 
-_Cập nhật: 21/10/2026_
+_Cập nhật: 24/10/2026_
 
 Giao diện hiện có:
 - notebook `app/notebooks/runpod.ipynb`, chạy trong Jupyter của pod Runpod;
@@ -12,7 +12,7 @@ Giao diện hiện có:
 
 ### 1.1 Network volume
 
-Runpod → **Storage → New Network Volume**: ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; chạy cả dò tham số ở mục 5.2 rồi thêm chế độ mới vào thực nghiệm chính thì nên 150 GB; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
+Runpod → **Storage → New Network Volume**: ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; chạy cả dò tham số và vòng ghép ở mục 5.2 rồi thêm chế độ mới vào thực nghiệm chính thì nên 170 GB; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
 
 ### 1.2 Pod
 
@@ -43,7 +43,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 |---|---|
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
 | Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `EXP = "main"`, `CHAY = True`), theo dõi ở ô 5 |
-| Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 5 giờ) | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, `CHAY = True`), theo dõi ở ô 5 |
+| Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 6 giờ), rồi vòng ghép khi đã có file kế hoạch | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, sau đó `EXP = "tune_mcmc_combo"`, `CHAY = True`), theo dõi ở ô 5 |
 | Ảnh so sánh các lượt trên cùng ảnh test và video xếp chồng (mục 4; không cần GPU) | 7 (`WHAT = "panels"`) hoặc 9 (`SO_SANH = True`) |
 | Đưa dữ liệu của bạn lên (mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
 | Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
@@ -272,19 +272,20 @@ Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "main"`, `VOLUME_GB` = 
 
 ### 5.2 Dò tham số `mcmc`: `tune_mcmc`
 
-Một việc nền trên `room` của Mip-NeRF 360, seed 42 (thiết kế: `docs/design/experiments.md` mục 3): `default`, `mcmc` và 10 biến thể của `mcmc`, mỗi biến thể đổi một tham số (`opacity_reg`, `scale_reg`, `strategy.noise_lr`, `strategy.min_opacity`, `random_bkgd`, `depth_loss`); kiểm tra điểm SfM trước khi train (vì có biến thể `depth_loss`); sau khi train, lọc Gaussian mọi lượt rồi chấm lại; bảng so với `default`, bảng so với `mcmc`, bảng sau khi lọc.
+Một việc nền trên `room` của Mip-NeRF 360, seed 42 (thiết kế: `docs/design/experiments.md` mục 3): `default`, `mcmc` và 12 biến thể của `mcmc`, mỗi biến thể đổi một tham số (`opacity_reg`, `scale_reg`, `strategy.noise_lr`, `strategy.min_opacity`, `random_bkgd`, `depth_loss`, `strategy.refine_stop_iter`, `sh_degree`); kiểm tra điểm SfM trước khi train (vì có biến thể `depth_loss`); sau khi train, lọc Gaussian mọi lượt rồi chấm lại; bảng so với `default`, bảng so với `mcmc`, bảng sau khi lọc.
 
 ```bash
 bash scripts/pod/run_experiment.sh tune_mcmc --plan                       # kế hoạch, các bước, dữ liệu đã có
-VOLUME_GB=100 bash scripts/pod/run_experiment.sh tune_mcmc --background   # chạy nền (việc exp_tune_mcmc)
+VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background   # chạy nền (việc exp_tune_mcmc)
 ```
 
 Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "tune_mcmc"`, `VOLUME_GB`, rồi `CHAY = True`.
 
-- Ước lượng (chưa đo): khoảng 5 giờ GPU trên RTX 4090; thêm khoảng 24 GB trên volume. Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
-- Một cảnh, một seed: chỉ để chọn ứng viên cho chế độ `mcmc_indoor`, chưa phải kết quả "cải thiện". `room` là cảnh dùng để chọn tham số: khi so `mcmc_indoor` trong thực nghiệm chính, kết luận dựa trên 5 cảnh còn lại. Bảng tự động vẫn có `room`; bảng không có `room`: `docs/design/experiments.md` mục 3.1.
-- Lượt `room/default_s42`, `room/mcmc_s42` dùng chung với thực nghiệm chính: chạy `main` sau đó không train lại hai lượt này. 10 biến thể có tag nên bảng của `main` không lẫn chúng (có một dòng cảnh báo ghi số lượt để ngoài); xem lại bảng của các biến thể: `TAGS="or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth" SCENES=room bash scripts/run_evaluate.sh mipnerf360` (ô 7: `WHAT = "evaluate"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `TAGS`).
+- Ước lượng (chưa đo): khoảng 6 giờ GPU trên RTX 4090 (khoảng 4,7 giờ khi chạy sau `main`); thêm khoảng 27 GB trên volume. Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
+- Một cảnh, một seed: chỉ để chọn ứng viên cho vòng ghép, chưa phải kết quả "cải thiện". `room` là cảnh dùng để chọn tham số: khi so `mcmc_indoor` trong thực nghiệm chính, kết luận dựa trên 5 cảnh còn lại. Bảng tự động vẫn có `room`; bảng không có `room`: `docs/design/experiments.md` mục 3.1.
+- Lượt `room/default_s42`, `room/mcmc_s42` dùng chung với thực nghiệm chính: chỉ train một lần, dù `main` chạy trước hay sau. 12 biến thể có tag nên bảng của `main` không lẫn chúng (có một dòng cảnh báo ghi số lượt để ngoài); xem lại bảng của các biến thể: `TAGS="or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth rs30k sh2" SCENES=room bash scripts/run_evaluate.sh mipnerf360` (ô 7: `WHAT = "evaluate"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `TAGS`).
 - Kết quả: `/workspace/outputs/reports/experiment_tune_mcmc_<thời_gian>.md`.
+- **Vòng ghép** (`docs/design/experiments.md` mục 3.6): từ kết quả, chọn tối đa 3 ứng viên theo luật cố định trước, ghép thành 1–4 cấu hình, chạy 2 seed mới (43, 44) trên `room` để chọn `mcmc_indoor`. File kế hoạch `configs/experiments/tune_mcmc_combo.yaml` được viết khi có số liệu (chưa có); chạy bằng ô 7 với `EXP = "tune_mcmc_combo"`, sau `main` (cần độ lệch chuẩn của `mcmc` trên `room` và dùng lại `default`, `mcmc` seed 43, 44 của nó), trên cùng loại GPU với `main`. Ước lượng: khoảng 1–3,5 giờ GPU, thêm khoảng 10–20 GB.
 
 ## 6. Giao diện dòng lệnh `python -m app.cli`
 

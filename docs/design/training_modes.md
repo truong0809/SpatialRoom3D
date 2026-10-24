@@ -1,6 +1,6 @@
 # Thiết kế: hai chế độ huấn luyện 3DGS — Default (baseline) và MCMC
 
-_09/10/2026, cập nhật 21/10/2026 · Trạng thái: `default` và `mcmc` **đã chạy trên GPU** với Deep Blending bằng repo trước (17/10/2026, RTX 4090, seed 42; số liệu ở `docs/ENVIRONMENT_AUDIT.md` mục 7); repo này dùng cùng mã huấn luyện, chưa chạy trên pod. Mới một seed nên chưa kết luận về `mcmc`. Mip-NeRF 360 đã cấu hình, chưa chạy. Thực nghiệm chính (3 seed, 6 cảnh trong nhà): `docs/design/experiments.md` mục 2._
+_09/10/2026, cập nhật 24/10/2026 · Trạng thái: `default` và `mcmc` **đã chạy trên GPU** với Deep Blending bằng repo trước (17/10/2026, RTX 4090, seed 42; số liệu ở `docs/ENVIRONMENT_AUDIT.md` mục 7); repo này dùng cùng mã huấn luyện, chưa chạy trên pod. Mới một seed nên chưa kết luận về `mcmc`. Mip-NeRF 360 đã cấu hình, chưa chạy. Thực nghiệm chính (3 seed, 6 cảnh trong nhà): `docs/design/experiments.md` mục 2._
 
 ## 1. Mục tiêu và ranh giới
 
@@ -132,7 +132,7 @@ Kết quả không cải thiện vẫn được báo cáo đầy đủ (`docs/PR
 | `scripts/run_train.sh custom` → `scripts/pipeline/train_scene.sh` | Một cảnh tự chụp, một chế độ mỗi lượt; tự tìm lượt `default` cùng seed cho `mcmc` |
 | `scripts/run_train.sh <benchmark> gsplat` → `scripts/pipeline/train_gsplat_modes.sh` | Deep Blending hoặc Mip-NeRF 360: `default` → các chế độ khác (`MODES`, mặc định `mcmc`; cùng ngân sách) → các biến thể (`VARIANTS`) → bảng so sánh; đối chiếu `default` với lượt B0 tự chạy (từng cảnh) và với số liệu Inria công bố |
 | `configs/experiments/main.yaml`, `src/training/experiment.py`, `scripts/pod/run_experiment.sh` | Thực nghiệm chính trong một việc nền: tải dữ liệu còn thiếu, B0, gsplat theo từng seed, bảng so sánh (`docs/design/experiments.md` mục 2) |
-| `configs/experiments/tune_mcmc.yaml` | Dò tham số `mcmc` trên `room`: 10 biến thể, mỗi biến thể đổi một tham số; lọc Gaussian sau khi train (`docs/design/experiments.md` mục 3) |
+| `configs/experiments/tune_mcmc.yaml` | Dò tham số `mcmc` trên `room`: 12 biến thể, mỗi biến thể đổi một tham số; lọc Gaussian sau khi train; các ứng viên được ghép ở vòng ghép, 2 seed mới (`docs/design/experiments.md` mục 3, 3.6) |
 | `src/training/depth_check.py` | Trước khi train lượt có `depth_loss`: mọi ảnh train có điểm SfM nằm trong ảnh (Parser của gsplat, không GPU) |
 | `src/training/prune.py`, `scripts/run_filter.sh` | Lọc Gaussian của một lượt đã xong (opacity thấp, trục quá lớn so với `scene_scale` của gsplat) rồi chấm lại bằng lệnh đánh giá đã ghi; kết quả trong `<lượt>/filtered/` (`docs/design/experiments.md` mục 4) |
 | `scripts/run_evaluate.sh` | Lập lại bảng so sánh từ kết quả đã có (benchmark hoặc cảnh tự chụp), mọi chế độ đã chạy (`MODES`, `SCENES`, `BASELINE` để chọn), không train |
@@ -145,7 +145,7 @@ cd /workspace/SpatialRoom3D
 bash scripts/setup/setup_gsplat.sh                         # một lần: env gs-gsplat (scripts/pod/run_all.sh đã gồm bước này)
 bash scripts/run_train.sh deep_blending gsplat             # kiểm chứng trên Deep Blending (SEEDS="42 43 44" để chạy lặp)
 VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # thực nghiệm chính, một việc nền
-VOLUME_GB=100 bash scripts/pod/run_experiment.sh tune_mcmc --background   # dò tham số mcmc trên room, một việc nền
+VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background   # dò tham số mcmc trên room, một việc nền
 bash scripts/run_train.sh custom phong01 default           # cảnh tự chụp, đã qua scripts/prepare_data.sh custom
 bash scripts/run_train.sh custom phong01 mcmc              # cap_max = số Gaussian cuối của default_s42
 TAG=or001 BASELINE_TAG= bash scripts/run_train.sh custom phong01 mcmc -- --set opacity_reg=0.001   # đổi tham số mcmc

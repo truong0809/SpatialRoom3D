@@ -37,7 +37,7 @@ flowchart LR
 | `default` | 3DGS (Kerbl et al., 2023), `DefaultStrategy` của gsplat | Baseline; được đối chiếu với 3DGS gốc của Inria (B0) trên Deep Blending |
 | `mcmc` | 3DGS-MCMC (Kheradmand et al., 2024), `MCMCStrategy` của gsplat | Cùng protocol, cùng số Gaussian cuối với `default` trên cùng cảnh |
 
-Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep Blending (`drjohnson`, `playroom`) và Mip-NeRF 360 (`room`, `counter`, `kitchen`, `bonsai`), 3 seed, 30.000 vòng. Bước dò tham số (`tune_mcmc`: 10 biến thể của `mcmc` trên `room`, một seed, kèm lọc Gaussian) dùng để chọn tham số cho một chế độ thứ ba `mcmc_indoor`, sẽ được thêm vào thực nghiệm chính khi có số liệu; đây là tinh chỉnh tham số trên phương pháp có sẵn, không phải thuật toán mới. Thiết kế: [docs/design/training_modes.md](docs/design/training_modes.md), [docs/design/experiments.md](docs/design/experiments.md).
+Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep Blending (`drjohnson`, `playroom`) và Mip-NeRF 360 (`room`, `counter`, `kitchen`, `bonsai`), 3 seed, 30.000 vòng. Bước dò tham số (`tune_mcmc`: 12 biến thể của `mcmc` trên `room`, một seed, kèm lọc Gaussian) và vòng ghép (các ứng viên ghép lại, 2 seed mới trên `room`) dùng để chọn tham số cho một chế độ thứ ba `mcmc_indoor`, sẽ được thêm vào thực nghiệm chính khi có số liệu; đây là tinh chỉnh tham số trên phương pháp có sẵn, không phải thuật toán mới. Thiết kế: [docs/design/training_modes.md](docs/design/training_modes.md), [docs/design/experiments.md](docs/design/experiments.md).
 
 ## Chạy trên Runpod
 
@@ -54,7 +54,7 @@ bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong2/phong2.mp4 ph
 # Thực nghiệm (tự tải dữ liệu benchmark còn thiếu): main = thực nghiệm chính, tune_mcmc = dò tham số mcmc
 bash scripts/pod/run_experiment.sh main --plan                       # in kế hoạch, ước lượng (không chạy gì)
 VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # chạy thực nghiệm trong một việc nền
-VOLUME_GB=100 bash scripts/pod/run_experiment.sh tune_mcmc --background
+VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background
 bash scripts/run_filter.sh custom phong1 mcmc_s42                    # lọc Gaussian một lượt rồi chấm lại
 
 bash scripts/pod/results.sh                   # xem nhanh kết quả

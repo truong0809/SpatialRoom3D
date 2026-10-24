@@ -374,7 +374,7 @@ def test_the_tune_mcmc_plan_is_valid():
     assert plan["modes"] == ["default", "mcmc"] and plan["seeds"] == [42] and plan["also_against"] == ["mcmc"]
     assert [(b["dataset"], b["scenes"], b["b0"]) for b in plan["benchmarks"]] == [("mipnerf360", ["room"], False)]
     assert plan["runs"] == ["default", "mcmc", "mcmc_or0001", "mcmc_or0005", "mcmc_or005", "mcmc_sr0001", "mcmc_sr005",
-                            "mcmc_nlr250k", "mcmc_nlr1m", "mcmc_mo002", "mcmc_rbg", "mcmc_depth"]
+                            "mcmc_nlr250k", "mcmc_nlr1m", "mcmc_mo002", "mcmc_rbg", "mcmc_depth", "mcmc_rs30k", "mcmc_sh2"]
     assert all(variant["mode"] == "mcmc" and len(variant["set"]) == 1 for variant in plan["variants"])
     assert plan["depth_runs"] == ["mcmc_depth"] and plan["depth_test_every"] == 8
     assert plan["post_filter"] == {"min_opacity": 0.02, "max_scale": 0.1}
@@ -382,10 +382,51 @@ def test_the_tune_mcmc_plan_is_valid():
     assert "variants|mcmc:or0001:opacity_reg=0.001 mcmc:or0005:opacity_reg=0.005 mcmc:or005:opacity_reg=0.05" \
            " mcmc:sr0001:scale_reg=0.001 mcmc:sr005:scale_reg=0.05 mcmc:nlr250k:strategy.noise_lr=250000" \
            " mcmc:nlr1m:strategy.noise_lr=1000000 mcmc:mo002:strategy.min_opacity=0.02 mcmc:rbg:random_bkgd=true" \
-           " mcmc:depth:depth_loss=true" in lines
+           " mcmc:depth:depth_loss=true mcmc:rs30k:strategy.refine_stop_iter=30000 mcmc:sh2:sh_degree=2" in lines
+    assert "gpu_hours|6" in lines and "disk_gb|27" in lines
     assert "post_filter|0.02 0.1" in lines and "depth_runs|mcmc_depth" in lines
     main_plan = plan_lines(load_experiment("main", REPO / "configs", "/workspace"))
     assert {"variants|", "runs|default mcmc", "depth_runs|", "depth_test_every|", "post_filter|"} <= set(main_plan)
+
+
+def test_variant_tags_are_not_reused_across_plans():
+    """Mỗi tag biến thể chỉ thuộc một kế hoạch trong configs/experiments/: bảng lấy mọi seed có trên đĩa của tag được yêu
+    cầu, nên một tag dùng lại ở vòng ghép sẽ đưa lượt seed 42 của lượt dò vào phần quyết định
+    (docs/design/experiments.md mục 3.6)."""
+    owner = {}
+    for path in sorted((REPO / "configs" / "experiments").glob("*.yaml")):
+        plan = load_experiment(path.stem, REPO / "configs", "/workspace")
+        for variant in plan["variants"]:
+            key = (variant["mode"], variant["tag"])
+            assert key not in owner, f"variant {key} is in both {owner[key]} and {path.stem}"
+            owner[key] = path.stem
+    assert ("mcmc", "sh2") in owner and ("mcmc", "rs30k") in owner
+
+
+def test_a_combination_round_plan_has_several_parameters_per_variant(tmp_path):
+    """Kế hoạch của vòng ghép (docs/design/experiments.md mục 3.6), kiểm ở mức kế hoạch: seed mới 43, 44 trên room, mỗi
+    cấu hình là một biến thể có thể nhiều tham số, mọi cấu hình dùng tag mới (kể cả ứng viên đơn), cùng post_filter với
+    tune_mcmc; hai cấu hình cùng tham số (khác thứ tự) là một cấu hình."""
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    tune = load_experiment("tune_mcmc", configs, "/workspace")
+    single = next(variant for variant in tune["variants"] if variant["tag"] == "or005")
+    combo = {"name": "combo", "description": "vòng ghép", "modes": ["default", "mcmc"], "also_against": ["mcmc"],
+             "variants": [{"mode": "mcmc", "tag": "c1", "set": dict(single["set"])},
+                          {"mode": "mcmc", "tag": "c2", "set": {"opacity_reg": 0.05, "strategy.min_opacity": 0.02}}],
+             "seeds": [43, 44], "benchmarks": [{"dataset": "mipnerf360", "scenes": ["room"], "b0": False}],
+             "post_filter": tune["post_filter"], "estimate": {"gpu_hours": 2, "disk_gb": 15}}
+    (configs / "experiments" / "combo.yaml").write_text(yaml.safe_dump(combo, allow_unicode=True), encoding="utf-8")
+    plan = load_experiment("combo", configs, "/workspace")
+    assert plan["runs"] == ["default", "mcmc", "mcmc_c1", "mcmc_c2"] and plan["warnings"] == []
+    assert not {"c1", "c2"} & {variant["tag"] for variant in tune["variants"]}  # tag mới: lượt seed 42 không vào bảng
+    lines = plan_lines(plan)
+    assert "variants|mcmc:c1:opacity_reg=0.05 mcmc:c2:opacity_reg=0.05,strategy.min_opacity=0.02" in lines
+    assert "seeds|43 44" in lines and "post_filter|0.02 0.1" in lines
+    combo["variants"].append({"mode": "mcmc", "tag": "c3", "set": {"strategy.min_opacity": 0.02, "opacity_reg": 0.05}})
+    (configs / "experiments" / "combo.yaml").write_text(yaml.safe_dump(combo, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="mcmc_c3 and mcmc_c2 would train mcmc with the same configuration"):
+        load_experiment("combo", configs, "/workspace")
 
 
 @pytest.mark.parametrize("change, message", [
