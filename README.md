@@ -37,7 +37,7 @@ flowchart LR
 | `default` | 3DGS (Kerbl et al., 2023), `DefaultStrategy` của gsplat | Baseline; được đối chiếu với 3DGS gốc của Inria (B0) trên Deep Blending |
 | `mcmc` | 3DGS-MCMC (Kheradmand et al., 2024), `MCMCStrategy` của gsplat | Cùng protocol, cùng số Gaussian cuối với `default` trên cùng cảnh |
 
-Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep Blending (`drjohnson`, `playroom`) và Mip-NeRF 360 (`room`, `counter`, `kitchen`, `bonsai`), 3 seed, 30.000 vòng. Bước dò tham số (`tune_mcmc`: 12 biến thể của `mcmc` trên `room`, một seed, kèm lọc Gaussian) và vòng ghép (các ứng viên ghép lại, 2 seed mới trên `room`) dùng để chọn tham số cho một chế độ thứ ba `mcmc_indoor`, sẽ được thêm vào thực nghiệm chính khi có số liệu; đây là tinh chỉnh tham số trên phương pháp có sẵn, không phải thuật toán mới. Thiết kế: [docs/design/training_modes.md](docs/design/training_modes.md), [docs/design/experiments.md](docs/design/experiments.md).
+Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep Blending (`drjohnson`, `playroom`) và Mip-NeRF 360 (`room`, `counter`, `kitchen`, `bonsai`), 3 seed, 30.000 vòng. Bước dò (`tune_mcmc`: 16 biến thể của `mcmc` trên `room`, một seed, kèm lọc Gaussian) và vòng ghép (các ứng viên ghép lại, 2 seed mới trên `room`) dùng để chọn cấu hình cho một chế độ thứ ba `mcmc_indoor`, sẽ được thêm vào thực nghiệm chính khi có số liệu. 12 biến thể là tinh chỉnh tham số; 4 biến thể lấy từ notebook v2 của nhóm: bilateral grid (có sẵn trong gsplat), Kill-then-Relocate và depth prior bằng Depth Anything V2 (code của repo, chạy trên bản sao có vá của trainer, không sửa gsplat), và cả gói. Đây là tích hợp và đánh giá các kỹ thuật có sẵn cộng một heuristic, không phải thuật toán mới. Thiết kế: [docs/design/training_modes.md](docs/design/training_modes.md), [docs/design/experiments.md](docs/design/experiments.md).
 
 ## Chạy trên Runpod
 
@@ -112,6 +112,7 @@ Các thành phần dưới đây được cài vào môi trường trên pod the
 | [gsplat](https://github.com/nerfstudio-project/gsplat) | commit `6e8c837` | Apache-2.0 |
 | [3DGS gốc của Inria](https://github.com/graphdeco-inria/gaussian-splatting) (B0, chỉ để đối chiếu) | commit `54c035f` | Gaussian-Splatting License, chỉ dùng phi thương mại cho nghiên cứu và đánh giá |
 | [COLMAP](https://github.com/colmap/colmap) | 4.2.1 (conda-forge) | BSD cho riêng COLMAP; các thư viện đi kèm (vd. SiftGPU) có license riêng |
+| [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) (chỉ biến thể `mono`) | commit `a561b84`, trọng số bản Small | Apache-2.0 (code và trọng số bản Small; các bản lớn hơn là CC-BY-NC-4.0, không dùng) |
 
 ## Quy ước
 

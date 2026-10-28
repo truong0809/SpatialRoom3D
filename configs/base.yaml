@@ -53,7 +53,8 @@ train_modes:
     #   mcmc_or001:
     #     description: "mcmc, opacity_reg 0.001"
     #     preset: mcmc                        # default | mcmc
-    #     args: {opacity_reg: 0.001}          # tham số của simple_trainer.py (khóa protocol không đặt ở đây)
+    #     args: {opacity_reg: 0.001}          # tham số của simple_trainer.py (khóa protocol không đặt ở đây); sr3d.kr: true,
+    #                                         # sr3d.mono: true bật biến thể có code (docs/design/training_modes.md mục 3.1)
     #     cap_max: {policy: match_baseline}   # hoặc {policy: fixed, value: 2000000}
     # Thêm protocol: {max_steps: 40000} để đổi protocol (bị ghi là sai khác; match_baseline khi đó cần lượt default
     # cùng protocol). Đổi cho một lượt thì không cần sửa file này: --set / --protocol / --cap-max kèm TAG

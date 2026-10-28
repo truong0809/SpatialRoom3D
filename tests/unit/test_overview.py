@@ -213,8 +213,14 @@ def test_pack_results_keeps_small_files_and_skips_heavy_ones(tmp_path):
         f"{B0}/drjohnson/test/ours_30000/renders/00000.png", f"{B0}/drjohnson/test/ours_30000/gt/00000.png",
         "outputs/custom_scenes/v/colmap/frames_report.json", "outputs/custom_scenes/v/colmap/sfm_report.json",
         "outputs/custom_scenes/v/colmap/colmap_logs/mapper.log",
+        # biến thể có code (src/training/trainer_hooks.py): nhật ký hook, kết quả kiểm và manifest của depth prior
+        "outputs/benchmarks/mipnerf360/gsplat/room/mcmc_v2_s42/sr3d_hooks.jsonl",
+        "outputs/benchmarks/mipnerf360/gsplat/room/mcmc_v2_s42/mono_depth.json",
+        "outputs/benchmarks/mipnerf360/gsplat/room/.mono_depth_0123456789ab/manifest.json",
     ]
     skip = [
+        "outputs/benchmarks/mipnerf360/gsplat/room/.mono_depth_0123456789ab/frame_00001.npy",
+        "outputs/benchmarks/mipnerf360/gsplat/room/mcmc_v2_s42/sr3d_simple_trainer.py",
         "outputs/custom_scenes/v/default_s42/ply/point_cloud_29999.ply",
         "outputs/custom_scenes/v/default_s42/ckpts/ckpt_29999_rank0.pt",
         "outputs/custom_scenes/v/default_s42/renders/val_step29999_0001.png",

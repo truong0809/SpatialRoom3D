@@ -1,25 +1,42 @@
-# Dò tham số mcmc trên một cảnh trong nhà (room của Mip-NeRF 360), một seed, 30.000 vòng: default, mcmc và 12 biến thể
-# của mcmc, mỗi biến thể chỉ đổi một tham số so với mcmc; sau khi train, mọi lượt được lọc Gaussian rồi chấm lại.
-# Mục đích: sàng lọc tham số cho một chế độ mới (mcmc_indoor trong configs/base.yaml). Các tham số có ích được ghép
-# thành vài cấu hình, chạy 2 seed mới (43, 44) trên room (vòng ghép, docs/design/experiments.md mục 3.6); cấu hình được
-# chọn thành mcmc_indoor và được so với mcmc trên 6 cảnh × 3 seed của thực nghiệm chính. room là cảnh dùng để chọn tham
-# số, nên kết luận dựa trên 5 cảnh còn lại. Một cảnh, một seed: chỉ để sàng lọc, không đủ để kết luận "cải thiện" (mục 3
-# của tài liệu đó).
-# Chạy trên pod (một việc nền; dữ liệu còn thiếu thì tự tải; lượt đã xong tự bỏ qua; mọi file kết quả được giữ):
+# Dò tham số mcmc trên một cảnh trong nhà (room của Mip-NeRF 360), một seed, 30.000 vòng: default, mcmc và 16 biến thể
+# của mcmc. 3 biến thể mỗi biến thể thêm một thành phần của notebook demo v2 / v4 của nhóm (depth prior,
+# Kill-then-Relocate, bilateral grid); một biến thể (v2) bật cùng lúc mọi thứ notebook v2 thêm vào mcmc; 12 biến thể mỗi
+# biến thể chỉ đổi một tham số so với mcmc. Sau khi train, mọi lượt được lọc Gaussian rồi chấm lại.
+# Mục đích: sàng lọc cho một chế độ mới (mcmc_indoor trong configs/base.yaml). Các biến thể có ích (trừ v2, là một gói)
+# được ghép thành vài cấu hình, chạy 2 seed mới (43, 44) trên room (vòng ghép, docs/design/experiments.md mục 3.6);
+# cấu hình được chọn thành mcmc_indoor và được so với mcmc trên 6 cảnh × 3 seed của thực nghiệm chính. room là cảnh dùng
+# để chọn, nên kết luận dựa trên 5 cảnh còn lại. Một cảnh, một seed: chỉ để sàng lọc, không đủ để kết luận "cải thiện"
+# (mục 3 của tài liệu đó).
+# Chạy trên pod (một việc nền; dữ liệu còn thiếu thì tự tải; Depth Anything V2 Small cho mono và v2 thì tự tải ở bước
+# depth_anything, không tải được thì chỉ bỏ hai lượt đó; lượt đã xong tự bỏ qua; mọi file kết quả được giữ):
 #   VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background
 # Lượt default_s42 và mcmc_s42 của room nằm cùng thư mục với thực nghiệm chính (configs/experiments/main.yaml): chạy
-# main sau đó thì hai lượt này được dùng lại, không train lại (main chạy trước thì ngược lại). 12 biến thể có tag: bảng
+# main sau đó thì hai lượt này được dùng lại, không train lại (main chạy trước thì ngược lại). 16 biến thể có tag: bảng
 # của main không lẫn chúng.
 
 name: tune_mcmc
-description: "Dò tham số mcmc trên room (Mip-NeRF 360): default, mcmc, 12 biến thể mcmc; seed 42; 30.000 vòng; lọc Gaussian sau khi train"
+description: "Dò tham số mcmc trên room (Mip-NeRF 360): default, mcmc, 16 biến thể mcmc (12 tham số, 3 thành phần của notebook v2, gói v2); seed 42; 30.000 vòng; lọc Gaussian sau khi train"
 modes: [default, mcmc]
 also_against: [mcmc]     # thêm bảng: mỗi biến thể so với mcmc (ngoài bảng so với default)
-# Mỗi biến thể đổi đúng một tham số của simple_trainer.py (gsplat @6e8c837) so với preset mcmc
+# 12 biến thể tham số: mỗi biến thể đổi đúng một tham số của simple_trainer.py (gsplat @6e8c837) so với preset mcmc
 # (opacity_reg 0.01, scale_reg 0.01, strategy.noise_lr 5e5, strategy.min_opacity 0.005, random_bkgd false,
-# depth_loss false, strategy.refine_stop_iter 25000, sh_degree 3). or005 và mo002 nhắm vào lớp mờ / floater; rs30k thử
-# lựa chọn của notebook demo; sh2 thử file nhẹ hơn (docs/design/experiments.md mục 3.2).
+# depth_loss false, strategy.refine_stop_iter 25000, sh_degree 3, use_bilateral_grid false). or005 và mo002 nhắm vào
+# lớp mờ / floater; rs30k thử lựa chọn của notebook demo; sh2 thử file nhẹ hơn (docs/design/experiments.md mục 3.2).
+# bilagrid là một cờ có sẵn của gsplat; kr và mono là biến thể có code của repo (khóa sr3d.*, src/training/trainer_hooks.py;
+# docs/design/experiments.md mục 3.7). Chỉ số của mọi lượt tính trên ảnh render không qua bilateral grid (psnr / ssim /
+# lpips của gsplat, không dùng cc_psnr: cc_psnr chỉnh màu ảnh render theo chính ảnh test).
 variants:
+  # Ba thành phần của notebook v2, mỗi biến thể thêm đúng một thành phần (depth_loss và random_bkgd của notebook có ở
+  # depth, rbg), rồi gói v2. Đặt trước 12 biến thể tham số để đoạn code mới (bước mono, KR và loss trên GPU) chạy sớm:
+  # lỗi thì thấy sau khoảng một giờ, không phải sau năm giờ; thứ tự chỉ đổi lịch chạy, không đổi kết quả.
+  - {mode: mcmc, tag: mono, set: {sr3d.mono: true}, description: "depth prior: loss Pearson giữa nghịch đảo độ sâu render và Depth Anything V2 Small, trọng số 0,05, đến vòng 18.000 (theo notebook v2; loss Pearson như FSGS)"}
+  - {mode: mcmc, tag: kr, set: {sr3d.kr: true}, description: "Kill-then-Relocate (theo notebook v2, không có paper): vòng 3.000 → 21.000, cứ 500 vòng, MCMC dời Gaussian quá lớn, hình kim hoặc sát camera train (tối đa 2 % mỗi lần)"}
+  - {mode: mcmc, tag: bilagrid, set: {use_bilateral_grid: true}, description: "bilateral grid của gsplat (Wang et al., ACM TOG 2024): một phép biến đổi màu học riêng cho mỗi ảnh train, hấp thụ phơi sáng / cân bằng trắng tự động; ảnh test render không qua grid"}
+  # Gói v2: cùng lúc mọi thứ notebook v2 thêm vào mcmc, nhưng theo protocol chung (30.000 vòng, cap_max theo default,
+  # antialiased tắt; không tự tính lại global_scale / tâm cảnh). Chỉ trả lời "gói v2 so với mcmc"; không phải ứng viên
+  # của vòng ghép (docs/design/experiments.md mục 3.6, 3.7).
+  - {mode: mcmc, tag: v2, set: {depth_loss: true, random_bkgd: true, use_bilateral_grid: true, strategy.refine_stop_iter: 24000, sr3d.kr: true, sr3d.mono: true}, description: "gói v2: depth + rbg + bilagrid + kr + mono, refine_stop_iter 24000 (0,8 × số vòng, như notebook)"}
+  # 12 biến thể tham số:
   - {mode: mcmc, tag: or0001, set: {opacity_reg: 0.001}, description: "opacity_reg 0.001 (giá trị paper 3DGS-MCMC dùng cho Deep Blending)"}
   - {mode: mcmc, tag: or0005, set: {opacity_reg: 0.005}, description: "opacity_reg 0.005"}
   - {mode: mcmc, tag: or005, set: {opacity_reg: 0.05}, description: "opacity_reg 0.05 (gấp 5 preset: phạt opacity mạnh hơn)"}
@@ -42,12 +59,15 @@ benchmarks:
 post_filter: {min_opacity: 0.02, max_scale: 0.1}
 
 # Ước lượng trên RTX 4090, chỉ để in ra và kiểm tra chỗ trống (không phải kết quả, chưa đo trên room):
-#   - Thời gian: 14 lượt × khoảng 19 phút (train 30.000 vòng, chấm, video; cùng giả định với Mip-NeRF 360 trong main.yaml:
-#     2,5 giờ cho 4 cảnh × 2 chế độ) + lọc và chấm lại khoảng 4 phút mỗi lượt: khoảng 5,4 giờ. Chạy sau main thì
-#     default_s42, mcmc_s42 đã có: 12 lượt train, 14 lượt lọc, khoảng 4,7 giờ.
+#   - Thời gian: 18 lượt × khoảng 19 phút (train 30.000 vòng, chấm, video; cùng giả định với Mip-NeRF 360 trong main.yaml:
+#     2,5 giờ cho 4 cảnh × 2 chế độ) + lọc và chấm lại khoảng 4 phút mỗi lượt: khoảng 6,9 giờ; cộng phần chậm hơn chưa đo
+#     của bilagrid, mono và v2 (render thêm độ sâu, loss thêm; giả định +30 % cho mỗi lượt đó) và depth prior của room
+#     (vài phút, một lần): khoảng 7,3 giờ, ghi 8 cho dư. Chạy sau main thì default_s42, mcmc_s42 đã có: 16 lượt train,
+#     18 lượt lọc, khoảng 6,7 giờ.
 #   - Dung lượng thêm vào volume, giữ mọi file: khoảng 1,8 GB mỗi lượt (checkpoint và PLY mỗi file 236 byte mỗi
 #     Gaussian, sh2 152 byte; ảnh render, video, cộng bản đã lọc trong filtered/), cộng khoảng 2 GB dữ liệu room và ảnh
-#     PNG thu nhỏ. Lúc tải, 360_v2.zip (khoảng 12,5 GB) nằm tạm trên volume rồi bị xóa sau khi giải nén.
+#     PNG thu nhỏ, khoảng 0,3 GB depth prior và khoảng 0,2 GB Depth Anything V2 Small (code khoảng 114 MB kể cả lịch sử
+#     git, trọng số 99 MB). Lúc tải, 360_v2.zip (khoảng 12,5 GB) nằm tạm trên volume rồi bị xóa sau khi giải nén.
 estimate:
-  gpu_hours: 6
-  disk_gb: 27
+  gpu_hours: 8
+  disk_gb: 35

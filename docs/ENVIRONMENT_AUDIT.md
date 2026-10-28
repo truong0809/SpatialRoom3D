@@ -13,6 +13,7 @@ Bố cục (chi tiết và ba luồng dữ liệu: `docs/design/architecture.md`
 ├── SpatialRoom3D/            # code của đồ án (repo Git, clone từ GitHub bằng deploy key)
 ├── code/gaussian-splatting/  # repo 3DGS của Inria, ghim theo commit
 ├── code/gsplat/              # repo gsplat, ghim theo commit (hai chế độ huấn luyện Default / MCMC)
+├── code/depth_anything_v2/   # Depth Anything V2 (code ghim theo commit + trọng số bản Small), chỉ cho biến thể mono
 ├── miniforge3/               # conda (Miniforge) + env gs-inria (3DGS) + env gs-tools (COLMAP, ffmpeg) + env gs-gsplat
 ├── data/                     # chỉ dữ liệu gốc; ngoài bước tải benchmark, pipeline không ghi vào (ngoại lệ: docs/design/architecture.md mục 3)
 │   ├── custom_scenes/<cảnh>/ # ảnh / video tự chụp
@@ -179,6 +180,18 @@ Thiết kế và giao thức so sánh: `docs/design/training_modes.md`. Env tác
 
 ```bash
 ALLOW_PROVISIONAL=1 bash scripts/setup/setup_gsplat.sh   # 9 bước như setup_3dgs_inria.sh; smoke test: scripts/setup/smoke_test_gsplat.py
+```
+
+**Depth Anything V2 Small** cho biến thể `mono` của `tune_mcmc` (depth prior, `docs/design/experiments.md` mục 3.7). Không phải một env riêng: code chạy trong env `gs-gsplat` (cần `torch`, `torchvision`, `opencv`, `numpy`, đều đã có; `xformers` không bắt buộc), nên không cài thêm gói Python nào. `scripts/setup/setup_depth_anything.sh` tải vào `$WS/code/depth_anything_v2` (khoảng 0,2 GB: code 114 MB kể cả lịch sử git, trọng số 99 MB); `scripts/pod/run_experiment.sh` gọi ở bước `depth_anything`, trước `env_check`, khi kế hoạch có lượt `sr3d.mono` (lỗi thì chỉ bỏ các lượt đó). Phiên bản ghim trong `configs/environment/gs-gsplat.conf` (`DA2_*`) và lặp lại trong `src/training/mono_depth.py` (test kiểm hai nơi giống nhau).
+
+| Thành phần | Phiên bản | Ghi chú |
+|---|---|---|
+| Code Depth Anything V2 | commit `a561b84` của `DepthAnything/Depth-Anything-V2` | Apache-2.0. Không sửa file; `src/training/mono_depth.py` từ chối checkout khác commit hoặc có sửa đổi. Đã clone và chạy với trọng số ngẫu nhiên trong sandbox (CPU) |
+| Trọng số | `depth_anything_v2_vits.pth` (bản Small, 24,8 triệu tham số, 99,2 MB), Hugging Face `depth-anything/Depth-Anything-V2-Small` revision `03876f8` | Apache-2.0 (các bản Base / Large / Giant là CC-BY-NC-4.0, không dùng). SHA-256 `715fade1…1378` lấy từ trang của file trên Hugging Face; script kiểm sau khi tải, sai thì xóa file và dừng. **Chưa tải thử** (sandbox không ra được Hugging Face) |
+
+```bash
+bash scripts/setup/setup_depth_anything.sh   # git clone đúng commit + tải trọng số, kiểm SHA-256; chạy lại an toàn;
+                                             # thư mục có sẵn mà không phải bản checkout thì dừng, không ghi đè
 ```
 
 ### 4.4 Chạy trên Runpod từ Jupyter (pod mới, volume trống)

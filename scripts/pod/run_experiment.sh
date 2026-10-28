@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # run_experiment.sh - Mot thuc nghiem tron ven theo configs/experiments/<ten>.yaml, trong MOT viec dung GPU:
-#   kiem tra moi truong -> kiem tra cho trong -> tai du lieu con thieu (scripts/pod/fetch_data.sh) -> kiem tra diem SfM
-#   khi ke hoach co luot dung loss do sau (src/training/depth_check.py; khong dat thi chi bo cac luot do tren benchmark
-#   do) -> B0 Inria cho benchmark co b0: true -> gsplat
+#   (ke hoach co luot sr3d.mono: tai Depth Anything V2 Small neu chua co, scripts/setup/setup_depth_anything.sh; loi
+#   thi chi bo cac luot do) -> kiem tra moi truong -> kiem tra cho trong -> tai du lieu con thieu (scripts/pod/fetch_data.sh)
+#   -> kiem tra diem SfM khi ke hoach co luot dung loss do sau (src/training/depth_check.py; khong dat thi chi bo cac
+#   luot do tren benchmark do) -> B0 Inria cho benchmark co b0: true -> gsplat
 #   cac che do va bien the (scripts/run_train.sh <benchmark> gsplat), xen ke benchmark theo tung seed (du mot seed tren
 #   moi canh roi moi sang seed sau), sau moi seed loc Gaussian roi cham lai khi ke hoach co post_filter
 #   (src/training/prune.py) -> bao cao so sanh cuoi (scripts/run_evaluate.sh) -> goi ket qua nhe
@@ -32,7 +33,7 @@
 
 set -uo pipefail
 
-usage() { sed -n '2,31p' "$0"; exit 2; }
+usage() { sed -n '2,32p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 case "$1" in -h|--help) usage ;; esac
 NAME="$1"
@@ -56,7 +57,7 @@ export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
 # ---------------------------------------------------------------------------- ke hoach (configs/experiments/<ten>.yaml)
 PLAN_TEXT="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --plan "$NAME")" || exit 2
 DESCRIPTION="" MODES="" AGAINST="" VARIANTS="" RUNS="" DEPTH_RUNS="" TEST_EVERY="" POST_FILTER="" SEEDS=""
-GPU_HOURS="" DISK_GB=""
+MONO_RUNS="" GPU_HOURS="" DISK_GB=""
 BENCHES=() B0S=() SCENE_SETS=() WARNINGS=()
 while IFS='|' read -r key v1 v2 v3; do
   case "$key" in
@@ -67,6 +68,7 @@ while IFS='|' read -r key v1 v2 v3; do
     runs) RUNS="$v1" ;;
     depth_runs) DEPTH_RUNS="$v1" ;;
     depth_test_every) TEST_EVERY="$v1" ;;
+    mono_runs) MONO_RUNS="$v1" ;;
     post_filter) POST_FILTER="$v1" ;;
     seeds) SEEDS="$v1" ;;
     gpu_hours) GPU_HOURS="$v1" ;;
@@ -98,7 +100,7 @@ if ! [[ "$VOLUME" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
 fi
 
 print_plan() {
-  local i entry vmode vtag vsets
+  local i entry vmode vtag vsets dropped
   echo "Thực nghiệm $NAME: $DESCRIPTION"
   echo "  chế độ: $MODES | seed: $SEEDS (xen kẽ: đủ một seed trên mọi cảnh rồi mới sang seed sau) | 30.000 vòng"
   if [ "${#VARIANT_LIST[@]}" -gt 0 ]; then
@@ -114,6 +116,16 @@ print_plan() {
   if [ -n "$DEPTH_RUNS" ]; then
     echo "  loss độ sâu ($DEPTH_RUNS): kiểm tra điểm SfM của mọi ảnh train trước khi train (depth_check_<benchmark>);" \
       "không đạt thì bỏ các lượt đó trên benchmark đó, các lượt khác vẫn train"
+  fi
+  if [ -n "$MONO_RUNS" ]; then
+    if [[ " $MONO_RUNS " == *" ${MODE_LIST[0]} "* ]]; then
+      dropped="không tải được thì không train lượt gsplat nào: ${MODE_LIST[0]} dùng depth prior"
+    else
+      dropped="không tải được thì bỏ các lượt đó, các lượt khác vẫn train"
+    fi
+    echo "  depth prior ($MONO_RUNS): bước depth_anything tải Depth Anything V2 Small vào $WS/code/depth_anything_v2 nếu" \
+      "chưa có ($dropped); mỗi cảnh tính depth prior một lần (bước mono của lượt), prior không khớp điểm SfM thì lượt" \
+      "đó lỗi"
   fi
   if [ -n "$POST_FILTER" ]; then
     echo "  sau mỗi seed: lọc Gaussian (opacity < $FILTER_OPACITY, trục lớn nhất > $FILTER_SCALE × scene_scale)" \
@@ -137,7 +149,8 @@ if [ "$ACTION" = plan ]; then
     bash "$REPO_DIR/scripts/pod/fetch_data.sh" "${BENCHES[$i]}" "${scenes[@]}" --dry-run
   done
   echo
-  echo "Các bước: env_check, space_check, ${BENCHES[*]/#/fetch_}"
+  echo "Các bước: ${MONO_RUNS:+depth_anything (bash scripts/setup/setup_depth_anything.sh), }env_check, space_check," \
+    "${BENCHES[*]/#/fetch_}"
   for i in "${!BENCHES[@]}"; do
     if [ -n "$DEPTH_RUNS" ]; then
       echo "  depth_check_${BENCHES[$i]}: python -m src.training.depth_check --test-every $TEST_EVERY" \
@@ -242,15 +255,25 @@ check_envs() {
     || { echo "ERROR: no gsplat checkout in $WS/code/gsplat: run bash scripts/pod/run_all.sh first"; return 1; }
   env_ready gs-gsplat "import torch, fused_ssim; from gsplat import csrc; x = torch.rand(1, 3, 16, 16, device='cuda'); fused_ssim.fused_ssim(x, x)" \
     || return 1
-  # simple_trainer.py that nhan dung tham so cua moi che do va bien the trong ke hoach (vai giay, khong train): sai
-  # thi dung ngay, khong de cac luot cua che do do loi sau nhieu gio
-  local smoke=(--modes "${MODE_LIST[@]}")
-  if [ "${#VARIANT_LIST[@]}" -gt 0 ]; then smoke+=(--variants "${VARIANT_LIST[@]}"); fi
+  # simple_trainer.py that nhan dung tham so cua moi che do va bien the se train (vai giay, khong train; bien the co code:
+  # ban sao co va cua trainer, KR va loss depth prior tren GPU; depth prior: Depth Anything V2 chay duoc tren GPU): sai
+  # thi dung ngay, khong de cac luot do loi sau nhieu gio. Luot bi bo vi buoc depth_anything loi thi khong kiem.
+  local smoke=(--modes) mode entry vmode vtag variants=()
+  for mode in "${MODE_LIST[@]}"; do
+    [[ " $MONO_DROPPED " == *" $mode "* ]] || smoke+=("$mode")
+  done
+  for entry in "${VARIANT_LIST[@]}"; do
+    IFS=: read -r vmode vtag _ <<< "$entry"
+    [[ " $MONO_DROPPED " == *" ${vmode}_$vtag "* ]] || variants+=("$entry")
+  done
+  if [ "${#variants[@]}" -gt 0 ]; then smoke+=(--variants "${variants[@]}"); fi
+  if [ -n "$MONO_RUNS" ] && [ -z "$MONO_DROPPED" ]; then smoke+=(--depth-anything-dir "$WS/code/depth_anything_v2"); fi
   # shellcheck source=/dev/null
   if ! (set +u; . "$WS/miniforge3/etc/profile.d/conda.sh" && conda activate gs-gsplat \
         && python "$REPO_DIR/scripts/setup/smoke_test_gsplat.py" --examples-dir "$WS/code/gsplat/examples" \
            "${smoke[@]}"); then
-    echo "ERROR: gsplat simple_trainer.py does not accept the arguments of a mode or variant in the plan (see above)"
+    echo "ERROR: the gsplat smoke test of the plan failed (simple_trainer.py arguments of a mode or variant, the code"
+    echo "       variants on the GPU, or Depth Anything V2; see the FAIL lines above)"
     return 1
   fi
   if [ "$NEEDS_B0" = 1 ]; then
@@ -283,12 +306,16 @@ own_bytes() {  # own_bytes: dung luong du lieu / ket qua cua thuc nghiem (nhanh:
 }
 
 declare -A DROPPED=()  # theo benchmark: cac luot co loss do sau bi bo vi depth_check_<benchmark> khong dat
+MONO_DROPPED=""        # moi benchmark: cac luot dung depth prior bi bo vi buoc depth_anything loi
 
 seed_space() {  # seed_space [benchmark...]: dat NEED[seed], FINISHED[seed] theo cac luot da xong tren dia
   local text key seed need finished runs bench run only=() without=()  # mac dinh moi benchmark cua ke hoach
   [ "$#" -gt 0 ] && only=(--datasets "$@")
   for bench in "${!DROPPED[@]}"; do  # luot bi bo vi kiem tra diem SfM: khong train, khong can cho
     for run in ${DROPPED[$bench]}; do without+=("$bench:$run"); done
+  done
+  for run in $MONO_DROPPED; do  # luot bi bo vi buoc depth_anything loi, tren moi benchmark
+    for bench in "${BENCHES[@]}"; do without+=("$bench:$run"); done
   done
   if [ "${#without[@]}" -gt 0 ]; then only+=(--without "${without[@]}"); fi
   text="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --space "$NAME" "${only[@]}")" \
@@ -423,7 +450,7 @@ drop_depth_runs() {  # drop_depth_runs <chi so benchmark>: depth_check khong dat
 bench_modes() {  # bench_modes <chi so benchmark>: MODES cua buoc gsplat tren benchmark nay
   local mode out=""
   for mode in "${MODE_LIST[@]}"; do
-    [[ " ${DROPPED[${BENCHES[$1]}]:-} " == *" $mode "* ]] || out+="${out:+ }$mode"
+    [[ " ${DROPPED[${BENCHES[$1]}]:-} $MONO_DROPPED " == *" $mode "* ]] || out+="${out:+ }$mode"
   done
   echo "$out"
 }
@@ -432,7 +459,7 @@ bench_variants() {  # bench_variants <chi so benchmark>: VARIANTS cua buoc gspla
   local entry vmode vtag out=""
   for entry in "${VARIANT_LIST[@]}"; do
     IFS=: read -r vmode vtag _ <<< "$entry"
-    [[ " ${DROPPED[${BENCHES[$1]}]:-} " == *" ${vmode}_$vtag "* ]] || out+="${out:+ }$entry"
+    [[ " ${DROPPED[${BENCHES[$1]}]:-} $MONO_DROPPED " == *" ${vmode}_$vtag "* ]] || out+="${out:+ }$entry"
   done
   echo "$out"
 }
@@ -477,6 +504,9 @@ write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi sr
     if [ -n "$POST_FILTER" ]; then
       echo "- Lọc Gaussian sau khi train: opacity < $FILTER_OPACITY, trục lớn nhất > $FILTER_SCALE × scene_scale"
     fi
+    if [ -n "$MONO_DROPPED" ]; then
+      echo "- Depth Anything V2 chưa sẵn sàng (bước depth_anything lỗi): không train $MONO_DROPPED trên mọi benchmark"
+    fi
     for i in "${!BENCHES[@]}"; do
       if [ -n "${DROPPED[${BENCHES[$i]}]:-}" ] && ! ready "$i"; then
         echo "- ${BENCHES[$i]}: kiểm tra điểm SfM không đạt và ${MODE_LIST[0]} dùng loss độ sâu, không train lượt" \
@@ -520,7 +550,22 @@ write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi sr
 }
 
 # ------------------------------------------------------------------------------------------------- cac buoc
-run_step env_check check_envs
+if [ -n "$MONO_RUNS" ]; then  # truoc env_check: smoke test chay thu Depth Anything V2 tren GPU
+  run_step depth_anything bash "$REPO_DIR/scripts/setup/setup_depth_anything.sh"
+  if ! ok depth_anything; then
+    if [[ " $MONO_RUNS " == *" ${MODE_LIST[0]} "* ]]; then
+      echo "depth_anything lỗi và ${MODE_LIST[0]} dùng depth prior: không train lượt gsplat nào"
+    else
+      MONO_DROPPED="$MONO_RUNS"
+      echo "depth_anything lỗi: bỏ $MONO_DROPPED trên mọi benchmark (cần Depth Anything V2); các lượt khác vẫn train"
+    fi
+  fi
+fi
+if [ -n "$MONO_RUNS" ] && ! ok depth_anything && [ -z "$MONO_DROPPED" ]; then
+  skip_step env_check "depth_anything lỗi và ${MODE_LIST[0]} dùng depth prior"
+else
+  run_step env_check check_envs
+fi
 if ok env_check; then
   run_step space_check space_check
 fi
@@ -588,6 +633,10 @@ else
     for against in "${AGAINST_LIST[@]}"; do
       if [[ " ${DROPPED[$bench]:-} " == *" $against "* ]]; then
         skip_step "report_${bench}_vs_$against" "$against không train trên $bench (kiểm tra điểm SfM không đạt)"
+        continue
+      fi
+      if [[ " $MONO_DROPPED " == *" $against "* ]]; then
+        skip_step "report_${bench}_vs_$against" "$against không train (bước depth_anything lỗi)"
         continue
       fi
       run_step "report_${bench}_vs_$against" env -u QUICK BASELINE="$against" MODES="$others" \

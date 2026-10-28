@@ -13,7 +13,9 @@ import pytest
 
 from colmap_writer import make_model, write_cameras, write_points3d
 from src.reconstruction.colmap_model import read_points3d_binary
-from src.training.run import main, run_command
+from src.training.mono_depth import WEIGHTS_FILE
+from src.training.run import REPO_DIR, main, run_command, scene_fingerprint
+from src.training.trainer_hooks import hook_parameters
 
 CONFIG = Path(__file__).resolve().parents[2] / "configs" / "base.yaml"  # mục train_modes
 
@@ -499,3 +501,112 @@ def test_variant_tag_is_recorded_but_not_part_of_the_run_identity(env, capsys):
     assert run(env, "--tag", "a b", mode="default") == 2 and "invalid --tag" in capsys.readouterr().err
     assert run(env, "--tag", "t1", "--dry-run", out=env["out"].parent / "other") == 0
     assert json.loads(capsys.readouterr().out)["tag"] == "t1"
+
+
+
+class MonoRunner(FakeRunner):
+    """FakeRunner có thêm bước `mono` (src.training.mono_depth): ghi mono_depth.json như module thật."""
+
+    def __init__(self, mono_status="OK", **kwargs):
+        super().__init__(**kwargs)
+        self.mono_status = mono_status
+
+    def __call__(self, cmd, cwd, env, log_path):
+        if "src.training.mono_depth" not in cmd:
+            return super().__call__(cmd, cwd, env, log_path)
+        self.calls.append({"step": "mono", "cmd": cmd, "cwd": cwd, "env": env})
+        Path(log_path).write_text("fake mono log\n", encoding="utf-8")
+        record = {"status": self.mono_status, "train_images": 14, "used": 13, "unchecked": 0, "flipped": 0,
+                  "median_corr": 0.8 if self.mono_status == "OK" else 0.1, "cache": value_after(cmd, "--cache"),
+                  "manifest_sha256": "a" * 64, "low_corr": ["00002.jpg"]}
+        Path(value_after(cmd, "--record")).write_text(json.dumps(record), encoding="utf-8")
+        return 0 if self.mono_status == "OK" else 1
+
+
+@pytest.fixture()
+def depth_anything(tmp_path):
+    folder = tmp_path / "depth_anything_v2"
+    (folder / WEIGHTS_FILE).parent.mkdir(parents=True)
+    (folder / WEIGHTS_FILE).write_bytes(b"weights")
+    return folder
+
+
+def mcmc_variant(env, tmp_path, *sets, runner, depth_anything=None, out=None):
+    if not (tmp_path / "default" / "summary.json").is_file():
+        assert run(env, runner=FakeRunner(), out=tmp_path / "default") == 0
+    extra = [item for pair in sets for item in ("--set", pair)]
+    if depth_anything is not None:
+        extra += ["--depth-anything-dir", str(depth_anything)]
+    return run(env, "--cap-max-from", str(tmp_path / "default"), "--tag", "v2", *extra, runner=runner, mode="mcmc",
+               out=out or tmp_path / "mcmc_v2")
+
+
+def test_code_variants_run_the_hooks_and_the_depth_prior_step(env, tmp_path, depth_anything):
+    runner = MonoRunner()
+    sets = ("sr3d.kr=true", "sr3d.mono=true", "use_bilateral_grid=true")
+    assert mcmc_variant(env, tmp_path, *sets, runner=runner, depth_anything=depth_anything) == 0
+    out = (tmp_path / "mcmc_v2").resolve()
+    assert [call["step"] for call in runner.calls] == ["mono", "train", "eval"]
+    mono, train, evaluation = (call["cmd"] for call in runner.calls)
+    fingerprint = scene_fingerprint(env["scene"])
+    cache = out.parent / f".mono_depth_{fingerprint[:12]}"
+    assert runner.calls[0]["cwd"] == REPO_DIR and mono[1:3] == ["-m", "src.training.mono_depth"]
+    assert value_after(mono, "--scene") == str(env["scene"].resolve()) and value_after(mono, "--cache") == str(cache)
+    assert value_after(mono, "--fingerprint") == fingerprint and value_after(mono, "--split") == str(out / "split.json")
+    assert value_after(mono, "--record") == str(out / "mono_depth.json")
+    assert value_after(mono, "--depth-anything-dir") == str(depth_anything.resolve())
+    own = train[:train.index("--")]
+    assert [own[i + 1] for i, token in enumerate(own) if token == "--hook"] == ["kr", "mono"]
+    assert value_after(own, "--mono-dir") == str(cache)
+    trainer = train[train.index("--") + 1:]
+    assert "--use-bilateral-grid" in trainer and not any("sr3d" in token for token in trainer)
+    assert "--hook" not in evaluation and "--mono-dir" not in evaluation  # đánh giá: simple_trainer.py gốc
+    meta = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["status"] == "DONE" and meta["hooks"] == hook_parameters(["kr", "mono"])
+    assert meta["commands"]["mono"] == mono and "mono_seconds" in meta
+    assert meta["mono_depth"]["status"] == "OK" and meta["mono_depth"]["low_corr"] == 1
+    assert meta["spec"]["args"] == {"sr3d.kr": True, "sr3d.mono": True, "use-bilateral-grid": True}
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "OK" and summary["args"]["sr3d.kr"] is True
+    again = MonoRunner()
+    assert mcmc_variant(env, tmp_path, *sets, runner=again, depth_anything=depth_anything) == 0 and not again.calls
+    meta["hooks"]["kr"]["every"] = 1000  # hằng số của hook đổi: không còn là cùng một lượt
+    (out / "run_meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    assert mcmc_variant(env, tmp_path, *sets, runner=again, depth_anything=depth_anything) == 2 and not again.calls
+
+
+def test_kr_alone_needs_no_depth_prior_step(env, tmp_path):
+    runner = MonoRunner()
+    assert mcmc_variant(env, tmp_path, "sr3d.kr=true", runner=runner, out=tmp_path / "mcmc_kr") == 0
+    assert [call["step"] for call in runner.calls] == ["train", "eval"]
+    own = runner.calls[0]["cmd"][:runner.calls[0]["cmd"].index("--")]
+    assert own.count("--hook") == 1 and "--mono-dir" not in own
+    meta = json.loads((tmp_path / "mcmc_kr" / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["hooks"] == hook_parameters(["kr"]) and "mono" not in meta["commands"]
+    plain = json.loads((tmp_path / "default" / "run_meta.json").read_text(encoding="utf-8"))
+    assert "hooks" not in plain and "mono_depth" not in plain  # lượt không có hook: run_meta như trước
+
+
+def test_failed_depth_prior_check_fails_the_run_before_training(env, tmp_path, depth_anything):
+    runner = MonoRunner(mono_status="FAILED")
+    assert mcmc_variant(env, tmp_path, "sr3d.mono=true", runner=runner, depth_anything=depth_anything) == 1
+    assert [call["step"] for call in runner.calls] == ["mono"]
+    meta = json.loads((tmp_path / "mcmc_v2" / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["status"] == "FAILED" and meta["failed_step"] == "mono" and meta["mono_depth"]["status"] == "FAILED"
+
+
+def test_missing_depth_anything_stops_before_anything_is_written(env, tmp_path, capsys):
+    assert mcmc_variant(env, tmp_path, "sr3d.mono=true", runner=MonoRunner(),
+                        depth_anything=tmp_path / "none") == 2
+    assert "setup_depth_anything.sh" in capsys.readouterr().err and not (tmp_path / "mcmc_v2").exists()
+
+
+def test_dry_run_shows_the_hooks_and_the_depth_prior_command(env, tmp_path, capsys):
+    assert run(env, runner=FakeRunner(), out=tmp_path / "default") == 0
+    capsys.readouterr()
+    assert run(env, "--dry-run", "--cap-max-from", str(tmp_path / "default"), "--set", "sr3d.mono=true", mode="mcmc",
+               out=tmp_path / "mono") == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["hooks"] == hook_parameters(["mono"]) and "src.training.mono_depth" in plan["mono"]
+    assert "--hook mono --mono-dir" in plan["train"] and "--hook" not in plan["eval"]
+    assert not (tmp_path / "mono").exists()

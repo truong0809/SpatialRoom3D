@@ -129,11 +129,12 @@ Nếu chỉ một benchmark cải thiện, hoặc chỉ một chỉ số, thì g
 
 ## 3. Dò tham số `mcmc`: `tune_mcmc`
 
-Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script với thực nghiệm chính. **Trạng thái: đã viết, đã kiểm thử bằng stub trong sandbox; chưa chạy trên pod, chưa có số liệu.**
+Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script với thực nghiệm chính. **Trạng thái: đã viết, đã kiểm thử bằng stub trong sandbox; chưa chạy trên pod, chưa có số liệu.** Bốn biến thể lấy từ notebook v2 (mục 3.7): đã viết, đã kiểm thử trên CPU (kể cả `simple_trainer.py` thật của gsplat @6e8c837 ở chế độ chỉ phân giải tham số); **chưa chạy một vòng train nào trên GPU**.
 
 ### 3.1 Câu hỏi và cách dùng kết quả
 
 - Với cảnh trong nhà, tham số nào của `mcmc` đáng đổi: độ mạnh của regularization opacity / scale, nhiễu của MCMC, ngưỡng opacity mà MCMC dời Gaussian, nền ngẫu nhiên khi train, loss độ sâu theo điểm SfM, dời Gaussian đến vòng cuối, bậc SH thấp hơn (file nhẹ hơn)?
+- Ba thành phần mà notebook v2 của nhóm thêm vào `mcmc` (bilateral grid, Kill-then-Relocate, depth prior) có ích không khi đo theo protocol chung, từng thành phần một; và cả gói v2 so với `mcmc` (mục 3.7)?
 - Đây là bước **sàng lọc**: một cảnh (`room`), một seed (42). Bảng ghi `seeds=FEW` (hoặc `seeds=DIFF` khi `room` đã có 3 seed của thực nghiệm chính) và không đủ để nói "cải thiện". Một biến thể chỉ được coi là đáng giữ khi hơn `mcmc` rõ ràng hơn độ dao động thường gặp giữa các seed; độ dao động này trên `room` chỉ đo được khi có 3 seed của thực nghiệm chính (chạy `main` trước thì đã có: độ lệch chuẩn của `mcmc` trên `room`), nên kết luận của bước này là giả thuyết, được kiểm lại ở vòng ghép (mục 3.6).
 - Sau khi có kết quả: chọn ứng viên, ghép thành vài cấu hình rồi chạy 2 seed mới (43, 44) trên `room` (vòng ghép, mục 3.6). Cấu hình được chọn thành chế độ mới `mcmc_indoor` trong `configs/base.yaml` (cùng preset `mcmc`, cùng `cap_max: {policy: match_baseline}`), rồi được đưa vào `main.yaml` với `also_against: [mcmc]` để so trên 6 cảnh × 3 seed.
   - Thư mục của `mcmc_indoor` là `mcmc_indoor_s<seed>`, khác thư mục của cấu hình trong vòng ghép, nên `main` train lại 3 lượt của nó trên `room` dù cùng cấu hình: thêm một lần lặp trên cảnh dùng để chọn, không đổi kết luận.
@@ -144,14 +145,14 @@ Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script v
   BASELINE=mcmc MODES="mcmc mcmc_indoor" SCENES="counter kitchen bonsai" bash scripts/run_evaluate.sh mipnerf360
   ```
   Khi báo cáo, dòng của `room` vẫn ghi nhưng nói rõ là cảnh đã dùng để chọn tham số. Cách chặt hơn (chưa làm): dò trên một phần ảnh train của `room` tách ra làm tập kiểm định.
-- Đây là tinh chỉnh tham số của một phương pháp có sẵn (3DGS-MCMC trên gsplat) cộng một bước hậu xử lý, không phải thuật toán mới.
+- 12 biến thể tham số là tinh chỉnh tham số của một phương pháp có sẵn (3DGS-MCMC trên gsplat) cộng một bước hậu xử lý, không phải thuật toán mới. Ba thành phần của notebook v2 là thay đổi phương pháp ở mức tích hợp: bilateral grid và loss Pearson với độ sâu đơn ảnh là kỹ thuật đã công bố (mục 3.7), Kill-then-Relocate là heuristic của nhóm, không có paper. Không gọi phần nào là thuật toán mới.
 
 ### 3.2 Thiết kế
 
 | Mục | Giá trị |
 |---|---|
 | Chế độ | `default`, `mcmc` |
-| Biến thể của `mcmc` (`variants`) | mỗi biến thể đổi đúng một tham số của `simple_trainer.py` so với preset `mcmc` của gsplat @6e8c837 (`opacity_reg` 0,01, `scale_reg` 0,01, `strategy.noise_lr` 5e5, `strategy.min_opacity` 0,005, `random_bkgd` tắt, `depth_loss` tắt, `strategy.refine_stop_iter` 25.000, `sh_degree` 3): `or0001` (`opacity_reg` 0,001), `or0005` (0,005), `or005` (0,05), `sr0001` (`scale_reg` 0,001), `sr005` (0,05), `nlr250k` (`strategy.noise_lr` 2,5e5), `nlr1m` (1e6), `mo002` (`strategy.min_opacity` 0,02), `rbg` (`random_bkgd`), `depth` (`depth_loss`, `depth_lambda` mặc định 0,01), `rs30k` (`strategy.refine_stop_iter` 30.000), `sh2` (`sh_degree` 2) |
+| Biến thể của `mcmc` (`variants`) | 16 biến thể, theo thứ tự chạy. Ba biến thể thêm từng thành phần của notebook v2: `mono` (`sr3d.mono`), `kr` (`sr3d.kr`), `bilagrid` (`use_bilateral_grid`); rồi gói `v2` (mục 3.7). Rồi 12 biến thể tham số, mỗi biến thể đổi đúng một tham số của `simple_trainer.py` so với preset `mcmc` của gsplat @6e8c837 (`opacity_reg` 0,01, `scale_reg` 0,01, `strategy.noise_lr` 5e5, `strategy.min_opacity` 0,005, `random_bkgd` tắt, `depth_loss` tắt, `strategy.refine_stop_iter` 25.000, `sh_degree` 3): `or0001` (`opacity_reg` 0,001), `or0005` (0,005), `or005` (0,05), `sr0001` (`scale_reg` 0,001), `sr005` (0,05), `nlr250k` (`strategy.noise_lr` 2,5e5), `nlr1m` (1e6), `mo002` (`strategy.min_opacity` 0,02), `rbg` (`random_bkgd`), `depth` (`depth_loss`, `depth_lambda` mặc định 0,01), `rs30k` (`strategy.refine_stop_iter` 30.000), `sh2` (`sh_degree` 2). Bốn biến thể của notebook chạy trước để code mới (bước `mono`, KR, loss của prior trên GPU) chạy sớm: lỗi thì thấy sau khoảng một giờ, không phải sau năm giờ; thứ tự chỉ đổi lịch chạy, không đổi kết quả |
 | Dữ liệu | Mip-NeRF 360 `room` (`images_2`) |
 | Seed | 42 |
 | Protocol, ngân sách Gaussian | như thực nghiệm chính (mục 2.2): mọi biến thể lấy `cap_max` từ lượt `default` cùng cảnh, cùng seed |
@@ -168,13 +169,13 @@ Các khóa của kế hoạch, ngoài các khóa của mục 2 (`src/training/ex
 - `variants`: danh sách `{mode, tag, set, description}`.
   - `mode` là một chế độ trong `modes`, không phải `default`.
   - `tag`: chữ thường và số, các từ nối bằng `_`.
-  - `set`: tham số của `simple_trainer.py`, giá trị là số, true / false hoặc chữ không dấu cách. Khóa protocol và tham số do wrapper quản lý (`max_steps`, `data_factor`, `strategy.cap_max`...) bị từ chối, nên biến thể không đổi được protocol.
+  - `set`: tham số của `simple_trainer.py`, giá trị là số, true / false hoặc chữ không dấu cách. Khóa protocol và tham số do wrapper quản lý (`max_steps`, `data_factor`, `strategy.cap_max`...) bị từ chối, nên biến thể không đổi được protocol. Khóa `sr3d.kr`, `sr3d.mono` bật biến thể có code (mục 3.7), chỉ nhận `true`; khóa `sr3d.*` khác bị từ chối.
   - Thư mục của biến thể `<chế_độ>_<tag>_s<seed>` không được trùng một chế độ khác.
   - Cấu hình của mỗi lượt (preset, protocol, ngân sách Gaussian, tham số; 250000 và 250000.0 là một) được so sau khi ghép quy ước mcmc của benchmark. Hai lượt cùng chế độ mà cùng cấu hình là lỗi, vì bảng so sánh gom lượt theo chế độ + tham số (vd. trên Deep Blending, một biến thể `opacity_reg: 0.001` của `mcmc` trùng với chính `mcmc`). Hai chế độ khác tên mà cùng cấu hình (vd. một chế độ mới không có tham số riêng) chỉ là cảnh báo, in cùng kế hoạch: cả hai vẫn train, mỗi chế độ một dòng trong bảng. Biến thể bằng đúng giá trị mặc định của gsplat (vd. `opacity_reg: 0.01`) thì chưa bắt được: không có giá trị mặc định của gsplat lúc kiểm tra kế hoạch.
   - Thứ tự ghép tham số (ưu tiên tăng dần): preset của gsplat → quy ước mcmc của benchmark (`benchmark.gsplat.mcmc_set`, vd. `opacity_reg=0.001` trên Deep Blending; chỉ cho chế độ preset mcmc) → tham số của chế độ trong `configs/base.yaml` → tham số của biến thể. Chế độ tự đặt khóa của quy ước (vd. `mcmc_indoor` với `opacity_reg` riêng) thì giữ giá trị của nó trên mọi benchmark; khóa khác của quy ước vẫn được thêm.
   - Tag được ghi vào `run_meta.json` (`src.training.run --tag`): bảng so với `mcmc` lấy các lượt không có tag làm mốc. Bảng chỉ đưa vào lượt có tag khi được yêu cầu (`TAGS` của `scripts/run_evaluate.sh`): bảng của kế hoạch này có các biến thể của nó, bảng của thực nghiệm chính (chạy trên cùng thư mục) thì không, kèm một dòng cảnh báo ghi số lượt để ngoài.
 - `post_filter: {min_opacity, max_scale}`: sau mỗi seed, lọc mọi lượt đã train xong của seed đó rồi chấm lại (mục 4). 0 là tắt một tiêu chí, không được tắt cả hai.
-- Chế độ hoặc biến thể có `depth_loss: true` thêm bước kiểm tra điểm SfM (mục 3.3, bước 3b).
+- Chế độ hoặc biến thể có `depth_loss: true` thêm bước kiểm tra điểm SfM (mục 3.3, bước 3b). Có `sr3d.mono: true` thì thêm bước `depth_anything` trước `env_check` (mục 3.3, bước 0).
 
 ### 3.3 Chạy
 
@@ -184,18 +185,19 @@ bash scripts/pod/run_experiment.sh tune_mcmc --plan                       # ch�
 ```
 
 Hoặc ô 7 của notebook với `WHAT = "experiment"`, `EXP = "tune_mcmc"`. Các bước như mục 2.3, thêm:
-- 1. `env_check` kiểm tra cả tham số của 12 biến thể với `simple_trainer.py` thật (sai tên tham số thì dừng trước khi tải, chưa tốn GPU).
+- 0. `depth_anything`: tải code và trọng số Depth Anything V2 Small nếu chưa có (`scripts/setup/setup_depth_anything.sh`; bản ghim, kiểm SHA-256). Không tải được thì bước này lỗi và chỉ bỏ các lượt dùng prior (`mono`, `v2`) trên mọi benchmark: kiểm tra môi trường và chỗ trống không tính hai lượt đó, các lượt khác vẫn train, báo cáo ghi một dòng, việc nền kết thúc với exit 1.
+- 1. `env_check` kiểm tra tham số của mọi lượt sẽ train với `simple_trainer.py` thật, kể cả bản sao có vá của `kr`, `mono`, `v2`; chạy thử trên GPU với tensor nhỏ KR (cùng bước relocate thật của MCMC), loss của prior và kiểm NaN; khi bước 0 đạt, chạy thử Depth Anything V2 trên ảnh tổng hợp. Sai thì dừng trước khi tải, chưa tốn GPU cho train: lỗi ở đây là lỗi code hoặc môi trường, dừng cả việc như mọi lỗi của `env_check`, sửa rồi chạy lại. Lỗi ở bước 0 (thường do mạng: GitHub, Hugging Face, không sửa ngay được) thì chỉ bỏ riêng các lượt dùng prior.
 - 3b. `depth_check_<benchmark>`: mỗi ảnh train của mỗi cảnh có điểm SfM (`src/training/depth_check.py`; Parser của gsplat, không GPU, vài giây). Với `depth_loss`, gsplat @6e8c837 báo `KeyError` khi nạp một ảnh không có điểm nào trong track của SfM: không đạt, và chỉ các lượt có loss độ sâu của benchmark đó bị bỏ (B0 và các lượt khác vẫn chạy; baseline có loss độ sâu thì bỏ mọi lượt gsplat của benchmark đó, vì các lượt khác lấy ngân sách Gaussian từ nó). Ảnh có track nhưng mọi điểm nằm ngoài ảnh thì chỉ cảnh báo: ảnh đó không có giám sát độ sâu, loss ghi ra là NaN ở những vòng gặp ảnh đó, gradient vẫn hữu hạn (thử lại đoạn loss của simple_trainer.py bằng PyTorch trên CPU).
-- 5. `gsplat_<benchmark>_s<seed>`: trên mỗi cảnh: `default`, `mcmc`, rồi 12 biến thể theo thứ tự trong kế hoạch.
+- 5. `gsplat_<benchmark>_s<seed>`: trên mỗi cảnh: `default`, `mcmc`, rồi 16 biến thể theo thứ tự trong kế hoạch (mục 3.2). Lượt `mono`, `v2` có thêm bước `mono` trước khi train (mục 3.7): lần đầu tính depth prior của cảnh, các lượt sau dùng lại; prior không khớp điểm SfM thì lượt đó lỗi ở bước này, các lượt khác vẫn train, lọc và báo cáo vẫn chạy, nhưng bước `gsplat_<benchmark>_s<seed>` ghi lỗi và việc nền kết thúc với exit 1.
 - 5b. `filter_<benchmark>_s<seed>`: lọc và chấm lại mọi lượt đã xong của seed đó (`src/training/prune.py --skip-unfinished`; lượt train lỗi thì bỏ qua, bước gsplat đã báo lỗi). Lọc lỗi không dừng việc train.
 - Lượt `room/default_s42` và `room/mcmc_s42` dùng chung thư mục với thực nghiệm chính: hai lượt này chỉ train một lần, dù `main` chạy trước hay sau.
 
 ### 3.4 Thời gian và dung lượng
 
 Ước lượng trên RTX 4090, chưa phải số đo (`configs/experiments/tune_mcmc.yaml`):
-- Khoảng 6 giờ GPU: 14 lượt × khoảng 19 phút (train, chấm, video; cùng giả định với Mip-NeRF 360 trong `main.yaml`), cộng lọc và chấm lại khoảng 4 phút mỗi lượt (khoảng 5,4 giờ). Chạy sau `main` thì `default_s42`, `mcmc_s42` đã có: 12 lượt train, 14 lượt lọc, khoảng 4,7 giờ.
-- Thêm khoảng 27 GB trên volume: khoảng 1,8 GB mỗi lượt (checkpoint và PLY, ảnh render, video, bản đã lọc; `sh2` nhỏ hơn), cộng khoảng 2 GB dữ liệu `room` và ảnh PNG thu nhỏ. Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
-- Chạy `main`, `tune_mcmc`, vòng ghép (mục 3.6) rồi `mcmc_indoor` trên cùng volume: khoảng 130 GB kết quả (56 + 27 + tối đa 20 + khoảng 25 GB cho 18 lượt `mcmc_indoor`) cộng 15–20 GB môi trường, nên dùng volume 170 GB. Volume tăng được bất cứ lúc nào, không giảm được: có thể bắt đầu với 100 GB cho `main` rồi tăng trước các bước sau.
+- Khoảng 7,3 giờ GPU (kế hoạch ghi 8 cho dư): 18 lượt × khoảng 19 phút (train, chấm, video; cùng giả định với Mip-NeRF 360 trong `main.yaml`), cộng lọc và chấm lại khoảng 4 phút mỗi lượt (khoảng 6,9 giờ), cộng phần chậm hơn chưa đo của `bilagrid`, `mono`, `v2` (giả định +30 % mỗi lượt: render thêm độ sâu, loss thêm) và depth prior của `room` (vài phút, một lần). Chạy sau `main` thì `default_s42`, `mcmc_s42` đã có: 16 lượt train, 18 lượt lọc, khoảng 6,7 giờ.
+- Thêm khoảng 35 GB trên volume: khoảng 1,8 GB mỗi lượt (checkpoint và PLY, ảnh render, video, bản đã lọc; `sh2` nhỏ hơn), cộng khoảng 2 GB dữ liệu `room` và ảnh PNG thu nhỏ, khoảng 0,3 GB depth prior, khoảng 0,2 GB Depth Anything V2 Small (code khoảng 114 MB kể cả lịch sử git, trọng số 99 MB). Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
+- Chạy `main`, `tune_mcmc`, vòng ghép (mục 3.6) rồi `mcmc_indoor` trên cùng volume: khoảng 140 GB kết quả (56 + 35 + tối đa 20 + khoảng 25 GB cho 18 lượt `mcmc_indoor`) cộng 15–20 GB môi trường, nên dùng volume 170 GB. Volume tăng được bất cứ lúc nào, không giảm được: có thể bắt đầu với 100 GB cho `main` rồi tăng trước các bước sau.
 
 ### 3.5 Kết quả và cách đọc
 
@@ -205,6 +207,12 @@ Với các biến thể nhắm vào floater (`or005`, `mo002`, `rbg`, `depth`), 
 
 Với `sh2`: bảng chất lượng theo dung lượng (cột byte mỗi Gaussian) và bề mặt bóng loáng, phản chiếu trên ảnh so sánh, vì SH bậc thấp hơn giữ ít màu thay đổi theo góc nhìn hơn.
 
+Với các biến thể của mục 3.7:
+- `bilagrid`, `v2`: PSNR / SSIM / LPIPS tính trên ảnh render **không qua** bilateral grid (ảnh test không có grid riêng), như mọi lượt. gsplat còn ghi `cc_psnr` / `cc_ssim` / `cc_lpips` vào `stats/val_step*.json`, nhưng các số đó chỉnh màu ảnh render theo chính ảnh test (`color_correct`), nên không dùng để so. Bilateral grid hấp thụ chênh lệch màu giữa các ảnh train; nếu ảnh test có phơi sáng khác ảnh train, PSNR có thể giảm dù hình học tốt hơn: xem thêm ảnh so sánh.
+- `kr`, `v2`: `sr3d_hooks.jsonl` của lượt ghi mỗi lần KR bao nhiêu Gaussian bị dời và vì sao (quá lớn, hình kim, sát camera). Xem ảnh so sánh và nửa độ sâu của video như các biến thể nhắm vào floater.
+- Lượt có hook (`kr`, `mono`, `v2`) dừng ngay khi một Gaussian có tham số không hữu hạn (mục 3.7); lượt khác train đến hết, PLY của gsplat lặng lẽ bỏ các Gaussian đó (`export_splats`) còn checkpoint vẫn giữ. Số Gaussian không hữu hạn trong checkpoint cuối của mọi lượt có ở `filtered/filter_meta.json` (`counts.removed.non_finite`). Một lượt có hook dừng vì NaN thì xem số đó của `mcmc` và các lượt khác trước khi kết luận biến thể làm train kém ổn định: tiêu chí dừng chặt hơn tiêu chí của các lượt được so.
+- `mono`, `v2`: `mono_depth.json` ghi số ảnh train dùng prior và trung vị tương quan với điểm SfM; `sr3d_hooks.jsonl` ghi loss Pearson trung bình mỗi 500 vòng. Tường, sàn phẳng hơn phải thấy ở nửa độ sâu của video; độ sâu render đẹp hơn không có nghĩa là hình học đúng hơn khi chưa có độ sâu thật để so.
+
 ### 3.6 Vòng ghép: chọn `mcmc_indoor` trên seed mới
 
 **Trạng thái: mới thiết kế; file kế hoạch viết khi có kết quả của `tune_mcmc`; chưa chạy.**
@@ -213,13 +221,13 @@ Mục đích: chọn bộ tham số cho `mcmc_indoor` trên những lượt chư
 
 **Mức dao động.** Với mỗi chỉ số (PSNR, SSIM, LPIPS), σ là độ lệch chuẩn gộp giữa các seed của `default` và `mcmc` trên `room` trong bảng của `main`: σ = √((σ_default² + σ_mcmc²) / 2), từ 6 lượt (một σ ước từ 3 lượt quá bất định). Chênh lệch giữa hai lượt có độ lệch khoảng √2·σ, nên đơn vị dao động là d = √2·σ. σ gộp vẫn còn bất định: d chỉ là ngưỡng thô. Điểm chuẩn hóa của một cấu hình là S = ΔPSNR / d_PSNR + ΔSSIM / d_SSIM − ΔLPIPS / d_LPIPS (Δ = cấu hình − `mcmc`; LPIPS thấp hơn là tốt hơn).
 
-1. **Chọn ứng viên** từ bảng so với `mcmc` của `tune_mcmc` (`room`, seed 42). Một biến thể là ứng viên khi không kém `mcmc` quá d ở chỉ số nào, và có thêm một trong ba điều:
+1. **Chọn ứng viên** từ bảng so với `mcmc` của `tune_mcmc` (`room`, seed 42), trong 15 biến thể đổi một thứ (12 tham số cùng `bilagrid`, `kr`, `mono`); gói `v2` không phải ứng viên (mục 3.7). Một biến thể là ứng viên khi không kém `mcmc` quá d ở chỉ số nào, và có thêm một trong ba điều:
    - hơn `mcmc` quá d ở ít nhất một chỉ số;
    - ảnh so sánh và nửa độ sâu của video có ít floater hơn rõ (bằng chứng chính, đánh giá bằng mắt). Bảng cấu trúc mô hình chỉ để tham khảo: `mo002` (MCMC dời mọi Gaussian có opacity ≤ 0,02, đúng ngưỡng của bảng và của bộ lọc) và phần nào `rs30k` tự làm giảm tỉ lệ Gaussian gần trong suốt;
    - file nhẹ hơn rõ (`sh2`; bảng chất lượng theo dung lượng).
 
    Mỗi ứng viên ghi lý do theo số liệu. Cùng một tham số chỉ giữ giá trị có S lớn nhất (vd. một trong `or0001`, `or0005`, `or005`). Nhiều hơn 3 ứng viên thì giữ 3 ứng viên có S lớn nhất; nếu 3 ứng viên đó không có ứng viên nào vào nhờ floater mà vẫn còn ứng viên như vậy, ứng viên floater có S lớn nhất thay cho ứng viên thứ ba. Không có ứng viên nào thì dừng: ghi kết quả âm tính, không có vòng ghép, không định nghĩa `mcmc_indoor`.
-2. **Cấu hình.** Gọi A là ứng viên có S lớn nhất, B và C là các ứng viên còn lại: 1 ứng viên → {A}; 2 ứng viên → {A, A+B}; 3 ứng viên → {A, A+B, A+C, A+B+C}. Mỗi cấu hình là một biến thể của `mcmc`, có thể nhiều tham số trong `set`, vd. `{mode: mcmc, tag: c2, set: {opacity_reg: 0.05, strategy.min_opacity: 0.02}}`. Mọi cấu hình dùng tag mới (`c1`…`c4`), kể cả A: bảng lấy mọi seed có trên đĩa của các tag được yêu cầu, nên tag cũ sẽ đưa lượt seed 42 của lượt dò vào bảng.
+2. **Cấu hình.** Gọi A là ứng viên có S lớn nhất, B và C là các ứng viên còn lại: 1 ứng viên → {A}; 2 ứng viên → {A, A+B}; 3 ứng viên → {A, A+B, A+C, A+B+C}. Mỗi cấu hình là một biến thể của `mcmc`, có thể nhiều tham số trong `set`, vd. `{mode: mcmc, tag: c2, set: {opacity_reg: 0.05, strategy.min_opacity: 0.02}}`; ứng viên `kr`, `mono` vào cấu hình bằng `sr3d.kr: true`, `sr3d.mono: true`. Mọi cấu hình dùng tag mới (`c1`…`c4`), kể cả A: bảng lấy mọi seed có trên đĩa của các tag được yêu cầu, nên tag cũ sẽ đưa lượt seed 42 của lượt dò vào bảng.
 3. **Kế hoạch** `configs/experiments/tune_mcmc_combo.yaml`, cùng các khóa của mục 3.2: `modes: [default, mcmc]`, `also_against: [mcmc]`, `variants` là các cấu hình ở bước 2, `seeds: [43, 44]`, `room` của Mip-NeRF 360, `b0: false`, cùng `post_filter` với `tune_mcmc`.
    - `estimate.disk_gb` khoảng 1,8 GB × số lượt của kế hoạch, kể cả các lượt `default`, `mcmc`: khi chưa có lượt cùng cấu hình đã xong, kiểm tra chỗ trống tính mỗi lượt bằng `disk_gb` chia đều cho mọi lượt.
    - Chạy như mục 3.3 với tên kế hoạch mới (ô 7: `EXP = "tune_mcmc_combo"`), sau `main` (cần σ và các lượt seed 43, 44 của nó) và trên cùng loại GPU với `main`: lượt `default`, `mcmc` seed 43, 44 của `room` dùng chung thư mục với `main` nên không train lại, và bảng so sánh kiểm tra tên GPU của mọi lượt.
@@ -233,13 +241,52 @@ Mục đích: chọn bộ tham số cho `mcmc_indoor` trên những lượt chư
 
    `mcmc_indoor` trong `configs/base.yaml` mang đúng `set` của cấu hình được chọn (mục 3.1). Bước lọc không thuộc chế độ: lọc là hậu xử lý, báo cáo riêng (mục 4).
 5. **Không dùng 5 cảnh kết luận để chọn.** Bước 1–4 chỉ dùng bảng và ảnh của `room`. Bảng của `main` trên 5 cảnh còn lại đã có trước khi chọn; khi chọn, chúng chỉ dùng để kiểm điều kiện (B0 so với số Inria công bố, `default` so với B0, đủ seed). Việc đối chiếu `default` / `mcmc` với lượt 17/10/2026 của repo trước làm sau khi chọn (P9 của `docs/PROJECT_STATUS.md`). Ghi quyết định và lý do trước khi đọc các bảng đó để kết luận; báo cáo ghi rõ kết quả `default` / `mcmc` trên các cảnh đó đã có trước khi chọn.
-6. **Báo cáo công sức dò:** số cấu hình đã thử (12 biến thể của `tune_mcmc` và các cấu hình của vòng này), tất cả trên `room`; `default` và `mcmc` dùng tham số gốc, không dò. Kết luận về `mcmc_indoor` vẫn dựa trên 5 cảnh còn lại (mục 3.1).
+6. **Báo cáo công sức dò:** số cấu hình đã thử (16 biến thể của `tune_mcmc` và các cấu hình của vòng này), tất cả trên `room`; `default` và `mcmc` dùng tham số gốc, không dò. Kết luận về `mcmc_indoor` vẫn dựa trên 5 cảnh còn lại (mục 3.1).
 
 **Ước lượng** trên RTX 4090, chưa phải số đo: 1–4 cấu hình × 2 seed, tức 2–8 lượt, mỗi lượt khoảng 23 phút kể cả lọc và chấm lại, cộng lọc và chấm lại 4 lượt `default`, `mcmc` seed 43, 44 (khoảng 16 phút): khoảng 1–3,5 giờ GPU. Thêm khoảng 10–20 GB: khoảng 1,8 GB mỗi lượt mới, cộng bản đã lọc của 4 lượt kia (tối đa khoảng 6 GB).
 
+### 3.7 Biến thể từ notebook v2: `bilagrid`, `kr`, `mono` và gói `v2`
+
+**Trạng thái: đã viết, đã kiểm thử trên CPU (mục cuối); chưa train trên GPU, chưa có số liệu.** Quyết định D16 (`docs/PROJECT_STATUS.md`).
+
+Notebook demo v2 của nhóm (`3D_demo_v2.ipynb`, giống v4 `3D_demo_v4_improved_30k.ipynb` nhưng 7.000 vòng) thêm vào `mcmc`: `global_scale` tính lại cho bền với camera lỗi, tâm cảnh theo vị trí camera, Kill-then-Relocate, bilateral grid, depth prior; cùng `depth_loss` (điểm SfM), `random_bkgd` và `strategy.refine_stop_iter` = 0,8 × số vòng. `depth_loss` và `random_bkgd` đã có ở `depth`, `rbg`. Ba thành phần còn lại thành ba biến thể, mỗi biến thể thêm đúng một thành phần; thêm một gói bật cùng lúc mọi thứ.
+
+| Biến thể | `set` | Cách làm trong repo | Nguồn |
+|---|---|---|---|
+| `bilagrid` | `use_bilateral_grid: true` | Cờ có sẵn của `simple_trainer.py` (`examples/lib_bilagrid.py`, cần `tensorly`: có trong env `gs-gsplat`). Mỗi ảnh train có một grid 16 × 16 × 8 học phép biến đổi màu; ảnh test render không qua grid. Grid không nằm trong checkpoint | Wang et al., *Bilateral Guided Radiance Field Processing*, ACM TOG (SIGGRAPH) 2024 |
+| `kr` | `sr3d.kr: true` | Hook trên bản sao có vá của trainer (`docs/design/training_modes.md` mục 3.1): ở các vòng refine của MCMC chia hết cho 500, từ 3.000 đến 21.000 (10–70 % số vòng), Gaussian còn sống mà trục lớn nhất > 0,15 × `scene_scale`, hình kim (trục lớn nhất > 0,01 × `scene_scale` và gấp hơn 15 lần trục giữa) hoặc cách một camera train dưới 0,03 × `scene_scale` bị hạ opacity xuống dưới `strategy.min_opacity`; bước relocate của MCMC ngay sau đó trong cùng vòng dời chúng tới vị trí các Gaussian khác. Mỗi lần tối đa 2 % số Gaussian, ưu tiên trục lớn nhất; số Gaussian không đổi. Như Gaussian "chết" của MCMC (và như notebook), Gaussian bị dời nhận tham số mới nhưng giữ moment Adam cũ: relocate của gsplat chỉ đặt lại moment của Gaussian nguồn | Notebook của nhóm, không có paper. Khác bước relocate gốc của 3DGS-MCMC (chỉ dời Gaussian gần trong suốt, ảnh render gần như không đổi), KR dời cả Gaussian còn nhìn thấy: heuristic nằm ngoài công thức MCMC |
+| `mono` | `sr3d.mono: true` | Bước `mono` trước khi train tính depth prior của cảnh bằng Depth Anything V2 Small (`src/training/mono_depth.py`, mục dưới); hook cộng vào loss: λ · (1 − Pearson(1/độ sâu render, prior)) trên pixel có alpha > 0,5 (ít nhất 256 pixel), nghịch đảo độ sâu bị chặn trong khoảng phân vị 2–98 %, λ = 0,05, đến vòng 18.000 (60 % số vòng). Render thêm độ sâu (`RGB+ED`) dù `depth_loss` tắt | Depth Anything V2 (Yang et al., NeurIPS 2024); loss Pearson cho độ sâu đơn ảnh như FSGS (Zhu et al., ECCV 2024); hằng số theo notebook |
+| `v2` | `depth_loss`, `random_bkgd`, `use_bilateral_grid`: true; `strategy.refine_stop_iter`: 24000; `sr3d.kr`, `sr3d.mono`: true | Mọi thứ trên cùng lúc | Gói, theo notebook |
+
+**Depth prior** (`src/training/mono_depth.py`): Depth Anything V2 Small từ code chính thức (commit `a561b84`, Apache-2.0) với trọng số bản Small (Apache-2.0; các bản lớn hơn là CC-BY-NC-4.0), kiểm SHA-256; tải bằng `scripts/setup/setup_depth_anything.sh` vào `$WS/code/depth_anything_v2`, chạy trong env `gs-gsplat` (không thêm gói Python). Với mỗi ảnh đã đăng ký: bản đồ độ sâu tương đối (lớn = gần), thu về cạnh dài 768 px (mạng chạy ở cạnh ngắn 518 px), lưu float16 trong `<thư mục kết quả của cảnh>/.mono_depth_<dấu mô hình COLMAP>/`, dùng chung cho mọi lượt của cảnh. Độ tin cậy từng ảnh: hệ số Pearson với nghịch đảo độ sâu của các điểm SfM ảnh đó thấy (≥ 30 điểm); hệ số âm thì thử đảo bản đồ; dưới 0,15 thì ảnh đó không dùng prior. Cả cảnh: trung vị trên ảnh train phải ≥ 0,3, không thì bước `mono` lỗi và lượt không train. Camera phải không méo (PINHOLE / SIMPLE_PINHOLE): benchmark và cảnh qua `colmap_runner` đều vậy.
+
+**Khác notebook** (theo protocol chung, để so được với `mcmc`):
+- 30.000 vòng (notebook v2: 7.000); `cap_max` bằng số Gaussian cuối của `default` (notebook: cố định 1.000.000); `antialiased` tắt (notebook bật); LPIPS VGG (notebook AlexNet).
+- KR chỉ xét camera train. Notebook xét mọi camera, kể cả camera test, tức dùng vị trí camera test khi train.
+- Không tự tắt thành phần khi gặp NaN. Notebook tự tắt dần depth prior, bilateral grid, fused-ssim, antialiased rồi train lại, nên không chắc lượt cuối dùng phương pháp nào; bộ dò NaN của notebook cũng không tắt được `depth_loss` (đã kiểm tra bằng mô phỏng). Ở repo, lượt có hook (`kr`, `mono`, `v2`) kiểm tham số Gaussian mỗi 500 vòng: không hữu hạn thì lượt dừng và lỗi (`FloatingPointError`, ghi vào `sr3d_hooks.jsonl`). Lượt không có hook (`bilagrid` và mọi lượt khác) như mọi lượt của gsplat: không kiểm giữa chừng, chỉ số cuối không hữu hạn thì bảng so sánh ghi lượt là lỗi.
+- Depth prior: code chính thức thay cho pipeline `transformers` (bản `-hf`) của notebook; cạnh dài 768 px thay cho một nửa độ phân giải ảnh; prior không đạt thì lượt lỗi, notebook thì tự tắt prior rồi train tiếp như `mcmc` thường. Bộ ước lượng được kiểm bằng ảnh tổng hợp trong `env_check`.
+- Bỏ `global_scale` tính lại và tâm cảnh theo camera: cảnh benchmark không có camera đăng ký sai, còn đổi tâm cảnh chỉ dời và co giãn cả cảnh. Hai bước này thuộc phần chuẩn bị dữ liệu của cảnh tự quay; xét lại khi chạy video của nhóm.
+- Chỉ số: PSNR trên ảnh render không qua grid, không dùng `cc_psnr` (mục 3.5).
+
+**Gói `v2`** chỉ trả lời "notebook v2, đưa về protocol chung, so với `mcmc`" trên `room`, seed 42. Nó không phải ứng viên của vòng ghép: gộp sáu thay đổi nên không biết phần nào có ích, và một phần có lợi có thể bị một phần có hại che đi; câu hỏi đó do ba biến thể tách riêng trả lời. **Chưa quyết định:** có đưa `v2` vào vòng ghép như một cấu hình thêm (2 seed mới) để có số chắc hơn một seed hay không. Quyết định đó phải ghi lại trước khi đọc kết quả của `tune_mcmc` (mục 3.6: luật cố định trước khi có số liệu); không ghi thì `v2` chỉ là một dòng sàng lọc.
+
+**Đã kiểm thử trên CPU** (chưa train trên GPU):
+- vá `simple_trainer.py` thật của gsplat @6e8c837: đúng SHA-256 của bản ghim, 4 dòng chèn nằm đúng chỗ trong vòng lặp của `Runner.train` (cây cú pháp: sau khi tách màu / độ sâu; loss của prior sau loss độ sâu SfM, trước TV loss và `loss.backward()`; KR là lệnh đầu của nhánh MCMC, trước `step_post_backward`); `smoke_test_gsplat.py` mục 5 với trainer thật (PyTorch 2.7.1 chạy trên CPU, thư viện theo file khóa của env, fused-ssim thay bằng stub) phân giải đúng tham số của cả 18 lượt của `tune_mcmc`, kể cả bản sao có vá của `kr`, `mono`, `v2` (kiểm tra tay, ngoài bộ test);
+- KR với `MCMCStrategy` thật của gsplat: vòng KR trùng vòng relocate, Gaussian bị đánh dấu nằm trong mặt nạ "chết" mà relocate nhận; đúng các trường hợp quá lớn / hình kim / sát camera train, bỏ qua camera test, giới hạn 2 %;
+- loss Pearson bằng PyTorch: prior đúng hình dạng cho loss gần 0, prior ngược cho 2λ, có gradient, tắt sau 60 % số vòng, ảnh không dùng prior và ảnh ít pixel cho 0, prior nhỏ hơn được nội suy;
+- kiểm NaN: tham số Gaussian không hữu hạn ở vòng kiểm thì lượt dừng (`FloatingPointError`) và nhật ký có dòng `guard`; phần chạy thử mà `env_check` làm trên GPU (`hook_smoke` của `smoke_test_gsplat.py`) chạy được trên CPU, trừ bước relocate thật của MCMC (kernel CUDA);
+- bước `mono` trên cảnh COLMAP tổng hợp với bộ ước lượng giả (tương quan, đảo bản đồ, ảnh ít điểm SfM, kiểm cả cảnh, dùng lại cache, không xóa thư mục cache có file lạ, từ chối camera méo, sai kích thước ảnh, ảnh JPEG có cờ xoay EXIF đọc theo đúng hướng điểm ảnh như gsplat) và với code Depth Anything V2 thật nhưng trọng số ngẫu nhiên (kiểm tra tay, ngoài bộ test: đúng kích thước, float16, manifest, dùng lại cache; trọng số thật chưa tải được trong sandbox);
+- `setup_depth_anything.sh` với một kho git cục bộ và `file://` thay cho GitHub, Hugging Face: cài đúng commit, chạy lại an toàn, trọng số sai SHA-256 bị xóa, không đụng thư mục không phải bản checkout, từ chối bản checkout đã sửa;
+- launcher với trainer giả có đủ 4 chỗ chèn: chạy bản sao có vá, file gốc không đổi, mọi dòng chèn đều được gọi; `run.py`: bước `mono` → train (có `--hook`) → đánh giá (không hook), lỗi ở bước `mono` thì không train, đổi hằng số của hook thì không bỏ qua lượt cũ;
+- `run_experiment.sh` với stub: bước `depth_anything` chạy trước `env_check`; lỗi thì chỉ bỏ lượt dùng prior (kiểm tra môi trường và chỗ trống không tính lượt đó), các lượt khác vẫn train, báo cáo ghi một dòng; baseline dùng prior thì không train gì.
+
+Môi trường và cách làm các kiểm tra tay: `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox", lượt 28/10/2026.
+
+Chưa biết: thời gian và VRAM thêm của `bilagrid`, `mono`, `v2` (ước lượng ở mục 3.4 giả định +30 %); trọng số thật của Depth Anything V2 cho tương quan bao nhiêu với điểm SfM của `room`.
+
 ## 4. Lọc Gaussian sau khi train
 
-`src/training/prune.py`; trong kế hoạch: khóa `post_filter`; cho một lượt bất kỳ: `bash scripts/run_filter.sh <luồng> <cảnh> [<lượt> ...]` (vd. `custom phong1 mcmc_s42`). **Trạng thái: đã viết, đã kiểm thử trong sandbox (logic lọc bằng numpy; đọc / ghi checkpoint bằng PyTorch 2.7.1 CPU; ghi PLY bằng `export_splats` thật của gsplat @6e8c837; lệnh chấm lại bằng runner giả); chưa chạy trên GPU.**
+`src/training/prune.py`; trong kế hoạch: khóa `post_filter`; cho một lượt bất kỳ: `bash scripts/run_filter.sh <luồng> <cảnh> [<lượt> ...]` (vd. `custom phong1 mcmc_s42`). **Trạng thái: đã viết, đã kiểm thử trong sandbox (logic lọc bằng numpy; đọc / ghi checkpoint bằng PyTorch 2.7.1 chạy trên CPU; ghi PLY bằng `export_splats` thật của gsplat @6e8c837; lệnh chấm lại bằng runner giả); chưa chạy trên GPU.**
 
 - **Bỏ** một Gaussian khi tham số không hữu hạn, khi opacity (sau sigmoid) < `min_opacity` (lớp sương mờ, vệt mờ lơ lửng), hoặc khi trục lớn nhất > `max_scale` × `scene_scale`. Mỗi Gaussian chỉ được đếm ở tiêu chí đầu tiên loại nó. Các Gaussian còn lại giữ nguyên tham số, không tối ưu lại.
 - **`scene_scale`** đúng như `simple_trainer.py` tính (Parser của gsplat trên thư mục dữ liệu của lượt: khoảng cách lớn nhất từ một camera tới tâm các camera sau khi chuẩn hóa, × 1,1 × `global_scale`), cùng đại lượng mà DefaultStrategy dùng cho ngưỡng `prune_scale3d` = 0,1 lúc densify. Script đối chiếu với dòng `Scene scale:` trong `train.log`; lệch thì dừng. Ngưỡng tính theo camera, nên mọi chế độ trên cùng cảnh dùng cùng một ngưỡng tuyệt đối.
@@ -290,5 +337,6 @@ Biến thể của một kế hoạch (mục 3.2) là một dòng riêng `<chế
 | Mip-NeRF 360 (B0 và gsplat) | **Đã cấu hình, chưa chạy; chưa có dữ liệu trên volume** | `experiments/mipnerf360/README.md` |
 | Lệnh huấn luyện mà repo này sinh ra cho Deep Blending | Kiểm thử bằng stub: `default` / `mcmc` giống lệnh repo trước đã chạy ngày 17/10/2026, chỉ khác đường dẫn | `tests/unit/test_benchmarks.py` |
 | Dò tham số `mcmc` (`tune_mcmc`, mục 3): biến thể, kiểm tra điểm SfM, lọc theo seed | **Đã viết, chưa chạy trên pod** | Kiểm thử bằng stub: `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py` |
+| Biến thể từ notebook v2 (mục 3.7): `bilagrid`, `kr`, `mono`, gói `v2`; bản sao có vá của trainer; depth prior; bước `depth_anything` | **Đã viết, đã kiểm thử trên CPU (kể cả trainer và `MCMCStrategy` thật của gsplat), chưa train trên GPU, chưa chạy smoke test trên GPU, chưa tải Depth Anything V2 thật** | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_train_profiles.py`, `test_experiment.py`; các kiểm tra ngoài bộ test ghi ở mục 3.7 |
 | Vòng ghép (mục 3.6) | **Mới thiết kế**: luật chọn đã cố định; file kế hoạch viết khi có kết quả `tune_mcmc`; chưa chạy | Cơ chế đã có: biến thể nhiều tham số được kiểm tra trong kế hoạch (`test_experiment.py::test_a_combination_round_plan_has_several_parameters_per_variant`) và thành nhiều `--set` khi train (`test_benchmarks.py::test_variants_run_after_the_modes_into_their_own_folders`) |
 | Lọc Gaussian và chấm lại (mục 4) | **Đã viết, chưa chạy trên GPU**; logic lọc, checkpoint PyTorch và PLY của gsplat kiểm tra trên CPU | `tests/unit/test_prune.py`, `test_compare_modes.py`, `test_gsplat_results.py` |

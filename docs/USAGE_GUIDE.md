@@ -43,7 +43,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 |---|---|
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
 | Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `EXP = "main"`, `CHAY = True`), theo dõi ở ô 5 |
-| Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 6 giờ), rồi vòng ghép khi đã có file kế hoạch | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, sau đó `EXP = "tune_mcmc_combo"`, `CHAY = True`), theo dõi ở ô 5 |
+| Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 8 giờ), rồi vòng ghép khi đã có file kế hoạch | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, sau đó `EXP = "tune_mcmc_combo"`, `CHAY = True`), theo dõi ở ô 5 |
 | Ảnh so sánh các lượt trên cùng ảnh test và video xếp chồng (mục 4; không cần GPU) | 7 (`WHAT = "panels"`) hoặc 9 (`SO_SANH = True`) |
 | Đưa dữ liệu của bạn lên (mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
 | Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
@@ -272,7 +272,12 @@ Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "main"`, `VOLUME_GB` = 
 
 ### 5.2 Dò tham số `mcmc`: `tune_mcmc`
 
-Một việc nền trên `room` của Mip-NeRF 360, seed 42 (thiết kế: `docs/design/experiments.md` mục 3): `default`, `mcmc` và 12 biến thể của `mcmc`, mỗi biến thể đổi một tham số (`opacity_reg`, `scale_reg`, `strategy.noise_lr`, `strategy.min_opacity`, `random_bkgd`, `depth_loss`, `strategy.refine_stop_iter`, `sh_degree`); kiểm tra điểm SfM trước khi train (vì có biến thể `depth_loss`); sau khi train, lọc Gaussian mọi lượt rồi chấm lại; bảng so với `default`, bảng so với `mcmc`, bảng sau khi lọc.
+Một việc nền trên `room` của Mip-NeRF 360, seed 42 (thiết kế: `docs/design/experiments.md` mục 3): `default`, `mcmc` và 16 biến thể của `mcmc`, theo thứ tự chạy:
+- 3 biến thể, mỗi biến thể thêm một thành phần của notebook v2 của nhóm: `mono` (depth prior bằng Depth Anything V2 Small), `kr` (Kill-then-Relocate) và `bilagrid` (bilateral grid có sẵn của gsplat); `mono`, `kr` là code của repo chạy trên bản sao có vá của `simple_trainer.py` (`docs/design/training_modes.md` mục 3.1);
+- gói `v2`: mọi thứ notebook v2 thêm vào `mcmc`, cùng lúc, theo protocol chung (`docs/design/experiments.md` mục 3.7);
+- 12 biến thể, mỗi biến thể đổi một tham số (`opacity_reg`, `scale_reg`, `strategy.noise_lr`, `strategy.min_opacity`, `random_bkgd`, `depth_loss`, `strategy.refine_stop_iter`, `sh_degree`).
+
+Bốn biến thể của notebook chạy trước để code mới, nếu lỗi, lộ ra sớm. Trước khi train: tải Depth Anything V2 Small ở bước `depth_anything` nếu chưa có (code và trọng số đã ghim, khoảng 0,2 GB, vào `/workspace/code/depth_anything_v2`; tải tay: `bash scripts/setup/setup_depth_anything.sh`; không tải được thì chỉ bỏ `mono`, `v2`), kiểm tra điểm SfM (vì có biến thể `depth_loss`). Sau khi train: lọc Gaussian mọi lượt rồi chấm lại; bảng so với `default`, bảng so với `mcmc`, bảng sau khi lọc.
 
 ```bash
 bash scripts/pod/run_experiment.sh tune_mcmc --plan                       # kế hoạch, các bước, dữ liệu đã có
@@ -281,10 +286,10 @@ VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --
 
 Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "tune_mcmc"`, `VOLUME_GB`, rồi `CHAY = True`.
 
-- Ước lượng (chưa đo): khoảng 6 giờ GPU trên RTX 4090 (khoảng 4,7 giờ khi chạy sau `main`); thêm khoảng 27 GB trên volume. Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
+- Ước lượng (chưa đo): khoảng 8 giờ GPU trên RTX 4090 (khoảng 6,7 giờ khi chạy sau `main`); thêm khoảng 35 GB trên volume. Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
 - Một cảnh, một seed: chỉ để chọn ứng viên cho vòng ghép, chưa phải kết quả "cải thiện". `room` là cảnh dùng để chọn tham số: khi so `mcmc_indoor` trong thực nghiệm chính, kết luận dựa trên 5 cảnh còn lại. Bảng tự động vẫn có `room`; bảng không có `room`: `docs/design/experiments.md` mục 3.1.
-- Lượt `room/default_s42`, `room/mcmc_s42` dùng chung với thực nghiệm chính: chỉ train một lần, dù `main` chạy trước hay sau. 12 biến thể có tag nên bảng của `main` không lẫn chúng (có một dòng cảnh báo ghi số lượt để ngoài); xem lại bảng của các biến thể: `TAGS="or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth rs30k sh2" SCENES=room bash scripts/run_evaluate.sh mipnerf360` (ô 7: `WHAT = "evaluate"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `TAGS`).
-- Kết quả: `/workspace/outputs/reports/experiment_tune_mcmc_<thời_gian>.md`.
+- Lượt `room/default_s42`, `room/mcmc_s42` dùng chung với thực nghiệm chính: chỉ train một lần, dù `main` chạy trước hay sau. 16 biến thể có tag nên bảng của `main` không lẫn chúng (có một dòng cảnh báo ghi số lượt để ngoài); xem lại bảng của các biến thể: `TAGS="mono kr bilagrid v2 or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth rs30k sh2" SCENES=room bash scripts/run_evaluate.sh mipnerf360` (ô 7: `WHAT = "evaluate"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `TAGS`).
+- Kết quả: `/workspace/outputs/reports/experiment_tune_mcmc_<thời_gian>.md`. Lượt `mono`, `v2` có thêm `mono_depth.json` (depth prior dùng được cho bao nhiêu ảnh train, tương quan với điểm SfM); lượt `kr`, `mono`, `v2` có `sr3d_hooks.jsonl` (nhật ký của hook). Prior không khớp điểm SfM của cảnh thì lượt `mono` (và `v2`) lỗi ở bước `mono`, không train; các lượt khác vẫn chạy. Lượt có hook gặp tham số không hữu hạn thì dừng và lỗi (`FloatingPointError`), không tự tắt thành phần nào.
 - **Vòng ghép** (`docs/design/experiments.md` mục 3.6): từ kết quả, chọn tối đa 3 ứng viên theo luật cố định trước, ghép thành 1–4 cấu hình, chạy 2 seed mới (43, 44) trên `room` để chọn `mcmc_indoor`. File kế hoạch `configs/experiments/tune_mcmc_combo.yaml` được viết khi có số liệu (chưa có); chạy bằng ô 7 với `EXP = "tune_mcmc_combo"`, sau `main` (cần độ lệch chuẩn của `mcmc` trên `room` và dùng lại `default`, `mcmc` seed 43, 44 của nó), trên cùng loại GPU với `main`. Ước lượng: khoảng 1–3,5 giờ GPU, thêm khoảng 10–20 GB.
 
 ## 6. Giao diện dòng lệnh `python -m app.cli`
@@ -352,6 +357,12 @@ Gói kết quả gồm báo cáo, log, trạng thái việc nền, JSON / CSV k�
 | `góc nhìn: THIẾU` (ô 9), `VIEW COVERAGE: LOW` (log) | Chỉ là cảnh báo: có hướng chưa ảnh nào nhìn tới, hoặc camera gần như đứng yên |
 | `not a finished run` (ô 9) | Lượt `RUN` chưa train xong hoặc tên sai: xem tên các lượt trong bảng của ô 9 |
 | `cannot be trained with the SfM depth loss` (bước `depth_check_<benchmark>` của thực nghiệm) | Có ảnh train không có điểm nào trong track của SfM (tên ảnh in ở dòng `FAIL` phía trên): lượt có `depth_loss` sẽ lỗi. Chỉ các lượt đó của benchmark đó bị bỏ, các lượt khác vẫn train. Dòng `WARN` (mọi điểm của ảnh nằm ngoài ảnh) chỉ là cảnh báo |
+| Bước `depth_anything` LỖI, `depth_anything lỗi: bỏ ... trên mọi benchmark` (thực nghiệm có `sr3d.mono`); `cannot download`, `do not have the pinned SHA-256`, `is not a git checkout`, `has local modifications` | Không tải được code (GitHub) hoặc trọng số (Hugging Face), file tải về sai SHA-256, hoặc `/workspace/code/depth_anything_v2` không phải bản checkout sạch: xem dòng `ERROR` của bước đó. Chỉ các lượt dùng depth prior (`mono`, `v2`) bị bỏ, các lượt khác vẫn train. Sửa (mạng của pod; thư mục lạ thì dời đi) rồi chạy lại thực nghiệm: lượt đã xong tự bỏ qua. Thử riêng: `bash scripts/setup/setup_depth_anything.sh` |
+| `the mono variant needs Depth Anything V2 Small`, `is not an unmodified Depth Anything V2 checkout` (một lượt `mono` chạy tay hoặc bước `mono`) | Chưa tải hoặc đã sửa Depth Anything V2: `bash scripts/setup/setup_depth_anything.sh` rồi chạy lại |
+| `the gsplat smoke test of the plan failed` (bước `env_check` của thực nghiệm) | Một dòng `FAIL` phía trên chỉ ra phần lỗi: tham số của một chế độ / biến thể, biến thể có code trên GPU (KR, loss của prior, kiểm NaN) hoặc Depth Anything V2. Chưa tải, chưa train gì |
+| `non-finite Gaussian parameters` (lượt `kr`, `mono`, `v2`) | Tham số Gaussian thành NaN / vô cùng khi train: lượt dừng, `sr3d_hooks.jsonl` có dòng `guard`. Ghi lại như một kết quả của biến thể; không tự tắt thành phần nào |
+| `the depth prior does not agree with the SfM points` (bước `mono` của một lượt, `mono_depth.log`) | Độ sâu của Depth Anything V2 không khớp điểm SfM của cảnh (trung vị tương quan dưới 0,3, xem `mono_depth.json`): lượt `mono` / `v2` của cảnh đó không train, các lượt khác vẫn chạy. Không phải lỗi môi trường; ghi lại như một kết quả của biến thể |
+| `anchor occurs 0 time(s)` (bản sao có vá của trainer) | `examples/simple_trainer.py` không phải bản của gsplat @6e8c837 mà biến thể có code được viết cho: cài lại gsplat bằng `scripts/setup/setup_gsplat.sh` |
 | `the thresholds remove every Gaussian`, `evaluation of the filtered model failed` (lọc Gaussian) | Ngưỡng quá chặt: giảm `MIN_OPACITY` hoặc tăng `MAX_SCALE`. Lỗi chấm lại: xem `<lượt>/filtered/eval.log`; lượt gốc không bị ảnh hưởng |
 | `COLMAP model ... changed after this run was trained` (render lại) | Cảnh đã làm lại COLMAP sau lượt này: chạy ô 8 với `SOURCE = "-"` và `SCENE` của cảnh (lượt làm từ mô hình cũ tự được train lại), rồi render lượt mới; xuất PLY của lượt cũ vẫn được (`XUAT_PLY`) |
 | Lỗi khác | Chạy ô 10 và gửi gói `ket_qua_*.tar.gz` (không gửi `/workspace/.ssh`) |
@@ -368,6 +379,7 @@ Sự cố môi trường đã biết: `docs/ENVIRONMENT_AUDIT.md` mục 6.
 | Notebook `runpod.ipynb` | Đã mô phỏng trên `/workspace` giả: GitHub thay bằng repo Git cục bộ, `ssh` / `curl` giả, không GPU, không conda (các việc cần GPU dừng sớm) | `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox" |
 | Tải dữ liệu benchmark, thực nghiệm chính | Đã kiểm thử với curl giả, file zip tổng hợp và các bước giả (stub); **chưa tải thật, chưa chạy trên pod** | `tests/unit/test_fetch.py`, `tests/unit/test_experiment.py` |
 | Dò tham số `tune_mcmc` (biến thể, kiểm tra điểm SfM), lọc Gaussian | Đã kiểm thử với các bước giả, runner giả; checkpoint PyTorch và PLY của gsplat kiểm tra trên CPU; **chưa chạy trên GPU** | `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py`, `test_prune.py` |
+| Biến thể có code của `tune_mcmc` (`kr`, `mono`, gói `v2`) và `bilagrid`; bước `depth_anything` | Đã kiểm thử trên CPU: bản vá đúng chỗ trong `simple_trainer.py` thật; KR với `MCMCStrategy` thật; loss Pearson bằng PyTorch; kiểm NaN; tải Depth Anything V2 với kho git cục bộ; bước `depth_anything` lỗi thì chỉ bỏ lượt dùng prior. Kiểm tra tay, ngoài bộ test: bản sao có vá phân giải đúng tham số của cả 18 lượt; depth prior với code Depth Anything V2 thật nhưng trọng số ngẫu nhiên. **Chưa train trên GPU, chưa chạy smoke test trên GPU, chưa tải trọng số thật** | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_experiment.py`; `docs/design/experiments.md` mục 3.7; `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox" |
 | Bảng so sánh mở rộng (số cặp và số cảnh tốt hơn, chất lượng theo dung lượng, cấu trúc mô hình), ảnh so sánh và video xếp chồng | Đã kiểm thử trên CPU với PLY, ảnh render và video tổng hợp; **chưa chạy trên kết quả thật** | `tests/unit/test_compare_modes.py`, `tests/unit/test_splat_stats.py`, `tests/unit/test_panels.py` |
 | Trên pod (COLMAP 4.2.1, GPU) bằng repo này | **Chưa chạy** | — |
 

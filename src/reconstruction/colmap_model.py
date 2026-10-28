@@ -58,6 +58,7 @@ class Image:
     tvec: tuple[float, float, float]
     num_points2d: int
     num_observations: int  # số điểm 2D có điểm 3D tương ứng
+    points2d: np.ndarray | None = None  # (x, y, point3d_id) mỗi điểm 2D; chỉ có khi đọc với with_points2d=True
 
 
 @dataclass
@@ -90,7 +91,8 @@ def read_cameras_binary(path: Path) -> dict[int, Camera]:
     return cameras
 
 
-def read_images_binary(path: Path) -> dict[int, Image]:
+def read_images_binary(path: Path, with_points2d: bool = False) -> dict[int, Image]:
+    """Ảnh đã đăng ký; with_points2d=True giữ cả điểm 2D (x, y theo pixel, tâm pixel góc trái trên là (0,5; 0,5))."""
     images = {}
     with open(path, "rb") as handle:
         (count,) = _read(handle, "<Q")
@@ -111,8 +113,17 @@ def read_images_binary(path: Path) -> dict[int, Image]:
             points = np.frombuffer(raw, dtype=_POINT2D_DTYPE)
             observations = int(np.count_nonzero(points["point3d_id"] != INVALID_POINT3D_ID))
             images[image_id] = Image(image_id, name_bytes.decode("utf-8"), camera_id,
-                                     (qw, qx, qy, qz), (tx, ty, tz), num_points2d, observations)
+                                     (qw, qx, qy, qz), (tx, ty, tz), num_points2d, observations,
+                                     points.copy() if with_points2d else None)
     return images
+
+
+def qvec_to_rotation(qvec) -> np.ndarray:
+    """Quaternion (w, x, y, z) của COLMAP -> ma trận quay 3x3 (cam_from_world)."""
+    w, x, y, z = np.asarray(qvec, dtype=float) / np.linalg.norm(qvec)
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+                     [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+                     [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
 
 
 def read_points3d_summary(path: Path) -> PointsSummary:
@@ -142,6 +153,21 @@ def read_points3d_xyz(path: Path) -> np.ndarray:
             handle.seek(8 * track_length, 1)
             xyz.append((x, y, z))
     return np.array(xyz, dtype=float).reshape(-1, 3)
+
+
+def read_points3d_positions(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """(id (N,) uint64 tăng dần, tọa độ (N, 3)) của mọi điểm 3D, bỏ qua track."""
+    ids, xyz = [], []
+    with open(path, "rb") as handle:
+        (count,) = _read(handle, "<Q")
+        for _ in range(count):
+            point_id, x, y, z, _r, _g, _b, _error, track_length = _read(handle, "<Q3d3BdQ")
+            handle.seek(8 * track_length, 1)
+            ids.append(point_id)
+            xyz.append((x, y, z))
+    ids_array = np.array(ids, dtype=np.uint64)
+    order = np.argsort(ids_array, kind="stable")
+    return ids_array[order], np.array(xyz, dtype=float).reshape(-1, 3)[order]
 
 
 @dataclass

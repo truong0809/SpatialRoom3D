@@ -18,10 +18,15 @@ ghi thêm `images_<N>_png/` vào thư mục dữ liệu nó được đưa. Vì 
 (`<out>/../.images_<N>_png_<dấu mô hình COLMAP>`, dùng chung cho mọi chế độ và seed; dấu "đủ" nằm cạnh, không nằm
 trong thư mục vì gsplat ghép ảnh theo thứ tự tên mọi file trong đó): bộ dữ liệu gốc không bị ghi thêm gì.
 
+Lượt có biến thể có code (`sr3d.kr` / `sr3d.mono`, src/training/trainer_hooks.py) train bằng bản sao có vá của
+simple_trainer.py (launcher `--hook`); bước đánh giá vẫn dùng file gốc. Lượt có `sr3d.mono` có thêm bước `mono` trước
+bước train (src.training.mono_depth, log mono_depth.log): depth prior của cảnh nằm trong
+`<out>/../.mono_depth_<dấu mô hình COLMAP>` (dùng chung cho mọi chế độ / seed), kết quả kiểm ghi vào mono_depth.json.
+
 `--dry-run` chỉ in kế hoạch (không ghi file, không cần GPU). Một thư mục kết quả đã có lượt chạy OK chỉ được
 bỏ qua khi yêu cầu mới giống hệt: cùng cảnh và cùng model COLMAP (dấu SHA-256 của sparse/0), cùng chế độ,
-protocol (cả protocol gốc), tham số, seed, ngân sách Gaussian và tập train/test. Đường dẫn không được so: dời thư
-mục dữ liệu hay kết quả không làm train lại. Lượt dở dang được chạy lại với
+protocol (cả protocol gốc), tham số, tham số của hook, seed, ngân sách Gaussian và tập train/test. Đường dẫn không được
+so: dời thư mục dữ liệu hay kết quả không làm train lại. Lượt dở dang được chạy lại với
 `--rerun-incomplete`, trừ khi tiến trình đang chạy lượt đó vẫn còn sống.
 """
 
@@ -48,13 +53,16 @@ from src.utils.gpu_lock import inherited_lock_fds
 from src.reconstruction.colmap_model import model_exists, read_cameras_binary, read_images_binary
 from src.training.profiles import (
     eval_args,
+    hook_names,
     load_config,
     parse_assignments,
     resolve_cap_max,
     resolve_mode,
     trainer_args,
 )
+from src.training.mono_depth import WEIGHTS_FILE
 from src.training.split import make_split, make_train_view, write_split
+from src.training.trainer_hooks import hook_parameters
 
 REPO_DIR = Path(__file__).resolve().parents[2]  # gốc repo: package `src` import được từ đây
 DEFAULT_CONFIG = REPO_DIR / "configs" / "base.yaml"  # mục train_modes
@@ -250,6 +258,19 @@ def png_cache_dir(out: Path, data_factor: int, fingerprint: str) -> Path:
     return out.parent / f".images_{data_factor}_png_{fingerprint[:12]}"
 
 
+def mono_cache_dir(out: Path, fingerprint: str) -> Path:
+    """Nơi src.training.mono_depth lưu depth prior của cảnh: cạnh các lượt của cảnh, dùng chung cho mọi chế độ / seed."""
+    return out.parent / f".mono_depth_{fingerprint[:12]}"
+
+
+def mono_summary(record: dict | None) -> dict | None:
+    """Phần chính của mono_depth.json (kết quả kiểm depth prior) để ghi vào run_meta.json."""
+    if not isinstance(record, dict):
+        return None
+    keys = ("status", "train_images", "used", "unchecked", "flipped", "median_corr", "cache", "manifest_sha256")
+    return {key: record.get(key) for key in keys} | {"low_corr": len(record.get("low_corr") or [])}
+
+
 def cache_marker(cache_dir: Path) -> Path:
     """Dấu "cache đủ" nằm CẠNH thư mục cache, không nằm trong: gsplat (examples/datasets/colmap.py @6e8c837) liệt kê
     mọi file trong images_<N>_png rồi ghép với images/ theo thứ tự tên, nên một file lạ trong đó làm lệch cặp ảnh."""
@@ -335,6 +356,8 @@ def request_differences(meta: dict, spec, seed: int, cap_max: int | None, split_
         # bên là sai khác (--protocol) và một bên là quy ước (--dataset-protocol) thì không phải cùng một lượt
         "base_protocol": (previous.get("base_protocol"), spec.base_protocol),
         "args": (previous.get("args"), spec.args),
+        # hằng số của biến thể có code (src/training/trainer_hooks.py); lượt không có hook: None ở cả hai bên
+        "hooks": (meta.get("hooks"), hook_parameters(hook_names(spec))),
         "seed": (meta.get("seed"), seed),
         "cap_max": ((meta.get("cap_max") or {}).get("value"), cap_max),
         "split": (meta.get("split", {}).get("sha256"), split_digest),
@@ -438,6 +461,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scene-name", help="tên cảnh ghi vào kết quả (mặc định: tên thư mục cảnh)")
     parser.add_argument("--out", required=True, type=Path, help="thư mục kết quả của lượt chạy này")
     parser.add_argument("--gsplat-dir", type=Path, default=Path(os.environ.get("WS", "/workspace")) / "code" / "gsplat")
+    parser.add_argument("--depth-anything-dir", type=Path, default=None,
+                        help="code Depth Anything V2 cho lượt có sr3d.mono (mặc định: <gsplat-dir>/../depth_anything_v2)")
     parser.add_argument("--seed", type=int, default=None, help="mặc định: default_seed trong file cấu hình")
     parser.add_argument("--test-list", type=Path, help="file danh sách ảnh test (thay cho mỗi ảnh thứ test_every)")
     cap = parser.add_mutually_exclusive_group()
@@ -501,19 +526,36 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
         return 2
     gpu_index = visible if visible not in (None, "") else str(args.gpu)
 
-    def launcher(record: str, resolved: str, trainer: list[str]) -> list[str]:
+    hooks = hook_names(spec)
+    hook_info = hook_parameters(hooks)
+    mono_cache = mono_cache_dir(out, scene_info["fingerprint"]) if "mono" in hooks else None
+    depth_anything = (args.depth_anything_dir or args.gsplat_dir.parent / "depth_anything_v2").resolve()
+
+    def launcher(record: str, resolved: str, trainer: list[str], with_hooks: bool = False) -> list[str]:
         cmd = [args.python, "-m", "src.training.gsplat_launcher", "--examples-dir", str(examples),
                "--seed", str(seed), "--record-split", str(out / record), "--resolved-config", str(out / resolved)]
         if split.rule == "test_list":
             cmd += ["--split-file", str(out / "split.json")]
+        if with_hooks:  # chỉ bước train; bước đánh giá chạy simple_trainer.py gốc (hook không đổi gì khi đánh giá)
+            for name in hooks:
+                cmd += ["--hook", name]
+            if mono_cache is not None:
+                cmd += ["--mono-dir", str(mono_cache)]
         return cmd + ["--", *trainer]
 
     # Với danh sách test riêng, gsplat đọc một bản dữ liệu đã lọc điểm SfM (xem split.make_train_view); với
     # data_factor > 1, một bản xem dữ liệu để gsplat không ghi images_<N>_png/ vào bộ dữ liệu gốc.
     data_dir = out / "data" if split.rule == "test_list" or data_factor > 1 else scene_dir
-    train_cmd = launcher("split_applied.json", "resolved_config.json", trainer_args(spec, data_dir, out, cap_max))
+    train_cmd = launcher("split_applied.json", "resolved_config.json", trainer_args(spec, data_dir, out, cap_max),
+                         with_hooks=True)
     eval_cmd = launcher("split_applied_eval.json", "resolved_config_eval.json",
                         eval_args(spec, data_dir, out, cap_max))
+    mono_cmd = None
+    if mono_cache is not None:  # depth prior đọc ảnh và mô hình COLMAP của cảnh gốc (không qua bản xem dữ liệu)
+        mono_cmd = [args.python, "-m", "src.training.mono_depth", "--scene", str(scene_dir),
+                    "--fingerprint", scene_info["fingerprint"], "--cache", str(mono_cache),
+                    "--split", str(out / "split.json"), "--record", str(out / "mono_depth.json"),
+                    "--depth-anything-dir", str(depth_anything)]
     warnings = list(scene_info["warnings"])
     if spec.deviations:
         warnings.append(f"protocol deviations: {sorted(spec.deviations)} - not comparable with protocol runs")
@@ -524,6 +566,8 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
                 **({"png_cache": str(png_cache_dir(out, data_factor, scene_info["fingerprint"]))}
                    if data_factor > 1 else {}),
                 "split": {k: v for k, v in split.to_dict().items() if k not in ("train", "test")},
+                **({"hooks": hook_info} if hooks else {}),
+                **({"mono": shlex.join(mono_cmd)} if mono_cmd else {}),
                 "train": shlex.join(train_cmd), "eval": shlex.join(eval_cmd), "warnings": warnings}
         print(json.dumps(plan, indent=2, ensure_ascii=False))
         return 0
@@ -556,6 +600,10 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
             print(f"ERROR: {message} (run scripts/setup/setup_gsplat.sh or pass --allow-gsplat-mismatch)", file=sys.stderr)
             return 2
         warnings.append(message)
+    if mono_cmd is not None and not (depth_anything / WEIGHTS_FILE).is_file():
+        print(f"ERROR: {depth_anything / WEIGHTS_FILE} not found: the mono variant needs Depth Anything V2 Small "
+              "(run bash scripts/setup/setup_depth_anything.sh)", file=sys.stderr)
+        return 2
     train_view = None
     factor_view = None
     staged_view = out.with_name(f".{out.name}.data_tmp")
@@ -608,7 +656,8 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
         "data_dir": str(data_dir),
         "train_view": train_view,
         **({"factor_view": factor_view} if factor_view is not None else {}),
-        "commands": {"train": train_cmd, "eval": eval_cmd},
+        **({"hooks": hook_info} if hooks else {}),
+        "commands": {**({"mono": mono_cmd} if mono_cmd else {}), "train": train_cmd, "eval": eval_cmd},
         "gsplat_dir": str(args.gsplat_dir.resolve()),
         "gsplat_commit": gsplat_commit,
         "gsplat_dirty": gsplat_dirty,
@@ -633,15 +682,20 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
     env["MPLBACKEND"] = "Agg"  # Jupyter đặt backend inline; env gs-gsplat không có gói đó (matplotlib báo lỗi)
     env["PYTHONPATH"] = str(REPO_DIR) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
 
-    for step, cmd, log_name in (("train", train_cmd, "train.log"), ("eval", eval_cmd, "eval.log")):
+    steps = [("train", train_cmd, "train.log", examples), ("eval", eval_cmd, "eval.log", examples)]
+    if mono_cmd is not None:
+        steps.insert(0, ("mono", mono_cmd, "mono_depth.log", REPO_DIR))
+    for step, cmd, log_name, cwd in steps:
         print(f"\n===== [{dt.datetime.now():%H:%M:%S}] {step}: {spec.mode} / {meta['scene']} =====")
         monitor = start_gpu_monitor(out / "gpu_log.csv", gpu_index) if step == "train" else None
         started = time.monotonic()
         try:
-            code = runner(cmd, examples, env, out / log_name)
+            code = runner(cmd, cwd, env, out / log_name)
         finally:
             stop_gpu_monitor(monitor)
         meta[f"{step}_seconds"] = round(time.monotonic() - started, 1)
+        if step == "mono":
+            meta["mono_depth"] = mono_summary(read_json_or_none(out / "mono_depth.json"))
         if code == 0 and step == "train" and factor_view is not None and factor_view["png_cache_used"] \
                 and not mark_cache_complete(Path(factor_view["png_cache"]), scene_dir, scene_info["fingerprint"]):
             warnings.append(f"PNG cache {factor_view['png_cache']} does not hold exactly one PNG per image after "

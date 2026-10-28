@@ -7,7 +7,12 @@ Kiểm tra:
 4. LPIPS (VGG, như Inria) tính được; lần đầu sẽ tải trọng số.
 5. examples/simple_trainer.py import được và phân giải đúng tham số của mọi chế độ trong configs/base.yaml (strategy,
    protocol, cap_max, tham số riêng của chế độ), và của các biến thể tham số (`--variants`, mục variants của một kế
-   hoạch thực nghiệm), không train.
+   hoạch thực nghiệm), không train. Biến thể có code (`sr3d.kr`, `sr3d.mono`): bản sao có vá của simple_trainer.py
+   (src/training/trainer_hooks.py) phải vá được và phân giải được như file gốc.
+6. Khi có biến thể có code (`sr3d.kr`, `sr3d.mono`): trên GPU, với tensor nhỏ, KR đánh dấu đúng Gaussian quá lớn và bước
+   relocate thật của MCMCStrategy dời chúng; loss của depth prior có gradient hữu hạn; kiểm NaN dừng lượt
+   (src/training/trainer_hooks.py). Khi có `sr3d.mono`: Depth Anything V2 Small (--depth-anything-dir) nạp được với trọng
+   số đã ghim và ước lượng được một ảnh trên GPU.
 
     python scripts/setup/smoke_test_gsplat.py --examples-dir /workspace/code/gsplat/examples
     python scripts/setup/smoke_test_gsplat.py --examples-dir ... --modes default mcmc   # chỉ mục 5, vài giây
@@ -151,18 +156,27 @@ def resolved_value(cfg: dict, flag: str):
     return value
 
 
-@check("simple_trainer.py arguments of the training modes")
-def check_trainer_cli(examples_dir: Path, modes: list[str] | None = None, variants: list[str] | None = None):
+def specs_of(modes: list[str] | None, variants: list[str] | None) -> list:
+    """(tên lượt, ModeSpec) của các chế độ (mặc định mọi chế độ trong configs/base.yaml) và biến thể."""
     sys.path.insert(0, str(REPO_DIR))
-    from src.training.profiles import load_config, parse_assignments, resolve_cap_max, resolve_mode, trainer_args
+    from src.training.profiles import load_config, parse_assignments, resolve_mode
 
     config = load_config(REPO_DIR / "configs" / "base.yaml")
-    env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_DIR), env.get("PYTHONPATH")]))
     specs = [(mode, resolve_mode(config, mode)) for mode in modes or list(config["modes"])]
     for entry in variants or []:  # <chế_độ>:<tag>:<khóa>=<giá_trị>[,...], như VARIANTS của train_gsplat_modes.sh
         mode, tag, sets = entry.split(":", 2)
         specs.append((f"{mode}_{tag}", resolve_mode(config, mode, parse_assignments(sets.split(",")))))
+    return specs
+
+
+@check("simple_trainer.py arguments of the training modes")
+def check_trainer_cli(examples_dir: Path, modes: list[str] | None = None, variants: list[str] | None = None):
+    sys.path.insert(0, str(REPO_DIR))
+    from src.training.profiles import HOOK_KEYS, hook_names, resolve_cap_max, trainer_args
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(REPO_DIR), env.get("PYTHONPATH")]))
+    specs = specs_of(modes, variants)
     with tempfile.TemporaryDirectory() as tmp:
         for mode, spec in specs:
             cap = None
@@ -171,8 +185,9 @@ def check_trainer_cli(examples_dir: Path, modes: list[str] | None = None, varian
                 policy = (spec.cap_max_policy or {}).get("policy")
                 cap = resolve_cap_max(spec)[0] if policy == "fixed" else 1_234_567
             out = Path(tmp) / f"{mode}.json"
+            hooks = hook_names(spec)
             cmd = [sys.executable, "-m", "src.training.gsplat_launcher", "--examples-dir", str(examples_dir),
-                   "--resolve-only", "--resolved-config", str(out), "--",
+                   "--resolve-only", "--resolved-config", str(out), *[f"--hook={name}" for name in hooks], "--",
                    *trainer_args(spec, Path(tmp) / "scene", Path(tmp) / mode, cap)]
             proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
             if proc.returncode != 0:
@@ -188,10 +203,110 @@ def check_trainer_cli(examples_dir: Path, modes: list[str] | None = None, varian
             if cap is not None:
                 assert cfg["strategy"]["cap_max"] == cap
             for flag, value in spec.args.items():  # tham số riêng của chế độ có tác dụng
+                if flag in HOOK_KEYS:  # biến thể có code: không phải tham số của simple_trainer.py
+                    continue
                 assert resolved_value(cfg, flag) == value, (mode, flag, resolved_value(cfg, flag), value)
+            hooks_info = cfg["_launcher"].get("hooks") or {}
+            assert hooks_info.get("names", []) == hooks, (mode, hooks_info.get("names"), hooks)
+            if hooks:  # bản sao có vá phân giải được như file gốc; ghi rõ file gốc có đúng bản ghim không
+                print(f"{mode}: patched trainer for {hooks} (simple_trainer.py "
+                      f"{'is' if hooks_info['trainer_is_pinned'] else 'is NOT'} the pinned file)")
             extra = ", ".join(f"{flag}={value}" for flag, value in spec.args.items())
             print(f"{mode}: {expected}, max_steps {cfg['max_steps']}, lpips {cfg['lpips_net']}"
                   + (f", {extra}" if extra else ""))
+
+
+def hooks_used(modes: list[str] | None, variants: list[str] | None) -> set[str]:
+    """Các hook (sr3d.kr, sr3d.mono) mà chế độ / biến thể bật (tham số sai đã được báo ở mục 5)."""
+    try:
+        specs = specs_of(modes, variants)  # thêm gốc repo vào sys.path
+        from src.training.profiles import hook_names
+
+        return {name for _, spec in specs for name in hook_names(spec)}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def hook_smoke(device: str, mcmc_step: bool = True) -> dict:
+    """Biến thể có code chạy được trên `device`, với tensor nhỏ: KR đánh dấu đúng các Gaussian quá lớn; bước relocate
+    thật của MCMCStrategy dời chúng ngay trong vòng đó (`mcmc_step`, cần CUDA); loss của depth prior có gradient hữu
+    hạn; kiểm NaN dừng lượt."""
+    import tempfile as _tempfile
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    sys.path.insert(0, str(REPO_DIR))
+    from src.training import mono_depth
+    from src.training.trainer_hooks import Hooks
+
+    n, huge = 400, 4
+    params = make_params(n, 0.5, device)
+    with torch.no_grad():
+        params["scales"][:huge] = math.log(0.6)  # trục lớn nhất 0,6 > 0,15 × scene_scale
+    optimizers = {key: torch.optim.Adam([value], lr=1e-3) for key, value in params.items()}
+    from gsplat import MCMCStrategy
+
+    strategy = MCMCStrategy(cap_max=n)
+    camtoworlds = np.tile(np.eye(4), (2, 1, 1))
+    camtoworlds[1, :3, 3] = (0.0, 0.0, -5.0)
+    runner = SimpleNamespace(cfg=SimpleNamespace(strategy=strategy, max_steps=30_000, patch_size=None), splats=params,
+                             scene_scale=1.0, parser=SimpleNamespace(camtoworlds=camtoworlds, image_names=["a.png"]),
+                             trainset=SimpleNamespace(indices=np.array([0])))
+    with _tempfile.TemporaryDirectory() as tmp:
+        height, width = 48, 64
+        depth = 2.0 + torch.linspace(0.0, 1.0, width, device=device).expand(height, width)
+        np.save(Path(tmp) / "a.npy", (1.0 / depth).cpu().numpy().astype(np.float16))
+        manifest = {"version": mono_depth.VERSION, "complete": True,
+                    "images": {"a.png": {"file": "a.npy", "use": True, "corr": 0.9, "points": 50, "flipped": False}}}
+        (Path(tmp) / mono_depth.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
+        hooks = Hooks(["kr", "mono"], mono_dir=Path(tmp))
+        killed = hooks.kill_then_relocate(runner, 3000)
+        assert killed == huge, f"KR marked {killed} Gaussians, expected {huge}"
+        dead = torch.sigmoid(params["opacities"]) <= strategy.min_opacity
+        assert bool(dead[:huge].all()) and not bool(dead[huge:].any())
+        if mcmc_step:  # relocate, thêm Gaussian và nhiễu vị trí của gsplat (kernel CUDA)
+            strategy.step_post_backward(params, optimizers, strategy.initialize_state(), 3000, {}, lr=1e-3)
+            assert len(params["means"]) == n, len(params["means"])
+            assert bool((torch.sigmoid(params["opacities"]) > strategy.min_opacity).all()), "dead Gaussians remain"
+        rendered = depth[None, ..., None].clone().requires_grad_(True)
+        loss = hooks.mono_loss(runner, 100, {"image_id": torch.tensor([0])}, rendered, torch.ones_like(rendered))
+        loss.backward()
+        assert torch.isfinite(loss) and rendered.grad is not None and bool(torch.isfinite(rendered.grad).all())
+        assert float(loss) < 0.01, f"depth prior loss {float(loss)} for a prior equal to 1 / depth"
+        with torch.no_grad():
+            params["means"][0, 0] = float("nan")
+        try:
+            hooks.guard(runner, 500)
+        except FloatingPointError:
+            pass
+        else:
+            raise AssertionError("the NaN check did not stop the run")
+    return {"killed": killed, "mono_loss": float(loss)}
+
+
+@check("code variants (Kill-then-Relocate + MCMC relocate, depth prior loss, NaN check) on the GPU")
+def check_code_variants():
+    result = hook_smoke("cuda")
+    print(f"KR marked {result['killed']} Gaussians, MCMC relocated them; depth prior loss {result['mono_loss']:.5f} "
+          "with finite gradients; NaN check stops the run")
+
+
+@check("Depth Anything V2 Small (depth prior of the mono variant)")
+def check_depth_anything(code_dir: Path):
+    sys.path.insert(0, str(REPO_DIR))
+    import numpy as np
+
+    from src.training.mono_depth import load_depth_anything
+
+    estimate = load_depth_anything(code_dir)  # đúng commit, đúng SHA-256 của trọng số
+    y, x = np.mgrid[0:240, 0:320]
+    image = np.stack([(x * 255 // 319), (y * 255 // 239), np.full_like(x, 128)], axis=-1).astype(np.uint8)
+    depth = estimate(image)
+    assert depth.shape == (240, 320) and np.isfinite(depth).all(), (depth.shape, np.isfinite(depth).all())
+    assert float(depth.max()) > float(depth.min()), "constant depth map"
+    print(f"Depth Anything V2 Small on {'GPU' if torch.cuda.is_available() else 'CPU'}: depth map {depth.shape}, "
+          f"range {float(depth.min()):.3f} .. {float(depth.max()):.3f}")
 
 
 def main() -> int:
@@ -200,6 +315,8 @@ def main() -> int:
     parser.add_argument("--modes", nargs="+", help="chỉ kiểm tra tham số của các chế độ này (mục 5, không train)")
     parser.add_argument("--variants", nargs="*", default=[], metavar="CHẾ_ĐỘ:TAG:KHÓA=GIÁ_TRỊ[,...]",
                         help="kiểm tra thêm tham số của các biến thể này (mục 5)")
+    parser.add_argument("--depth-anything-dir", type=Path, default=None,
+                        help="code Depth Anything V2 cho mục 6 (mặc định: <examples-dir>/../../depth_anything_v2)")
     args = parser.parse_args()
     if not torch.cuda.is_available():
         print("FAIL: PyTorch cannot see a GPU")
@@ -210,7 +327,13 @@ def main() -> int:
         check_strategies()
         check_fused_ssim()
         check_lpips()
-    check_trainer_cli(args.examples_dir.resolve(), args.modes, args.variants)
+    examples = args.examples_dir.resolve()
+    check_trainer_cli(examples, args.modes, args.variants)
+    hooks = hooks_used(args.modes, args.variants)
+    if hooks:
+        check_code_variants()
+    if "mono" in hooks:
+        check_depth_anything(args.depth_anything_dir or examples.parent.parent / "depth_anything_v2")
     print("\n===== SUMMARY =====")
     for name, ok in RESULTS:
         print(f"{'PASS' if ok else 'FAIL'}  {name}")

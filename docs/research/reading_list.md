@@ -1,6 +1,6 @@
 # Danh sách tài liệu cần khảo sát
 
-_Phiên bản 1 · 09/10/2026_
+_Phiên bản 1 · 09/10/2026 · thêm FSGS, ghi chú tài liệu dùng cho các biến thể của `tune_mcmc` ngày 28/10/2026_
 
 Đây là danh sách khởi đầu, chưa phải literature matrix. Ở mốc M1, mỗi mục sẽ được đối chiếu với nguồn chính thức (CVF Open Access, ACM DL, ECVA, OpenReview, arXiv) và bổ sung link/DOI đã kiểm chứng trước khi đưa vào tài liệu tham khảo của báo cáo.
 
@@ -49,11 +49,12 @@ _Phiên bản 1 · 09/10/2026_
 ## D. Nội thất và prior hình học
 
 - ★ Turkulainen et al. — DN-Splatter: Depth and Normal Priors for Gaussian Splatting and Meshing, WACV 2025
+- ☆ Zhu, Fan, Jiang, Wang — FSGS: Real-Time Few-shot View Synthesis using Gaussian Splatting, ECCV 2024 ([ECVA](https://www.ecva.net/papers/eccv_2024/papers_ECCV/html/5583_ECCV_2024_paper.php); arXiv 2312.00451). Loss Pearson giữa độ sâu render và độ sâu đơn ảnh (DPT), không phụ thuộc tỉ lệ / độ dịch: dạng loss của biến thể `mono` trong `tune_mcmc` (`docs/design/experiments.md` mục 3.7)
 - ☆ Xiang et al. — GaussianRoom: Improving 3D Gaussian Splatting with SDF Guidance and Monocular Cues for Indoor Scene Reconstruction (†, arXiv 2405.19671)
 - ☆ Zhang et al. — 2DGS-Room: Seed-Guided 2D Gaussian Splatting with Geometric Constrains for High-Fidelity Indoor Scene Reconstruction (†, arXiv 2412.03428)
 - ☆ Yu et al. — MonoSDF: Exploring Monocular Geometric Cues for Neural Implicit Surface Reconstruction, NeurIPS 2022 (đối chứng nhánh SDF)
 - ☆ Mô hình prior:
-  - Yang et al. — Depth Anything V2, NeurIPS 2024
+  - Yang et al. — Depth Anything V2, NeurIPS 2024. Bản Small (Apache-2.0) tạo depth prior cho biến thể `mono` (`src/training/mono_depth.py`)
   - Bae & Davison — Rethinking Inductive Biases for Surface Normal Estimation (DSINE), CVPR 2024
   - Hu et al. — Metric3D v2, TPAMI 2024
 
@@ -75,7 +76,7 @@ _Phiên bản 1 · 09/10/2026_
   - Lee et al. — Deblurring 3D Gaussian Splatting, ECCV 2024
   - Zhao et al. — BAD-Gaussians: Bundle Adjusted Deblur Gaussian Splatting, ECCV 2024
 - ☆ Ngoại hình thay đổi giữa các ảnh:
-  - Wang et al. — Bilateral Guided Radiance Field Processing, ACM TOG 2024
+  - Wang et al. — Bilateral Guided Radiance Field Processing, ACM TOG 2024 (SIGGRAPH 2024). Có sẵn trong gsplat (`use_bilateral_grid`): biến thể `bilagrid` của `tune_mcmc`
   - Martin-Brualla et al. — NeRF in the Wild, CVPR 2021
 
 ## G. Ước lượng camera

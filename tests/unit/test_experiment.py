@@ -43,6 +43,7 @@ STUBS = {
         ' >> "$CALLS"\n'
         'printf "| bảng so sánh %s |\\n" "$1" > "$REPORT.md"\n',
     "scripts/pod/pack_results.sh": 'echo "pack $*" >> "$CALLS"\n',
+    "scripts/setup/setup_depth_anything.sh": 'echo "da2setup $* | WS=${WS-unset}" >> "$CALLS"\nexit "${FAKE_DA2_RC:-0}"\n',
 }
 FAKE_PYTHON = r'''#!/usr/bin/env bash
 # python của env conda giả: kiểm tra import (-c) luôn qua; smoke test, kiểm tra điểm SfM và lọc Gaussian ghi lại lời gọi
@@ -229,7 +230,7 @@ def test_a_failed_download_skips_only_that_benchmark(sh):
 
 def test_environment_not_ready_stops_before_any_download(sh):
     out = experiment(sh, "main", FAKE_SMOKE_RC=1)  # trainer không nhận tham số của một chế độ
-    assert out.returncode == 1 and "does not accept the arguments of a mode or variant in the plan" in out.stdout
+    assert out.returncode == 1 and "the gsplat smoke test of the plan failed" in out.stdout
     assert not steps(sh, "fetch") and not steps(sh, "train") and "môi trường chưa sẵn sàng" in out.stdout
     (sh.root / "calls.txt").unlink()
     shutil.rmtree(sh.ws / "code" / "gsplat")
@@ -373,20 +374,33 @@ def test_the_tune_mcmc_plan_is_valid():
     plan = load_experiment("tune_mcmc", REPO / "configs", "/workspace")
     assert plan["modes"] == ["default", "mcmc"] and plan["seeds"] == [42] and plan["also_against"] == ["mcmc"]
     assert [(b["dataset"], b["scenes"], b["b0"]) for b in plan["benchmarks"]] == [("mipnerf360", ["room"], False)]
-    assert plan["runs"] == ["default", "mcmc", "mcmc_or0001", "mcmc_or0005", "mcmc_or005", "mcmc_sr0001", "mcmc_sr005",
-                            "mcmc_nlr250k", "mcmc_nlr1m", "mcmc_mo002", "mcmc_rbg", "mcmc_depth", "mcmc_rs30k", "mcmc_sh2"]
-    assert all(variant["mode"] == "mcmc" and len(variant["set"]) == 1 for variant in plan["variants"])
-    assert plan["depth_runs"] == ["mcmc_depth"] and plan["depth_test_every"] == 8
+    # biến thể có đoạn code mới chạy trước (lỗi thì thấy sớm), rồi 12 biến thể tham số
+    assert plan["runs"] == ["default", "mcmc", "mcmc_mono", "mcmc_kr", "mcmc_bilagrid", "mcmc_v2", "mcmc_or0001",
+                            "mcmc_or0005", "mcmc_or005", "mcmc_sr0001", "mcmc_sr005", "mcmc_nlr250k", "mcmc_nlr1m",
+                            "mcmc_mo002", "mcmc_rbg", "mcmc_depth", "mcmc_rs30k", "mcmc_sh2"]
+    # mọi biến thể đổi đúng một thứ so với mcmc, trừ gói v2 (mọi thứ notebook v2 thêm vào, cùng lúc)
+    assert all(variant["mode"] == "mcmc" for variant in plan["variants"])
+    assert all(len(variant["set"]) == 1 for variant in plan["variants"] if variant["tag"] != "v2")
+    bundle = next(variant["set"] for variant in plan["variants"] if variant["tag"] == "v2")
+    assert bundle == {"depth_loss": True, "random_bkgd": True, "use_bilateral_grid": True,
+                      "strategy.refine_stop_iter": 24000, "sr3d.kr": True, "sr3d.mono": True}
+    assert plan["depth_runs"] == ["mcmc_v2", "mcmc_depth"] and plan["depth_test_every"] == 8
+    assert plan["mono_runs"] == ["mcmc_mono", "mcmc_v2"]
     assert plan["post_filter"] == {"min_opacity": 0.02, "max_scale": 0.1}
     lines = plan_lines(plan)
-    assert "variants|mcmc:or0001:opacity_reg=0.001 mcmc:or0005:opacity_reg=0.005 mcmc:or005:opacity_reg=0.05" \
+    assert "variants|mcmc:mono:sr3d.mono=true mcmc:kr:sr3d.kr=true mcmc:bilagrid:use_bilateral_grid=true" \
+           " mcmc:v2:depth_loss=true,random_bkgd=true,use_bilateral_grid=true,strategy.refine_stop_iter=24000," \
+           "sr3d.kr=true,sr3d.mono=true" \
+           " mcmc:or0001:opacity_reg=0.001 mcmc:or0005:opacity_reg=0.005 mcmc:or005:opacity_reg=0.05" \
            " mcmc:sr0001:scale_reg=0.001 mcmc:sr005:scale_reg=0.05 mcmc:nlr250k:strategy.noise_lr=250000" \
            " mcmc:nlr1m:strategy.noise_lr=1000000 mcmc:mo002:strategy.min_opacity=0.02 mcmc:rbg:random_bkgd=true" \
            " mcmc:depth:depth_loss=true mcmc:rs30k:strategy.refine_stop_iter=30000 mcmc:sh2:sh_degree=2" in lines
-    assert "gpu_hours|6" in lines and "disk_gb|27" in lines
-    assert "post_filter|0.02 0.1" in lines and "depth_runs|mcmc_depth" in lines
+    assert "gpu_hours|8" in lines and "disk_gb|35" in lines
+    assert "post_filter|0.02 0.1" in lines and "depth_runs|mcmc_v2 mcmc_depth" in lines
+    assert "mono_runs|mcmc_mono mcmc_v2" in lines
     main_plan = plan_lines(load_experiment("main", REPO / "configs", "/workspace"))
-    assert {"variants|", "runs|default mcmc", "depth_runs|", "depth_test_every|", "post_filter|"} <= set(main_plan)
+    assert {"variants|", "runs|default mcmc", "depth_runs|", "depth_test_every|", "post_filter|",
+            "mono_runs|"} <= set(main_plan)
 
 
 def test_variant_tags_are_not_reused_across_plans():
@@ -689,3 +703,65 @@ def test_a_failed_filter_is_reported_and_training_goes_on(sh):
     rows = dict(summary_rows(sh, "tune"))
     assert rows["gsplat_mipnerf360_s42"] == "FAIL"
     assert rows["filter_mipnerf360_s42"] == "FAIL" and rows["report_mipnerf360"] == "OK"  # lọc lượt đã xong vẫn chạy
+
+
+MONO_VARIANTS = TUNE_VARIANTS + [{"mode": "mcmc", "tag": "mono", "set": {"sr3d.mono": True}},
+                                 {"mode": "mcmc", "tag": "kr", "set": {"sr3d.kr": True}}]
+
+
+def test_a_plan_with_a_depth_prior_sets_up_depth_anything_first(sh):
+    add_tune_plan(sh.repo / "configs", variants=MONO_VARIANTS, seeds=[42])
+    out = experiment(sh, "tune", "--plan")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "depth prior (mcmc_mono): bước depth_anything tải Depth Anything V2 Small" in out.stdout
+    assert "Các bước: depth_anything (bash scripts/setup/setup_depth_anything.sh), env_check, space_check" in out.stdout
+    assert all(line.startswith("fetch ") and "--dry-run" in line for line in calls(sh.root))  # --plan chỉ kiểm dữ liệu
+    (sh.root / "calls.txt").unlink()
+    out = experiment(sh, "tune")
+    assert out.returncode == 0, out.stdout + out.stderr
+    lines = calls(sh.root)
+    assert lines[0] == f"da2setup  | WS={sh.ws}"
+    variants = "mcmc:or0005:opacity_reg=0.005 mcmc:depth:depth_loss=true mcmc:mono:sr3d.mono=true mcmc:kr:sr3d.kr=true"
+    assert lines[1].endswith(f"--modes default mcmc --variants {variants} "
+                             f"--depth-anything-dir {sh.ws / 'code' / 'depth_anything_v2'}")
+    trains = [line for line in lines if line.startswith("train ")]
+    assert trains and all(line.endswith(f" VARIANTS={variants}") for line in trains)
+    assert [name for name, _ in summary_rows(sh, "tune")][:2] == ["depth_anything", "env_check"]
+
+
+def test_a_failed_depth_anything_setup_drops_only_the_depth_prior_runs(sh):
+    add_tune_plan(sh.repo / "configs", variants=MONO_VARIANTS, seeds=[42], also_against=["mcmc"])
+    out = experiment(sh, "tune", FAKE_DA2_RC=1)
+    assert out.returncode == 1  # một bước lỗi
+    assert "depth_anything lỗi: bỏ mcmc_mono trên mọi benchmark" in out.stdout
+    lines = calls(sh.root)
+    kept = "mcmc:or0005:opacity_reg=0.005 mcmc:depth:depth_loss=true mcmc:kr:sr3d.kr=true"
+    smoke = [line for line in lines if line.startswith("smoke ")]
+    assert smoke == [f"smoke --examples-dir {sh.ws / 'code' / 'gsplat' / 'examples'} --modes default mcmc "
+                     f"--variants {kept}"]  # không kiểm lượt bị bỏ, không kiểm Depth Anything V2
+    trains = [line for line in lines if line.startswith("train ")]
+    assert len(trains) == 2 and all(line.endswith(f" VARIANTS={kept}") for line in trains)
+    # chỗ trống không tính lượt bị bỏ: 6 lượt mỗi benchmark, trừ mcmc_mono
+    assert "seed 42: 0/10 lượt gsplat đã xong" in out.stdout and "Seed 42: 0/10 lượt đã xong" in out.stdout
+    rows = dict(summary_rows(sh, "tune"))
+    assert rows["depth_anything"] == "FAIL" and rows["env_check"] == "OK" and rows["gsplat_mipnerf360_s42"] == "OK"
+    text = summary_tsv(sh, "tune").with_suffix(".md").read_text(encoding="utf-8")
+    assert "- Depth Anything V2 chưa sẵn sàng (bước depth_anything lỗi): không train mcmc_mono trên mọi benchmark" in text
+
+
+def test_a_failed_depth_anything_setup_stops_when_the_baseline_needs_it(sh):
+    configs = sh.repo / "configs"
+    base = yaml.safe_load((configs / "base.yaml").read_text(encoding="utf-8"))
+    base["train_modes"]["modes"]["default"]["args"] = {"sr3d.mono": True}  # baseline có depth prior
+    (configs / "base.yaml").write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    add_tune_plan(configs, variants=[TUNE_VARIANTS[0]], seeds=[42])
+    plan = experiment(sh, "tune", "--plan")
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    assert "(không tải được thì không train lượt gsplat nào: default dùng depth prior)" in plan.stdout
+    (sh.root / "calls.txt").unlink(missing_ok=True)
+    out = experiment(sh, "tune", FAKE_DA2_RC=1)
+    assert out.returncode == 1
+    assert "depth_anything lỗi và default dùng depth prior: không train lượt gsplat nào" in out.stdout
+    assert not [line for line in calls(sh.root) if line.startswith(("smoke ", "fetch ", "train "))]
+    rows = dict(summary_rows(sh, "tune"))
+    assert rows["depth_anything"] == "FAIL" and rows["env_check"] == "SKIP"

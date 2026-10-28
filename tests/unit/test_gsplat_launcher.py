@@ -200,3 +200,151 @@ def test_installed_gsplat_must_match_checkout(fake):
     proc = launch(fake, ["--resolve-only", "--resolved-config", str(resolved)])
     assert proc.returncode == 0, proc.stderr
     assert json.loads(resolved.read_text())["_launcher"]["gsplat"]["matches_checkout"]
+
+
+
+# Trainer giả có đúng 4 chỗ chèn của src/training/trainer_hooks.py (cùng thụt lề với Runner.train của gsplat @6e8c837).
+# Không dùng textwrap.dedent: chỗ chèn phải giữ nguyên khoảng trắng. Các lời gọi vào hook được ghi lại để biết mọi dòng
+# [SR3D] đều chạy.
+FAKE_HOOK_TRAINER = """import json
+import sys
+from dataclasses import dataclass, field
+
+from gsplat.distributed import cli
+
+
+@dataclass
+class MCMCStrategy:
+    cap_max: int = 1_000_000
+    refine_start_iter: int = 500
+    refine_stop_iter: int = 25_000
+    refine_every: int = 100
+
+    def step_post_backward(self, step):
+        return step
+
+
+class DefaultStrategy:
+    pass
+
+
+@dataclass
+class Config:
+    data_dir: str = ""
+    result_dir: str = ""
+    max_steps: int = 3
+    depth_loss: bool = False
+    use_bilateral_grid: bool = False
+    strategy: MCMCStrategy = field(default_factory=MCMCStrategy)
+
+
+def rasterize(render_mode):
+    return render_mode
+
+
+class Runner:
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def train(self):
+        cfg = self.cfg
+        hooks = globals().get("_SR3D_HOOKS")
+        calls = []
+        if hooks is not None:
+            for name in ("wants_depth", "mono_loss", "kill_then_relocate"):
+                def wrapper(*args, _original=getattr(hooks, name), _name=name, **kwargs):
+                    calls.append(_name)
+                    return _original(*args, **kwargs)
+                setattr(hooks, name, wrapper)
+        modes, losses = [], []
+        for step in range(cfg.max_steps):
+            data = {"image_id": [0]}
+            alphas = None
+            renders = rasterize(
+                render_mode="RGB+ED" if cfg.depth_loss else "RGB",
+            )
+            modes.append(renders)
+            if renders == "RGB+ED":
+                colors, depths = renders, "depth map"
+            else:
+                colors, depths = renders, None
+            loss = 1.0
+            if cfg.use_bilateral_grid:
+                tvloss = 10 * total_variation_loss(self.bil_grids.grids)
+                loss += tvloss
+            losses.append(loss)
+            if isinstance(self.cfg.strategy, DefaultStrategy):
+                pass
+            elif isinstance(self.cfg.strategy, MCMCStrategy):
+                self.cfg.strategy.step_post_backward(
+                    step,
+                )
+        out = {"argv0": sys.argv[0], "hooks": getattr(hooks, "names", None), "calls": calls, "modes": modes,
+               "losses": losses}
+        with open(cfg.result_dir + "/fake_out.json", "w") as handle:
+            json.dump(out, handle)
+
+
+def main(local_rank, world_rank, world_size, cfg):
+    Runner(cfg).train()
+
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    values = dict(zip(argv[1::2], argv[2::2]))
+    cli(main, Config(data_dir=values["--data-dir"], result_dir=values["--result-dir"]), verbose=True)
+"""
+
+
+@pytest.fixture()
+def hook_fake(fake):
+    (fake["examples"] / "simple_trainer.py").write_text(FAKE_HOOK_TRAINER, encoding="utf-8")
+    return fake
+
+
+def test_hook_runs_a_patched_copy_of_the_trainer(hook_fake):
+    resolved = hook_fake["tmp"] / "resolved.json"
+    original = (hook_fake["examples"] / "simple_trainer.py").read_text(encoding="utf-8")
+    proc = launch(hook_fake, ["--hook", "kr", "--resolved-config", str(resolved)])
+    assert proc.returncode == 0, proc.stderr
+    patched = hook_fake["result"] / "sr3d_simple_trainer.py"
+    out = json.loads((hook_fake["result"] / "fake_out.json").read_text())
+    assert out["argv0"] == str(patched) and out["hooks"] == ["kr"]
+    # mỗi vòng: dòng render_mode, dòng loss của depth prior, dòng KR trước bước relocate của MCMC
+    assert out["calls"] == ["wants_depth", "mono_loss", "kill_then_relocate"] * 3
+    assert out["modes"] == ["RGB"] * 3 and out["losses"] == [1.0] * 3  # hook tắt / ngoài vòng KR: không đổi gì
+    assert (hook_fake["examples"] / "simple_trainer.py").read_text(encoding="utf-8") == original  # gốc không bị sửa
+    assert patched.read_text(encoding="utf-8").count("[SR3D]") >= 4
+    hooks = json.loads(resolved.read_text())["_launcher"]["hooks"]
+    assert hooks["names"] == ["kr"] and hooks["patched_trainer"] == str(patched)
+    assert hooks["trainer_is_pinned"] is False and hooks["parameters"]["kr"]["every"] == 500
+    assert hooks["log"] == str(hook_fake["result"] / "sr3d_hooks.jsonl") and hooks["mono_dir"] is None
+
+
+def test_without_hooks_the_original_trainer_runs(hook_fake):
+    proc = launch(hook_fake, [])
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads((hook_fake["result"] / "fake_out.json").read_text())
+    assert out["argv0"] == str(hook_fake["examples"] / "simple_trainer.py") and out["hooks"] is None
+    assert not (hook_fake["result"] / "sr3d_simple_trainer.py").exists()
+
+
+def test_mono_hook_needs_a_complete_depth_prior(hook_fake):
+    proc = launch(hook_fake, ["--hook", "mono"])
+    assert proc.returncode != 0 and "--hook mono needs --mono-dir" in proc.stderr
+    proc = launch(hook_fake, ["--mono-dir", str(hook_fake["tmp"])])
+    assert proc.returncode != 0 and "only applies with --hook mono" in proc.stderr
+    proc = launch(hook_fake, ["--hook", "mono", "--mono-dir", str(hook_fake["tmp"] / "none")])
+    assert proc.returncode != 0 and "no complete depth prior" in proc.stderr
+    assert not (hook_fake["result"] / "fake_out.json").exists()
+    resolved = hook_fake["tmp"] / "resolved.json"  # chỉ phân giải tham số (smoke test): không cần depth prior
+    proc = launch(hook_fake, ["--hook", "mono", "--hook", "kr", "--resolve-only", "--resolved-config", str(resolved)])
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(resolved.read_text())["_launcher"]["hooks"]["names"] == ["kr", "mono"]
+    assert not (hook_fake["result"] / "fake_out.json").exists()
+
+
+def test_hook_refuses_a_trainer_without_the_anchors(fake):
+    proc = launch(fake, ["--hook", "kr"])  # trainer giả gốc: không có chỗ chèn nào
+    assert proc.returncode != 0 and "anchor occurs 0 time" in proc.stderr
+    assert not (fake["result"] / "fake_out.json").exists()

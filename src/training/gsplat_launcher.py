@@ -9,6 +9,9 @@ Các mở rộng được áp dụng bằng cách thay thuộc tính của modul
 - `--record-split F`: ghi danh sách ảnh train/val mà gsplat thực sự dùng, làm bằng chứng cho báo cáo.
 - `--resolved-config F`: ghi toàn bộ cấu hình sau khi phân giải (kể cả tham số của strategy).
 - `--resolve-only`: chỉ phân giải cấu hình rồi thoát; không cần GPU, dùng để kiểm tra tham số.
+- `--hook kr|mono` (lặp lại được; `mono` cần `--mono-dir` = thư mục depth prior của src.training.mono_depth): chạy một
+  BẢN SAO có vá của simple_trainer.py, ghi vào `<result-dir>/sr3d_simple_trainer.py`, với các biến thể có code của
+  src/training/trainer_hooks.py; file gốc không bị sửa. Không có `--hook` thì chạy file gốc.
 
 Launcher dừng nếu gói `gsplat` đang cài khác mã nguồn trong thư mục checkout (so SHA-256 các file strategy
 và rasterization). Lý do: v1.5.3 và commit được ghim cùng báo phiên bản "1.5.3", nên cài nhầm sẽ không
@@ -33,6 +36,16 @@ import os
 import runpy
 import sys
 from pathlib import Path
+
+from src.training.trainer_hooks import (
+    HOOK_NAMES,
+    HOOKS_LOG,
+    PATCHED_TRAINER,
+    Hooks,
+    PatchError,
+    hook_parameters,
+    write_patched_trainer,
+)
 
 GSPLAT_DEFAULT_SEED = 42  # simple_trainer.Runner: set_random_seed(42 + local_rank)
 GUARDED_FILES = ("strategy/default.py", "strategy/mcmc.py", "strategy/ops.py", "rendering.py")
@@ -160,6 +173,14 @@ def _absolute_path_value(trainer: list[str], index: int) -> str:
     return value
 
 
+def _flag_value(trainer: list[str], names: tuple[str, ...]) -> str | None:
+    """Giá trị đứng sau một trong các tên tham số (dạng `--tên giá_trị`), hoặc None."""
+    for index, token in enumerate(trainer[:-1]):
+        if token in names:
+            return trainer[index + 1]
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--" in argv:
@@ -174,9 +195,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--record-split", type=Path, default=None)
     parser.add_argument("--resolved-config", type=Path, default=None)
     parser.add_argument("--resolve-only", action="store_true")
+    parser.add_argument("--hook", action="append", default=[], choices=HOOK_NAMES,
+                        help="biến thể có code (src/training/trainer_hooks.py), lặp lại được")
+    parser.add_argument("--mono-dir", type=Path, default=None,
+                        help="thư mục depth prior (src.training.mono_depth) cho --hook mono")
     args = parser.parse_args(own)
     if not trainer:
         parser.error("trainer arguments are required after '--'")
+    hooks = [name for name in HOOK_NAMES if name in args.hook]
+    if "mono" in hooks and args.mono_dir is None and not args.resolve_only:
+        parser.error("--hook mono needs --mono-dir")
+    if args.mono_dir is not None and "mono" not in hooks:
+        parser.error("--mono-dir only applies with --hook mono")
 
     examples = args.examples_dir.resolve()
     script = examples / "simple_trainer.py"
@@ -191,6 +221,25 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"{args.split_file} must contain non-empty 'train' and 'test' lists")
     if args.resolve_only and args.resolved_config is None:
         parser.error("--resolve-only needs --resolved-config")
+    mono_dir = args.mono_dir.resolve() if args.mono_dir is not None else None
+    run_script, init_globals, hooks_info = script, None, None
+    if hooks:
+        result_dir = _flag_value(trainer, ("--result-dir", "--result_dir"))
+        if result_dir is None:
+            parser.error("--hook needs --result-dir in the trainer arguments")
+        try:
+            hooks_info = write_patched_trainer(script, Path(result_dir) / PATCHED_TRAINER)
+        except (PatchError, OSError, UnicodeDecodeError) as error:
+            parser.error(str(error))
+        hook = Hooks(hooks, mono_dir=mono_dir, log_path=Path(result_dir) / HOOKS_LOG)
+        if "mono" in hooks and not args.resolve_only:
+            try:
+                hook.load_priors()  # thiếu / dở dang thì dừng trước khi nạp dữ liệu và train
+            except RuntimeError as error:
+                parser.error(str(error))
+        hooks_info.update(names=hooks, parameters=hook_parameters(hooks), mono_dir=str(mono_dir) if mono_dir else None,
+                          log=str(Path(result_dir) / HOOKS_LOG))
+        run_script, init_globals = Path(hooks_info["patched_trainer"]), {"_SR3D_HOOKS": hook}
 
     # Jupyter đặt MPLBACKEND=module://matplotlib_inline...; examples/utils.py và torchmetrics import matplotlib
     os.environ["MPLBACKEND"] = "Agg"
@@ -198,14 +247,17 @@ def main(argv: list[str] | None = None) -> int:
     sys.path.insert(0, str(examples))
     launcher_info = {"seed": args.seed, "split_file": str(args.split_file) if args.split_file else None,
                      "gsplat": check_installed_gsplat(examples)}
+    if hooks_info is not None:
+        launcher_info["hooks"] = hooks_info
     if args.seed is not None:
         patch_seed(args.seed, examples)
     if split is not None or record_split is not None:
         patch_split(split, record_split, examples)
     patch_cli(resolved_config, args.resolve_only, launcher_info)
 
-    sys.argv = [str(script), *trainer]
-    runpy.run_path(str(script), run_name="__main__")
+    # bản sao có vá nằm ngoài examples/: các module của gsplat vẫn được import từ examples/ (sys.path[0], thư mục hiện tại)
+    sys.argv = [str(run_script), *trainer]
+    runpy.run_path(str(run_script), init_globals=init_globals, run_name="__main__")
     return 0
 
 

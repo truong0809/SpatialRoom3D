@@ -5,7 +5,8 @@ Mục cấu hình gồm:
 - `protocol`: điều kiện chung cho mọi chế độ (độ phân giải, cách chia test, số vòng lặp, mạng LPIPS,
   chế độ raster...). Hai chế độ chỉ được so sánh khi protocol giống nhau.
 - `modes`: mỗi chế độ chọn preset của `simple_trainer.py` (`default` hoặc `mcmc`), tham số riêng (`args`)
-  và cách đặt giới hạn số Gaussian (`cap_max`) cho MCMC.
+  và cách đặt giới hạn số Gaussian (`cap_max`) cho MCMC. Khóa `sr3d.kr`, `sr3d.mono` trong tham số bật biến thể có code
+  (HOOK_KEYS, src/training/trainer_hooks.py) thay vì một tham số của `simple_trainer.py`.
 
 Mọi thay đổi protocol (trong `modes.<tên>.protocol` hoặc qua dòng lệnh) được ghi thành `deviations`
 để bước so sánh đánh dấu lượt chạy đó là không cùng điều kiện.
@@ -51,6 +52,13 @@ RESERVED_FLAGS = set(PROTOCOL_FLAGS.values()) | {
 PRESETS = ("default", "mcmc")
 DATASET_PROTOCOL_KEYS = ("data_factor",)  # khóa protocol mà một benchmark được đặt làm quy ước riêng
 CAP_POLICIES = ("match_baseline", "fixed")
+# Biến thể có code (src/training/trainer_hooks.py): không phải tham số của simple_trainer.py mà là hook chạy trên một bản
+# sao có vá của nó. Đặt như một tham số (`sr3d.kr: true` trong `args` / `set`, hoặc `--set sr3d.kr=true`) để đi cùng
+# đường với mọi tham số: run_meta, so cấu hình giữa các lượt, tên biến thể trong bảng so sánh. Chỉ nhận true (bỏ khóa
+# để tắt); không được đưa sang simple_trainer.py (trainer_args bỏ qua).
+HOOK_PREFIX = "sr3d."
+HOOK_KEYS = {"sr3d.kr": "kr", "sr3d.mono": "mono"}
+HOOK_PRESETS = {"kr": ("mcmc",), "mono": PRESETS}  # kr gắn vào bước relocate của MCMCStrategy
 
 
 def normalize_flag(key: str) -> str:
@@ -99,6 +107,22 @@ def to_cli(flag: str, value) -> list[str]:
     if value is None:
         raise ValueError(f"None is not allowed for --{flag}")
     return [f"--{flag}", str(value)]
+
+
+def _check_hook(flag: str, value, preset: str, where: str) -> None:
+    if flag not in HOOK_KEYS:
+        raise ValueError(f"{where}: unknown code variant {flag!r} (known: {sorted(HOOK_KEYS)})")
+    if value is not True:
+        raise ValueError(f"{where}: {flag} only takes true (leave the key out to turn the code variant off), "
+                         f"got {value!r}")
+    if preset not in HOOK_PRESETS[HOOK_KEYS[flag]]:
+        raise ValueError(f"{where}: {flag} needs the preset {' or '.join(HOOK_PRESETS[HOOK_KEYS[flag]])}, "
+                         f"not {preset!r}")
+
+
+def hook_names(spec) -> list[str]:
+    """Các hook (src/training/trainer_hooks.py) mà một lượt bật, theo thứ tự cố định."""
+    return [name for flag, name in HOOK_KEYS.items() if spec.args.get(flag) is True]
 
 
 def _coerce_protocol(key: str, value):
@@ -219,6 +243,8 @@ def resolve_mode(config: dict, mode: str, set_args: dict | None = None,
             if flag in RESERVED_FLAGS:
                 raise ValueError(f"--{flag} is controlled by the protocol / wrapper; "
                                  f"change it through the protocol instead ({source})")
+            if flag.startswith(HOOK_PREFIX):
+                _check_hook(flag, value, preset, f"mode {mode} ({source})")
             args[flag] = value
 
     cap = entry.get("cap_max")
@@ -311,6 +337,8 @@ def trainer_args(spec: ModeSpec, scene_dir: Path, result_dir: Path, cap_max: int
     if cap_max is not None:
         argv += to_cli("strategy.cap-max", int(cap_max))
     for flag, value in spec.args.items():
+        if flag in HOOK_KEYS:  # hook của launcher (--hook), không phải tham số của simple_trainer.py
+            continue
         argv += to_cli(flag, value)
     return argv
 

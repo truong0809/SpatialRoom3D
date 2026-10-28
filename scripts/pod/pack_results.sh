@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # pack_results.sh - Dong goi ket qua nhe de tai ve tu pod (vai MB):
 #   - $WS/outputs/reports, $WS/outputs/logs, $WS/outputs/jobs (bao cao, log, trang thai viec chay nen);
-#   - phan con lai cua $WS/outputs: JSON, CSV, log, cau hinh (cfg_args, *.yml, *.txt) va mot anh render moi lan
-#     chay, ke ca bao cao frame / COLMAP va log COLMAP cua canh tu chup (outputs/custom_scenes/<canh>/colmap/).
+#   - phan con lai cua $WS/outputs: JSON (ca *.jsonl, vd. nhat ky hook sr3d_hooks.jsonl), CSV, log, cau hinh
+#     (cfg_args, *.yml, *.txt) va mot anh render moi lan chay, ke ca bao cao frame / COLMAP va log COLMAP cua canh
+#     tu chup (outputs/custom_scenes/<canh>/colmap/).
 # KHONG gom: checkpoint, file PLY (ke ca outputs/checkpoints/), video, anh / video goc, dataset (qua lon; PLY tai
 # rieng khi can xem 3D).
 # Bo qua thu muc *.prev_* (lan chay cu da duoc thay bang --force / --rerun-incomplete).
@@ -30,7 +31,7 @@ trap 'rm -f "$LIST" "$PKG.part"' EXIT
     # khong theo symlink (find mac dinh): mot thu muc khong bi gom hai lan qua lien ket
     find outputs \( -path outputs/reports -o -path outputs/logs -o -path outputs/jobs -o -path outputs/checkpoints \
         -o -name '*.prev_*' -o -name '.images_*_png*' \) -prune -o -type f \( \
-        -name '*.json' -o -name '*.csv' -o -name '*.log' -o -name '*.yml' -o -name '*.txt' -o -name cfg_args \
+        -name '*.json' -o -name '*.jsonl' -o -name '*.csv' -o -name '*.log' -o -name '*.yml' -o -name '*.txt' -o -name cfg_args \
         -o -path '*/renders/val_step*_0000.png' -o -path '*/ours_30000/*/00000.png' \) -print0
   fi
 } > "$LIST" 2>/dev/null

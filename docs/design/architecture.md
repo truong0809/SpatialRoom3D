@@ -1,6 +1,6 @@
 # Kiến trúc repository và dữ liệu
 
-_Cập nhật: 24/10/2026_
+_Cập nhật: 28/10/2026_
 
 Tài liệu này ghi:
 - cây thư mục của repo và vai trò từng phần;
@@ -26,7 +26,9 @@ SpatialRoom3D/
 │   ├── reconstruction/            colmap_runner.py, colmap_model.py, report.py (kiểm tra trước khi train)
 │   ├── training/                  profiles.py, split.py, gsplat_launcher.py, run.py (một lượt train / đánh giá),
 │   │                              experiment.py (kế hoạch thực nghiệm, configs/experiments/),
-│   │                              depth_check.py (điểm SfM cho depth_loss), prune.py (lọc Gaussian, chấm lại)
+│   │                              depth_check.py (điểm SfM cho depth_loss), prune.py (lọc Gaussian, chấm lại),
+│   │                              trainer_hooks.py (biến thể có code: bản sao có vá của trainer, KR, depth prior),
+│   │                              mono_depth.py (depth prior bằng Depth Anything V2 Small)
 │   ├── rendering/                 render.py: render lại từ checkpoint, xuất PLY
 │   ├── evaluation/                gsplat_results.py, compare_modes.py, compare_reference.py, overview.py,
 │   │                              splat_stats.py (thống kê PLY), panels.py (ảnh so sánh các lượt)
@@ -39,7 +41,7 @@ SpatialRoom3D/
 │   ├── mipnerf360.yaml            Mip-NeRF 360: dữ liệu, nguồn tải, kết quả, mục benchmark (protocol, số liệu công bố, ngưỡng)
 │   ├── deep_blending.yaml         Deep Blending: như trên
 │   ├── experiments/               kế hoạch thực nghiệm (main.yaml: default / mcmc, 3 seed, 6 cảnh;
-│   │                              tune_mcmc.yaml: 12 biến thể của mcmc trên room, 1 seed, lọc Gaussian)
+│   │                              tune_mcmc.yaml: 16 biến thể của mcmc trên room, 1 seed, lọc Gaussian)
 │   ├── environment/               phiên bản ghim của 3 env conda (gs-inria, gs-tools, gs-gsplat)
 │   └── local.yaml                 (không vào Git) ghi đè đường dẫn trên một pod, mục 5
 ├── scripts/
@@ -53,7 +55,8 @@ SpatialRoom3D/
 │   ├── pod/                       run_all, run_scene (cả luồng một cảnh), run_experiment (thực nghiệm trọn vẹn),
 │   │                              fetch_data (tải benchmark), job (chạy nền, xếp hàng GPU), results, pack_results,
 │   │                              check_datasets
-│   ├── setup/                     env_probe, setup_3dgs_inria, setup_data_tools, setup_gsplat, smoke_test_*.py
+│   ├── setup/                     env_probe, setup_3dgs_inria, setup_data_tools, setup_gsplat, setup_depth_anything,
+│   │                              smoke_test_*.py
 │   └── lib/                       gpu_lock.sh, config.sh (đọc configs/*.yaml), benchmark.sh
 ├── tests/
 │   ├── test_dataset.py            cấu hình và kiểm tra dữ liệu
@@ -106,6 +109,7 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 │   ├── benchmarks/<benchmark>/
 │   │   ├── inria_b0/<cảnh>/          B0 Inria
 │   │   ├── gsplat/<cảnh>/<chế_độ>[_<tag>]_s<seed>/   tag: biến thể tham số của một kế hoạch (vd. mcmc_or0001_s42)
+│   │   │                                            .mono_depth_<dấu COLMAP>/: depth prior của cảnh (biến thể mono)
 │   │   └── gsplat_quick/<cảnh>/<chế_độ>_s<seed>/   chạy thử 3.000 vòng
 │   ├── checkpoints/<luồng>/<cảnh>/<lượt>.ply   PLY đã xuất để tải về / xem 3D (liên kết cứng tới PLY của lượt)
 │   ├── panels/<luồng>_<cảnh>_<thời_gian>/       ảnh so sánh các lượt, video xếp chồng (scripts/run_panels.sh)
@@ -113,7 +117,8 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 │   ├── logs/                         log; logs/jobs/: log của việc chạy nền
 │   └── jobs/                         trạng thái việc chạy nền
 ├── miniforge3/                     env conda gs-inria, gs-gsplat, gs-tools
-├── code/                           gaussian-splatting (Inria 54c035f), gsplat (6e8c837)
+├── code/                           gaussian-splatting (Inria 54c035f), gsplat (6e8c837),
+│                                   depth_anything_v2 (a561b84 + trọng số bản Small, chỉ biến thể mono)
 ├── ket_qua_*.tar.gz                gói kết quả nhẹ để tải về
 └── .ssh/                           deploy key chỉ đọc (không bao giờ gửi đi)
 ```

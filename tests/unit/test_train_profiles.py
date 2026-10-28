@@ -8,8 +8,10 @@ from pathlib import Path
 import pytest
 
 from src.training.profiles import (
+    HOOK_KEYS,
     checkpoint_path,
     eval_args,
+    hook_names,
     load_config,
     normalize_flag,
     parse_assignments,
@@ -166,3 +168,30 @@ def test_cli_helpers():
         parse_assignments(["novalue"])
     with pytest.raises(ValueError):
         normalize_flag("bad flag")
+
+
+def test_code_variants_are_hooks_not_trainer_arguments(config):
+    """sr3d.kr / sr3d.mono bật biến thể có code (src/training/trainer_hooks.py): giữ trong args (run_meta, so cấu hình,
+    tên biến thể trong bảng) nhưng không đưa sang simple_trainer.py."""
+    spec = resolve_mode(config, "mcmc", set_args={"sr3d.mono": True, "use_bilateral_grid": True, "sr3d.kr": True})
+    assert spec.args == {"sr3d.mono": True, "use-bilateral-grid": True, "sr3d.kr": True}
+    assert hook_names(spec) == ["kr", "mono"]  # thứ tự cố định, không theo thứ tự khai báo
+    argv = trainer_args(spec, Path("/s"), Path("/o"), 123)
+    assert "--use-bilateral-grid" in argv and not any("sr3d" in token for token in argv)
+    assert eval_args(spec, Path("/s"), Path("/o"), 123)[:len(argv)] == argv
+    assert hook_names(resolve_mode(config, "mcmc")) == []
+    assert set(HOOK_KEYS) == {"sr3d.kr", "sr3d.mono"}
+    # depth prior không phụ thuộc strategy; KR gắn vào bước relocate của MCMC
+    assert hook_names(resolve_mode(config, "default", set_args={"sr3d.mono": True})) == ["mono"]
+    with pytest.raises(ValueError, match="needs the preset mcmc"):
+        resolve_mode(config, "default", set_args={"sr3d.kr": True})
+    with pytest.raises(ValueError, match="only takes true"):
+        resolve_mode(config, "mcmc", set_args={"sr3d.kr": False})
+    with pytest.raises(ValueError, match="only takes true"):
+        resolve_mode(config, "mcmc", set_args={"sr3d.mono": "yes"})
+    with pytest.raises(ValueError, match="unknown code variant"):
+        resolve_mode(config, "mcmc", set_args={"sr3d.relocate": True})
+    with pytest.raises(ValueError, match="unknown code variant"):  # tên viết theo kiểu tham số (gạch dưới) vẫn bị bắt
+        resolve_mode(config, "mcmc", set_args={"sr3d.mono_depth": True})
+    with pytest.raises(ValueError, match="needs the preset mcmc"):  # khóa trong args của một chế độ tự thêm
+        resolve_mode(with_mode(config, "kr_default", {"preset": "default", "args": {"sr3d.kr": True}}), "kr_default")

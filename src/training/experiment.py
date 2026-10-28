@@ -20,6 +20,8 @@ Kiểm tra:
     (`warnings`): cả hai vẫn train, mỗi chế độ một dòng trong bảng;
   * chế độ hoặc biến thể có loss độ sâu (`depth_loss: true`) được liệt kê để kiểm tra điểm SfM trước khi train
     (src/training/depth_check.py);
+  * `set` có thể bật biến thể có code bằng `sr3d.kr: true` / `sr3d.mono: true` (src/training/trainer_hooks.py; kr chỉ cho
+    preset mcmc); lượt có `sr3d.mono` được liệt kê (`mono_runs`) để scripts/pod/run_experiment.sh cài Depth Anything V2;
   * `post_filter` (tùy chọn): `{min_opacity, max_scale}`, lọc Gaussian mỗi lượt đã xong rồi chấm lại
     (src/training/prune.py);
   * `seeds` là số nguyên không âm, không trùng;
@@ -45,7 +47,7 @@ import sys
 from pathlib import Path
 
 from src.datasets.registry import CONFIG_DIR, load_registry, read_yaml
-from src.training.profiles import normalize_flag, parse_assignments, parse_value, resolve_mode
+from src.training.profiles import hook_names, normalize_flag, parse_assignments, parse_value, resolve_mode
 
 EXPERIMENTS = "experiments"  # configs/experiments/<tên>.yaml
 NAME = re.compile(r"[a-z0-9_]+")
@@ -213,7 +215,7 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
         raise ValueError(f"{where}: benchmarks must be a non-empty list")
     datasets = registry.get("datasets") or {}
     plan_benches = []
-    depth_runs = set()
+    depth_runs, mono_runs = set(), set()
     warnings = []
     for index, bench in enumerate(benches):
         here = f"{where}: benchmarks[{index}]"
@@ -257,6 +259,8 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
             twins.append((run, mode))
             if spec.args.get(DEPTH_FLAG) is True:
                 depth_runs.add(run)
+            if "mono" in hook_names(spec):
+                mono_runs.add(run)
         plan_benches.append({"dataset": dataset, "scenes": scenes, "b0": b0,
                              "all_scenes": sorted(scenes) == sorted(known)})
 
@@ -268,6 +272,7 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
     run_mode = {**{mode: mode for mode in modes}, **{variant["run"]: variant["mode"] for variant in variants}}
     runs = list(run_mode)
     depth_runs = [run for run in runs if run in depth_runs]
+    mono_runs = [run for run in runs if run in mono_runs]
     test_every = sorted({resolve_mode(train_modes, run_mode[run]).protocol["test_every"] for run in depth_runs})
     if len(test_every) > 1:
         raise ValueError(f"{where}: the depth-loss runs {depth_runs} use different test_every values {test_every}")
@@ -284,6 +289,7 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
         "runs": runs,
         "depth_runs": depth_runs,
         "depth_test_every": test_every[0] if test_every else None,
+        "mono_runs": mono_runs,
         "post_filter": _post_filter(raw.get("post_filter"), where),
         "seeds": seeds,
         "benchmarks": plan_benches,
@@ -413,6 +419,7 @@ def plan_lines(plan: dict) -> list[str]:
              f"modes|{words(plan['modes'])}", f"also_against|{words(plan['also_against'])}",
              f"variants|{words(plan['variant_lines'])}", f"runs|{words(plan['runs'])}",
              f"depth_runs|{words(plan['depth_runs'])}", f"depth_test_every|{plan['depth_test_every'] or ''}",
+             f"mono_runs|{words(plan['mono_runs'])}",
              f"post_filter|{'' if post is None else f'{post[FILTER_KEYS[0]]!r} {post[FILTER_KEYS[1]]!r}'}",
              f"seeds|{words(plan['seeds'])}",
              f"gpu_hours|{plan['estimate']['gpu_hours']:g}", f"disk_gb|{plan['estimate']['disk_gb']:g}"]

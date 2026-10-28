@@ -119,7 +119,7 @@ Viewer được đưa vào ở dạng thô ngay từ giai đoạn 3 để phát 
   - B0 vẫn là mốc đối chiếu cho `default` trên Deep Blending.
   - Thiết kế và giao thức so sánh: `docs/design/training_modes.md`.
 - **Thực nghiệm chính (quyết định D12):** so sánh `default` và `mcmc` trên 6 cảnh trong nhà (Deep Blending và 4 cảnh của Mip-NeRF 360), 3 seed: `docs/design/experiments.md` mục 2.
-- **Chế độ thứ ba (quyết định D14):** dò tham số `mcmc` trên `room` (một seed, 12 biến thể, kèm lọc Gaussian sau khi train), ghép các ứng viên thành vài cấu hình chạy 2 seed mới trên `room` (vòng ghép, quyết định D15) để chọn tham số cho `mcmc_indoor`, rồi so `mcmc_indoor` với `mcmc` trong thực nghiệm chính; kết luận dựa trên 5 cảnh không dùng để chọn tham số và video của nhóm (`docs/design/experiments.md` mục 3, 4). Đây là đóng góp loại (b) dưới đây, không phải thuật toán mới.
+- **Chế độ thứ ba (quyết định D14, D16):** dò tham số `mcmc` trên `room` (một seed, 16 biến thể, kèm lọc Gaussian sau khi train; 4 biến thể lấy từ notebook v2 của nhóm: bilateral grid, Kill-then-Relocate, depth prior bằng Depth Anything V2 và cả gói, tức hai hướng depth prior và bù phơi sáng của bảng 3.4 dưới đây), ghép các ứng viên thành vài cấu hình chạy 2 seed mới trên `room` (vòng ghép, quyết định D15) để chọn tham số cho `mcmc_indoor`, rồi so `mcmc_indoor` với `mcmc` trong thực nghiệm chính; kết luận dựa trên 5 cảnh không dùng để chọn tham số và video của nhóm (`docs/design/experiments.md` mục 3, 4). Đây là đóng góp loại (b) dưới đây, không phải thuật toán mới.
 
 ### 3.4 Hướng cải tiến ứng viên
 
