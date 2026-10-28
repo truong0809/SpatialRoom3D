@@ -27,6 +27,18 @@ benchmarks:
 #     PNG thu nhỏ gsplat ghi một lần cho mỗi cảnh); B0 và dữ liệu khoảng 7 GB. File zip tải về bị xóa sau khi giải nén.
 #   Kiểm tra chỗ trống (scripts/pod/run_experiment.sh): lượt chưa xong tính theo dung lượng thật của lượt cùng cảnh,
 #   cùng chế độ đã xong ở seed khác; chưa có thì theo disk_gb chia đều cho mọi lượt (src/training/experiment.py).
+#   Chạy riêng một phương pháp (run_experiment.sh main --only <phương pháp>; notebook app/notebooks/b0_inria.ipynb,
+#   gsplat_default.ipynb, gsplat_mcmc.ipynb), cùng căn cứ:
+#   - b0: 49,5 phút đo được, gồm cả tải dữ liệu; B0 hai cảnh và dữ liệu Deep Blending, khoảng 5 GB (chưa đo riêng).
+#   - default: trên Deep Blending, default train khoảng 48 % thời gian của default + mcmc (số đo cùng ngày), nên lấy
+#     khoảng một nửa phần gsplat: 3 seed × (37 phút Deep Blending + 75 phút Mip-NeRF 360) ≈ 5,6 giờ; khoảng một nửa
+#     dung lượng gsplat (10 + 11–15 GB) cộng dữ liệu, khoảng 30 GB.
+#   - mcmc: tính cả default khi chưa có lượt default (như phần gsplat của main: 11,2 giờ, ghi 12 cho dư; khoảng 54 GB);
+#     lượt default đã xong (chạy sau notebook default hoặc main) thì chỉ còn khoảng một nửa.
 estimate:
   gpu_hours: 12
   disk_gb: 56
+  only:
+    b0: {gpu_hours: 1, disk_gb: 5}
+    default: {gpu_hours: 6, disk_gb: 30}
+    mcmc: {gpu_hours: 12, disk_gb: 54}

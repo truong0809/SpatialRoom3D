@@ -11,7 +11,8 @@ Nguồn đọc (mới nhất theo thời gian sửa file):
     outputs/reports/baseline_db_summary_*.json  B0 so với số liệu Inria công bố (src.evaluation.compare_reference)
     outputs/reports/modes_db_<thời gian>.md     gsplat đầy đủ, các chế độ (src.evaluation.compare_modes)
     outputs/reports/modes_db_quick_*.json       lượt chạy thử 3000 vòng (chỉ kiểm tra luồng chạy)
-    outputs/reports/experiment_*.tsv            các bước của thực nghiệm gần nhất (bảng so sánh: file .md cùng tên)
+    outputs/reports/<tên bản>_<thời gian>.tsv   các bước của thực nghiệm gần nhất (dòng đầu `# experiment ...`; tên bản:
+                                                main, gsplat_mcmc...; bảng so sánh: file .md cùng tên)
     data/custom_scenes/<cảnh>/               nguồn gốc (ảnh / video) của cảnh tự chụp
     <out-root>/<cảnh>/colmap/{frames_report,sfm_report}.json, <out-root>/<cảnh>/<chế độ>_s<seed>/ (và filtered/
     của lượt đó khi đã lọc Gaussian bằng scripts/run_filter.sh)
@@ -85,8 +86,22 @@ def run_all_section(ws: Path) -> list[str]:
     return [f"== run_all ({path.name})"] + _step_rows(path, 13)
 
 
+def latest_experiment(reports: Path) -> Path | None:
+    """Bảng các bước của lần chạy thực nghiệm gần nhất (scripts/pod/run_experiment.sh): `<tên bản>_<thời gian>.tsv`,
+    nhận ra bằng dòng đầu `# experiment ...` (tên bản là tên kế hoạch hoặc tên notebook, không có tiền tố chung)."""
+    found = []
+    for path in reports.glob("*.tsv"):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                if handle.readline().startswith("# experiment "):
+                    found.append(path)
+        except OSError:
+            continue
+    return max(found, key=lambda path: (path.stat().st_mtime, path.name)) if found else None
+
+
 def experiment_section(ws: Path) -> list[str]:
-    path = latest(ws / "outputs" / "reports", "experiment_*.tsv")
+    path = latest_experiment(ws / "outputs" / "reports")
     if path is None:
         return ["== Thực nghiệm (scripts/pod/run_experiment.sh): chưa có "
                 "(kế hoạch: bash scripts/pod/run_experiment.sh main --plan)"]

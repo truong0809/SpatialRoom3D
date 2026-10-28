@@ -38,7 +38,7 @@ COMMANDS: dict[str, tuple[str, list[str], str]] = {
     "scene": ("scripts/pod/run_scene.sh", [], "cả luồng cho một cảnh tự chụp: <ảnh|video|-> <cảnh> [--background]"),
     "fetch": ("scripts/pod/fetch_data.sh", [], "tải dữ liệu benchmark về volume: <benchmark> [cảnh ...] [--dry-run]"),
     "experiment": ("scripts/pod/run_experiment.sh", [],
-                   "một thực nghiệm trọn vẹn (configs/experiments/): <tên> --plan | --background"),
+                   "một thực nghiệm trọn vẹn (configs/experiments/): <tên> [--only <b0|chế độ>] --plan | --background"),
     "setup": ("scripts/pod/run_all.sh", ["--background"], "cài / kiểm tra môi trường trên pod (chạy nền, không train)"),
     "status": ("scripts/pod/job.sh", ["status"], "trạng thái các việc chạy nền"),
     "log": ("scripts/pod/job.sh", ["log"], "cuối log của một việc: log <tên> [số dòng]"),

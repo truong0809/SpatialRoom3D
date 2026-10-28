@@ -97,7 +97,7 @@ def test_render_runs_into_a_new_folder_and_exports_the_final_ply(tmp_path, capsy
     assert meta["exit_code"] == 0 and meta["images"] == 1 and meta["metrics"]["psnr"] == 30.1
     assert meta["videos"][0].endswith("traj_29999.mp4") and meta["source_run"] == str(run)
     assert seen["cwd"] == tmp_path / "gsplat" / "examples" and seen["env"]["MPLBACKEND"] == "Agg"
-    target = export / "phong1" / "default_s42.ply"
+    target = export / "phong1" / "gsplat_default_phong1_s42.ply"  # tên bản (gsplat_default), cảnh, seed
     assert target.read_bytes() == b"ply-final"  # PLY của bước cuối
     assert target.stat().st_ino == (run / "ply" / "point_cloud_29999.ply").stat().st_ino  # liên kết cứng
     assert "(hardlink)" in capsys.readouterr().out
@@ -128,18 +128,29 @@ def test_refuses_unfinished_runs_and_missing_files(tmp_path, capsys):
 
 
 def test_export_never_overwrites_another_ply(tmp_path, capsys):
-    """Tên <lượt>.ply đã là PLY của lượt khác (vd. lượt cũ trước khi train lại): xuất thêm tên có thời điểm train xong."""
+    """Tên PLY xuất ra đã là PLY của lượt khác (vd. lượt cũ trước khi train lại): xuất thêm tên có thời điểm train xong."""
     run, _ = make_run(tmp_path)
     export = tmp_path / "exp"
-    other = export / "phong1" / "default_s42.ply"
+    other = export / "phong1" / "gsplat_default_phong1_s42.ply"
     other.parent.mkdir(parents=True)
     other.write_bytes(b"older run")
     assert main(["--run", str(run), "--no-render", "--export", str(export)]) == 0
     assert other.read_bytes() == b"older run"  # không ghi đè
-    second = export / "phong1" / "default_s42_20261019_083005.ply"
+    second = export / "phong1" / "gsplat_default_phong1_s42_20261019_083005.ply"
     assert second.read_bytes() == b"ply-final" and f"[export] {second}" in capsys.readouterr().out
     assert main(["--run", str(run), "--no-render", "--export", str(export)]) == 0  # xuất lại: đã có, không thêm file
     assert "(exists)" in capsys.readouterr().out and len(list((export / "phong1").iterdir())) == 2
+
+
+def test_export_names_follow_the_version_scene_and_seed():
+    from src.rendering.render import export_name
+    assert export_name(Path("/x/drjohnson/mcmc_s42"), "drjohnson") == "gsplat_mcmc_drjohnson_s42"  # notebook gsplat_mcmc
+    assert export_name(Path("/x/room/mcmc_or0001_s43"), "room") == "gsplat_mcmc_or0001_room_s43"  # biến thể có tag
+    assert export_name(Path("/x/room/custom"), "room") == "gsplat_custom_room"  # thư mục không theo mẫu <lượt>_s<seed>
+    quick = Path("/ws/outputs/benchmarks/deep_blending/gsplat_quick/playroom/default_s42")
+    assert export_name(quick, "playroom") == "gsplat_default_playroom_s42_quick"  # lượt chạy thử 3.000 vòng
+    previous = Path("/ws/outputs/custom_scenes/phong1/default_s42.prev_20261028_101500")
+    assert export_name(previous, "phong1") == "gsplat_default_phong1_s42.prev_20261028_101500"  # lượt cũ đã đổi tên
 
 
 def test_render_refuses_when_the_colmap_model_changed(tmp_path, capsys):
@@ -191,7 +202,7 @@ def test_run_render_script_finds_the_run_and_exports_without_gpu(sh, tmp_path):
     script = str(sh.repo / "scripts" / "run_render.sh")
     out = sh.run(script, "custom", "phong1", env={"RENDER": "0"})
     assert out.returncode == 0, out.stdout + out.stderr
-    exported = sh.ws / "outputs" / "checkpoints" / "custom_scene" / "phong1" / "default_s42.ply"
+    exported = sh.ws / "outputs" / "checkpoints" / "custom_scene" / "phong1" / "gsplat_default_phong1_s42.ply"
     assert exported.read_bytes() == b"ply-final"
     missing = sh.run(script, "custom", "phong1", "mcmc_s42", env={"RENDER": "0"})
     assert missing.returncode == 1 and "no run at" in missing.stdout
@@ -208,7 +219,8 @@ def test_quick_runs_export_to_their_own_folder(sh, tmp_path):
     out = sh.run(str(sh.repo / "scripts" / "run_render.sh"), "deep_blending", "playroom",
                  env={"RENDER": "0", "QUICK": "1"})
     assert out.returncode == 0, out.stdout + out.stderr
-    assert (sh.ws / "outputs" / "checkpoints" / "deep_blending_quick" / "playroom" / "default_s42.ply").is_file()
+    assert (sh.ws / "outputs" / "checkpoints" / "deep_blending_quick" / "playroom" /
+            "gsplat_default_playroom_s42_quick.ply").is_file()  # tải về vẫn phân biệt được với lượt chuẩn
     assert not (sh.ws / "outputs" / "checkpoints" / "deep_blending").exists()
 
 

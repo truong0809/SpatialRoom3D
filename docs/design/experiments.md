@@ -1,6 +1,6 @@
 # Thực nghiệm: Deep Blending, Mip-NeRF 360, so sánh các chế độ huấn luyện, dò tham số mcmc
 
-_Cập nhật: 24/10/2026_
+_Cập nhật: 28/10/2026_
 
 Mỗi benchmark có một file cấu hình `configs/<benchmark>.yaml` (dữ liệu, nguồn tải, nơi lưu kết quả, mục `benchmark`: protocol, số liệu công bố, ngưỡng) và một thư mục `experiments/<benchmark>/` chỉ chứa `README.md` (protocol, lệnh, kết quả đã ghi nhận). Dữ liệu và kết quả nằm trên volume, không nằm trong `experiments/`.
 
@@ -67,7 +67,7 @@ Thêm một chế độ vào thực nghiệm: khai báo chế độ trong `confi
 ### 2.3 Chạy
 
 ```bash
-VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # một việc nền: exp_main
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # một việc nền: main
 bash scripts/pod/run_experiment.sh main --plan                       # chỉ in kế hoạch, ước lượng, dữ liệu đã có
 ```
 
@@ -84,6 +84,20 @@ Các bước, trong một việc nền (giữ khóa GPU suốt lượt):
 
 Luôn chạy đầy đủ, không có chế độ chạy thử. Biến môi trường của bạn (`QUICK`, `SEEDS`, `MODES`, `MCMC_SET`, `OUT_ROOT`...) không đổi được kế hoạch. Chạy lại an toàn: dữ liệu đã có không tải lại, lượt đã xong tự bỏ qua; lượt dở dang (pod tắt giữa chừng) được chạy lại từ đầu.
 
+**Chạy riêng một phương pháp: `--only`.** `run_experiment.sh main --only <b0|default|mcmc>` chỉ chạy phần của một phương pháp trong kế hoạch, cùng dữ liệu, protocol, seed và thư mục kết quả với cả kế hoạch (`select_method` trong `src/training/experiment.py`). Ba notebook `app/notebooks/b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` gọi đúng lệnh này (`docs/USAGE_GUIDE.md` mục 5.1.1).
+
+| `--only` | Lượt | Bảng `report_<benchmark>` | Tên bản (việc nền / báo cáo, gói kết quả) |
+|---|---|---|---|
+| `b0` | B0 Inria trên các benchmark có `b0: true` (Deep Blending, 2 cảnh); không có lượt gsplat | B0 so với số Inria công bố (`src.evaluation.compare_reference`) | `b0_inria` / `b0_inria_<thời_gian>.*`, `ket_qua_b0_inria_<thời_gian>.tar.gz` |
+| `default` | `default` trên 6 cảnh × 3 seed | các chỉ số của `default`; đối chiếu Inria công bố như cả kế hoạch; đối chiếu B0 từng cảnh khi đã có B0 (dưới đây) | `gsplat_default` / `gsplat_default_<thời_gian>.*`, `ket_qua_gsplat_default_<thời_gian>.tar.gz` |
+| `mcmc` | `default` rồi `mcmc` trên 6 cảnh × 3 seed; lượt `default` đã xong (của cả kế hoạch hay `--only default`) được dùng lại, chưa có thì train trước, vì `mcmc` lấy `cap_max` từ nó | `mcmc` so với `default`, như cả kế hoạch | `gsplat_mcmc` / `gsplat_mcmc_<thời_gian>.*`, `ket_qua_gsplat_mcmc_<thời_gian>.tar.gz` |
+
+- `--only default` / `mcmc` không chạy B0. Bước so sánh cuối của `gsplat` chỉ đối chiếu `default` với B0 khi mọi cảnh đã có kết quả B0 đủ chỉ số (`B0_CHECK=if_present` cho `scripts/pipeline/train_gsplat_modes.sh`; cùng tiêu chí với bảng so sánh, `results.json` hỏng vì pod tắt khi đang ghi tính là chưa có); chưa có thì ghi chú, không INCOMPLETE, không exit 1. Cả kế hoạch vẫn bắt buộc đối chiếu (`B0_CHECK=required`, mặc định).
+- Với benchmark có B0 trong cả kế hoạch, `--plan` và báo cáo của lần chạy riêng ghi rõ `default` đã được đối chiếu với B0 hay chưa (cảnh nào còn thiếu B0, chạy gì để lập lại bảng). Bảng `report_<benchmark>` (`scripts/run_evaluate.sh`) đối chiếu B0 khi thư mục B0 đã có: chỉ có một phần cảnh thì phần đối chiếu B0 là INCOMPLETE (không làm lỗi bước).
+- Không có biến thể, `also_against`, và cảnh báo của cặp chế độ không thuộc phần được chọn. `env_check` luôn kiểm tra GPU và Miniforge, rồi chỉ env của phần được chọn (`--only b0`: `gs-inria`; `default` / `mcmc`: `gs-gsplat` và smoke test của các chế độ sẽ train).
+- Ba phần gộp lại đúng bằng bộ lượt của cả kế hoạch: chạy riêng từng phần rồi chạy cả kế hoạch không train thêm lượt gsplat nào, và bước B0 của cả kế hoạch được gọi đúng như `--only b0` (`tests/unit/test_experiment.py::test_separate_methods_then_the_whole_plan_train_each_run_once`); cảnh B0 đã có kết quả thì B0 bỏ qua (`tests/unit/test_benchmarks.py::test_b0_skips_finished_scenes_and_uses_images_dir_for_mipnerf`).
+- Tên `b0` dành cho B0: kế hoạch có chế độ tên `b0` bị từ chối. Hai lần chạy khác nhau không được trùng tên bản (mục 2.5; vd. một kế hoạch tên `gsplat_mcmc` trùng `main --only mcmc`), tên bản cũng không được là tên việc / báo cáo loại khác: trùng thì báo lỗi, không chạy.
+
 ### 2.4 Thời gian và dung lượng
 
 Ước lượng trên RTX 4090, chưa phải số đo (căn cứ ghi trong `configs/experiments/main.yaml`):
@@ -95,11 +109,13 @@ Luôn chạy đầy đủ, không có chế độ chạy thử. Biến môi trư
   - Mip-NeRF 360 khoảng 22–30 GB (số Gaussian chưa đo);
   - B0 và dữ liệu khoảng 7 GB.
 - Môi trường conda cũng nằm trên volume (khoảng 15–20 GB, chưa đo). Theo ước lượng, volume 100 GB đủ. Thêm chế độ vào kế hoạch thì cần thêm chỗ: tăng volume trên trang Runpod (tăng được, không giảm được) rồi đặt `VOLUME_GB` bằng dung lượng mới.
+- Chạy riêng (`--only`): ước lượng của từng phần ghi ở `estimate.only` của kế hoạch, cùng căn cứ (cách tính trong `configs/experiments/main.yaml`): `b0` khoảng 1 giờ, 5 GB; `default` khoảng 6 giờ, 30 GB; `mcmc` khoảng 12 giờ, 54 GB khi chưa có lượt `default` (gồm cả `default`), khoảng một nửa khi đã có. Kế hoạch không có `estimate.only` cho phần được chọn thì in ước lượng của cả kế hoạch và ghi rõ như vậy.
 
 `df` trên network volume của Runpod không đọc được quota, nên script tự đo bằng `du` và so với `VOLUME_GB`. Chỗ cần cho một seed là tổng các lượt gsplat chưa xong của seed đó (`python -m src.training.experiment --space main`):
 - lượt đã xong (`summary.json` OK) không cần thêm gì, kể cả khi chạy lại sau khi pod dừng giữa chừng;
 - lượt chưa xong tính bằng dung lượng thật lớn nhất của lượt cùng cảnh, cùng chế độ đã xong ở seed khác;
-- chưa có lượt như vậy thì tính bằng ước lượng 56 GB của kế hoạch chia đều cho 36 lượt (khoảng 1,6 GB mỗi lượt, gồm cả phần dữ liệu, B0, ảnh PNG thu nhỏ chỉ ghi một lần).
+- chưa có lượt như vậy thì tính bằng ước lượng 56 GB của kế hoạch chia đều cho 36 lượt (khoảng 1,6 GB mỗi lượt, gồm cả phần dữ liệu, B0, ảnh PNG thu nhỏ chỉ ghi một lần). Khi chạy riêng vẫn dùng mức này (của cả kế hoạch), chỉ tính các lượt của phần được chọn.
+- `--only b0`: cần khoảng 5 GB (`estimate.only.b0`), trừ khi mọi cảnh B0 đã có kết quả đủ chỉ số. Kế hoạch không có `estimate.only.b0` thì không kiểm tra chỗ trống cho B0 (ước lượng của cả kế hoạch quá lớn cho riêng B0).
 
 Kiểm tra:
 - **Trước khi chạy:** seed đầu tiên còn lượt chưa xong không đủ chỗ thì dừng, chưa tải, chưa train gì. Phần còn lại của kế hoạch không đủ chỗ thì chỉ cảnh báo.
@@ -109,12 +125,15 @@ Kiểm tra:
 
 ### 2.5 Kết quả và cách đọc
 
+**Tên bản.** Mỗi lần chạy có một tên bản (`run_name` trong `src/training/experiment.py`), dùng làm tên việc nền và tiền tố của báo cáo, bảng, log, bản chụp kế hoạch và gói kết quả `ket_qua_<tên bản>_<thời_gian>.tar.gz` (cùng thời gian với báo cáo). Cả kế hoạch: tên kế hoạch (`main`, `tune_mcmc`). Chạy riêng một phương pháp của `main`: đúng tên notebook, `b0_inria`, `gsplat_default`, `gsplat_mcmc`; của kế hoạch khác thì thêm tên kế hoạch đứng trước (vd. `tune_mcmc_gsplat_mcmc`). PLY xuất ra (`scripts/run_render.sh`) mang tên bản của lượt, cảnh và seed: `gsplat_<chế độ>_<cảnh>_s<seed>.ply` (lượt chạy thử thêm `_quick`). File của các bước bên trong giữ tên riêng (`modes_<tag>_*`, `baseline_*`, `configs/<benchmark>_*`); bảng của chúng có trong `<tên bản>_<thời_gian>_<benchmark>.md`. Tên bản không được trùng tên bản của lần chạy khác, tên một luồng dữ liệu, tên việc của ô 7 (`b0_<benchmark>`, `gsplat_<benchmark>`, `gsplat_quick_<benchmark>`) hay bắt đầu như tên việc / báo cáo loại khác (`run_all`, `scene_`, `fetch_`, `modes_`...): trùng thì báo lỗi khi đọc kế hoạch. Ghi chú và báo cáo đồ án nên gọi đúng các tên này.
+
 | File (trong `$WS/outputs/reports/`) | Nội dung |
 |---|---|
-| `experiment_main_<thời_gian>.md` | Bảng các bước, rồi với từng benchmark: bảng so với `default` (và với mỗi mốc trong `also_against`) |
-| `experiment_main_<thời_gian>.tsv` | Các bước (đọc bởi `scripts/pod/results.sh`) |
-| `experiment_main_<thời_gian>_<benchmark>[_vs_<mốc>].{md,json}` | Từng bảng so sánh (`src.evaluation.compare_modes`) |
-| `configs/experiment_main_<thời_gian>.json` | Bản chụp kế hoạch đã dùng, kèm SHA-256 của file kế hoạch |
+| `main_<thời_gian>.md` | Bảng các bước, rồi với từng benchmark: bảng so với `default` (và với mỗi mốc trong `also_against`) |
+| `<b0_inria\|gsplat_default\|gsplat_mcmc>_<thời_gian>.*` | Như trên, cho một lần chạy riêng (`--only`), mang tên notebook của phương pháp; `b0_inria`: bảng B0 so với số Inria công bố |
+| `main_<thời_gian>.tsv` | Các bước (đọc bởi `scripts/pod/results.sh`, nhận ra bằng dòng đầu `# experiment ...`) |
+| `main_<thời_gian>_<benchmark>[_vs_<mốc>].{md,json}` | Từng bảng so sánh (`src.evaluation.compare_modes`) |
+| `configs/main_<thời_gian>.json` | Bản chụp kế hoạch đã dùng, kèm SHA-256 của file kế hoạch |
 | `fetch_<benchmark>_<thời_gian>.json` | Bản ghi tải dữ liệu |
 
 Các lượt train nằm ở `$WS/outputs/benchmarks/<benchmark>/gsplat/<cảnh>/<chế_độ>_s<seed>/` (mục 5).
@@ -180,7 +199,7 @@ Các khóa của kế hoạch, ngoài các khóa của mục 2 (`src/training/ex
 ### 3.3 Chạy
 
 ```bash
-VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background   # một việc nền: exp_tune_mcmc
+VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background   # một việc nền: tune_mcmc
 bash scripts/pod/run_experiment.sh tune_mcmc --plan                       # chỉ in kế hoạch, các bước, dữ liệu đã có
 ```
 
@@ -201,7 +220,7 @@ Hoặc ô 7 của notebook với `WHAT = "experiment"`, `EXP = "tune_mcmc"`. Cá
 
 ### 3.5 Kết quả và cách đọc
 
-`experiment_tune_mcmc_<thời_gian>.md`: bảng các bước, bảng so với `default`, bảng so với `mcmc` (mỗi biến thể là một dòng `mcmc[<tham số>]`, kèm ΔPSNR / ΔSSIM / ΔLPIPS so với `mcmc` và tỉ lệ thời gian train), bảng sau khi lọc (mục 4), chất lượng theo dung lượng và cấu trúc mô hình (`docs/design/comparisons.md`). Đọc theo mục 3.1: một seed chỉ để chọn ứng viên cho vòng ghép (mục 3.6).
+`tune_mcmc_<thời_gian>.md` (trong `$WS/outputs/reports/`): bảng các bước, bảng so với `default`, bảng so với `mcmc` (mỗi biến thể là một dòng `mcmc[<tham số>]`, kèm ΔPSNR / ΔSSIM / ΔLPIPS so với `mcmc` và tỉ lệ thời gian train), bảng sau khi lọc (mục 4), chất lượng theo dung lượng và cấu trúc mô hình (`docs/design/comparisons.md`). Đọc theo mục 3.1: một seed chỉ để chọn ứng viên cho vòng ghép (mục 3.6).
 
 Với các biến thể nhắm vào floater (`or005`, `mo002`, `rbg`, `depth`), chỉ số trên ảnh test chưa đủ: xem thêm bảng cấu trúc mô hình (tỉ lệ Gaussian gần trong suốt, rất to) và ảnh so sánh với `mcmc`, nhất là nửa độ sâu của video: `VIDEO=1 bash scripts/run_panels.sh mipnerf360 room mcmc_s42 mcmc_or005_s42 mcmc_mo002_s42` (ô 7: `WHAT = "panels"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `PANEL_RUNS`).
 
@@ -306,7 +325,7 @@ Thư mục dữ liệu và kết quả lấy từ `configs/<benchmark>.yaml` (`d
 | B0 Inria | `$WS/outputs/benchmarks/<benchmark>/inria_b0/<cảnh>/` |
 | gsplat | `$WS/outputs/benchmarks/<benchmark>/gsplat/<cảnh>/<chế_độ>[_<tag>]_s<seed>/` (biến thể: `<tag>`; bản đã lọc: `filtered/` bên trong lượt) |
 | gsplat chạy thử (`QUICK=1`) | `$WS/outputs/benchmarks/<benchmark>/gsplat_quick/<cảnh>/<chế_độ>_s<seed>/` |
-| Báo cáo, log | `$WS/outputs/reports/{baseline_<tag>_summary,modes_<tag>,compare_<tag>,experiment_<tên>}_<thời_gian>.*`, `$WS/outputs/logs/` (`benchmark.tag`: `db`, `mipnerf360`) |
+| Báo cáo, log | `$WS/outputs/reports/{baseline_<tag>_summary,modes_<tag>,compare_<tag>}_<thời_gian>.*` (`benchmark.tag`: `db`, `mipnerf360`); thực nghiệm: `$WS/outputs/reports/<tên bản>_<thời_gian>.*` (mục 2.5); `$WS/outputs/logs/` |
 
 Không ghi đè lượt gsplat: lượt đã có kết quả OK với cùng cấu hình thì được bỏ qua; khác cấu hình thì báo lỗi. Khi được phép thay, thư mục cũ được đổi tên `.prev_<thời_gian>`. B0 thì khác: cảnh đã có `results.json` (đủ chỉ số `ours_30000`) thì bỏ qua mà không so cấu hình; `FORCE=1` chạy lại, lượt cũ được đổi tên `<cảnh>.prev_<thời_gian>` (không ghi đè).
 
@@ -333,6 +352,7 @@ Biến thể của một kế hoạch (mục 3.2) là một dòng riêng `<chế
 | B0 Inria trên Deep Blending | Repo trước đã chạy trên pod ngày 17/10/2026, đạt ngưỡng so với số liệu Inria. **Repo này chưa chạy** | `docs/PROJECT_STATUS.md` (lịch sử), `docs/ENVIRONMENT_AUDIT.md` mục 7 |
 | gsplat `default` / `mcmc` trên Deep Blending, seed 42 | Repo trước đã chạy trên pod ngày 17/10/2026. **Repo này chưa chạy** | như trên |
 | Thực nghiệm chính (mục 2): `default` / `mcmc`, 3 seed, Deep Blending + 4 cảnh Mip-NeRF 360 | **Đã viết, chưa chạy trên pod** | Kiểm thử bằng stub: `tests/unit/test_experiment.py`, `test_fetch.py`, `test_benchmarks.py`, `test_compare_modes.py`; mô phỏng notebook và rà soát độc lập (`docs/PROJECT_STATUS.md`) |
+| Chạy riêng từng phương pháp của thực nghiệm chính (`--only`, mục 2.3; 3 notebook của `app/notebooks/`) | **Đã viết, đã kiểm thử bằng stub và mô phỏng notebook; chưa chạy trên pod** | `tests/unit/test_experiment.py` (các test `test_only_*`, `test_separate_methods_then_the_whole_plan_train_each_run_once`), `test_benchmarks.py::test_b0_check_if_present_compares_with_b0_only_once_it_exists`, `test_notebooks.py` |
 | Tải dữ liệu benchmark trên pod | Đã viết; kiểm thử với curl giả và file zip tổng hợp; **chưa tải thật** (sandbox không ra được Internet) | `tests/unit/test_fetch.py` |
 | Mip-NeRF 360 (B0 và gsplat) | **Đã cấu hình, chưa chạy; chưa có dữ liệu trên volume** | `experiments/mipnerf360/README.md` |
 | Lệnh huấn luyện mà repo này sinh ra cho Deep Blending | Kiểm thử bằng stub: `default` / `mcmc` giống lệnh repo trước đã chạy ngày 17/10/2026, chỉ khác đường dẫn | `tests/unit/test_benchmarks.py` |

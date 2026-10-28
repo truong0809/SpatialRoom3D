@@ -12,10 +12,20 @@
 # da xong, luot da loc voi cung nguong va canh B0 da co ket qua tu bo qua.
 #
 # Cach chay (tren pod, tu thu muc goc cua repo, sau scripts/pod/run_all.sh):
-#   VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   chay nen (viec exp_main)
+#   VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   chay nen (viec main)
 #   bash scripts/pod/run_experiment.sh main --plan     chi in ke hoach, uoc luong, du lieu da co (khong chay gi)
 #   bash scripts/pod/run_experiment.sh main            chay truc tiep (dong terminal la dung luot)
-# Theo doi: bash scripts/pod/job.sh status | bash scripts/pod/job.sh log exp_main
+#   VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --only mcmc --background   chi mot phuong phap (viec gsplat_mcmc)
+# Theo doi: bash scripts/pod/job.sh status | bash scripts/pod/job.sh log main
+#
+# --only <phuong phap>: chi phan cua mot phuong phap trong ke hoach (src/training/experiment.py, select_method), cung
+#   canh, seed, protocol va thu muc ket qua, nen chay rieng roi chay ca ke hoach (hay nguoc lai) khong train lai luot da
+#   xong. b0: chi cac buoc B0 Inria (benchmark co b0: true), bang B0 so voi so lieu Inria cong bo. <che do>: che do do,
+#   cung default khi che do khac default (luot default da xong duoc dung lai, chua co thi train truoc: cac che do khac
+#   lay ngan sach Gaussian tu no); khong B0, khong bien the; doi chieu default voi B0 chi khi da co B0 (B0_CHECK=if_present;
+#   ke hoach va bao cao ghi ro).
+# Ten ban (src.training.experiment.run_name): ten viec nen, bao cao, log, goi ket qua cua mot lan chay: ca ke hoach
+#   = ten ke hoach (main, tune_mcmc); mot phuong phap cua main = ten notebook (b0_inria, gsplat_default, gsplat_mcmc).
 #
 # Bien tuy chon:
 #   VOLUME_GB=100   dung luong that cua network volume (df tren Runpod khong doc duoc quota). Cho can cho mot seed =
@@ -27,26 +37,35 @@
 #                   bo qua ca hai
 #   AUTO_STOP=1     voi --background: dung pod khi viec cuoi cung xong (scripts/pod/job.sh; chua thu tren pod)
 #   WS=/workspace
-# Ket qua: $WS/outputs/reports/experiment_<ten>_<thoi gian>.{md,tsv}, bang tung benchmark _<benchmark>[_vs_<moc>].{md,json}
+# Ket qua: $WS/outputs/reports/<ten ban>_<thoi gian>.{md,tsv}, bang tung benchmark _<benchmark>[_vs_<moc>].{md,json}
 #          (bien the cua ke hoach vao bang qua TAGS; luot co tag cua ke hoach khac bi de ngoai);
-#          luot loc Gaussian: <luot>/filtered/ (bang truoc / sau khi loc nam trong bang so sanh); goi $WS/ket_qua_*.tar.gz
+#          luot loc Gaussian: <luot>/filtered/ (bang truoc / sau khi loc nam trong bang so sanh);
+#          goi $WS/ket_qua_<ten ban>_<thoi gian>.tar.gz
 
 set -uo pipefail
 
-usage() { sed -n '2,32p' "$0"; exit 2; }
+usage() { sed -n '2,43p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 case "$1" in -h|--help) usage ;; esac
 NAME="$1"
 shift
 [[ "$NAME" =~ ^[a-z0-9_]+$ ]] || usage
 ACTION=run
-for arg in "$@"; do
-  case "$arg" in
+ONLY=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --background) ACTION=background ;;
     --plan) ACTION=plan ;;
+    --only)
+      [ "$#" -ge 2 ] && [[ "$2" =~ ^[a-z0-9_]+$ ]] || usage
+      ONLY="$2"
+      shift ;;
     *) usage ;;
   esac
+  shift
 done
+ONLY_ARGS=()
+if [ -n "$ONLY" ]; then ONLY_ARGS=(--only "$ONLY"); fi
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WS="${WS:-/workspace}"
 # shellcheck source=/dev/null
@@ -55,9 +74,10 @@ PY="$(config_python)" || exit 2
 export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 # ---------------------------------------------------------------------------- ke hoach (configs/experiments/<ten>.yaml)
-PLAN_TEXT="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --plan "$NAME")" || exit 2
+PLAN_TEXT="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --plan "$NAME" \
+  "${ONLY_ARGS[@]}")" || exit 2
 DESCRIPTION="" MODES="" AGAINST="" VARIANTS="" RUNS="" DEPTH_RUNS="" TEST_EVERY="" POST_FILTER="" SEEDS=""
-MONO_RUNS="" GPU_HOURS="" DISK_GB=""
+MONO_RUNS="" GPU_HOURS="" DISK_GB="" ESTIMATE_SCOPE="" RUN_ESTIMATE="" B0_REFERENCE="" RUN_NAME=""
 BENCHES=() B0S=() SCENE_SETS=() WARNINGS=()
 while IFS='|' read -r key v1 v2 v3; do
   case "$key" in
@@ -73,6 +93,10 @@ while IFS='|' read -r key v1 v2 v3; do
     seeds) SEEDS="$v1" ;;
     gpu_hours) GPU_HOURS="$v1" ;;
     disk_gb) DISK_GB="$v1" ;;
+    estimate_scope) ESTIMATE_SCOPE="$v1" ;;
+    run_estimate_bytes) RUN_ESTIMATE="$v1" ;;
+    b0_reference) B0_REFERENCE="$v1" ;;
+    run_name) RUN_NAME="$v1" ;;  # ten ban: ten viec nen, bao cao, log, goi ket qua (main, gsplat_mcmc...)
     bench) BENCHES+=("$v1"); B0S+=("$v2"); SCENE_SETS+=("$v3") ;;
     warning) WARNINGS+=("$v1") ;;
   esac
@@ -99,10 +123,47 @@ if ! [[ "$VOLUME" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   exit 2
 fi
 
+b0_missing() {  # b0_missing <chi so benchmark>: canh chua co ket qua B0 du chi so (rong: moi canh da co)
+  local root method scenes
+  root="$(registry_value "${BENCHES[$1]}" results.inria_b0)" || return 1
+  # nhu compare_reference va train_gsplat_modes.sh: khong khai bao thi la ours_30000
+  method="$(registry_value "${BENCHES[$1]}" benchmark.method 2> /dev/null)" || method=ours_30000
+  read -r -a scenes <<< "${SCENE_SETS[$1]}"
+  b0_missing_scenes "$root" "$method" "${scenes[@]}"
+}
+
+b0_plan_text() {  # b0_plan_text <chi so benchmark>: cot "B0 Inria" cua ke hoach
+  local missing
+  if [ "${B0S[$1]}" = 1 ]; then
+    echo có
+  elif [[ " $B0_REFERENCE " != *" ${BENCHES[$1]} "* ]]; then
+    echo không
+  elif ! missing="$(b0_missing "$1")"; then
+    echo "không chạy trong lần này (chạy bằng --only b0); không đọc được kết quả B0"
+  elif [ -z "$missing" ]; then
+    echo "không chạy trong lần này (chạy bằng --only b0); đã có cho mọi cảnh: ${MODE_LIST[0]} được đối chiếu với B0"
+  else
+    echo "không chạy trong lần này (chạy bằng --only b0); chưa có cho $missing: ${MODE_LIST[0]} chưa được đối chiếu với B0"
+  fi
+}
+
 print_plan() {
   local i entry vmode vtag vsets dropped
-  echo "Thực nghiệm $NAME: $DESCRIPTION"
-  echo "  chế độ: $MODES | seed: $SEEDS (xen kẽ: đủ một seed trên mọi cảnh rồi mới sang seed sau) | 30.000 vòng"
+  if [ -n "$ONLY" ]; then
+    echo "Thực nghiệm $NAME (chỉ $ONLY), một phần của kế hoạch: $DESCRIPTION"
+  else
+    echo "Thực nghiệm $NAME: $DESCRIPTION"
+  fi
+  echo "  tên bản: $RUN_NAME (việc nền, báo cáo, log và gói kết quả mang tên này)"
+  if [ "$ONLY" = b0 ]; then
+    echo "  chỉ B0: 3DGS gốc của Inria trên các benchmark có B0 (cùng thư mục kết quả với cả kế hoạch); không có lượt gsplat"
+  else
+    echo "  chế độ: $MODES | seed: $SEEDS (xen kẽ: đủ một seed trên mọi cảnh rồi mới sang seed sau) | 30.000 vòng"
+  fi
+  if [ -n "$ONLY" ] && [ "$ONLY" != b0 ] && [ "${#MODE_LIST[@]}" -gt 1 ]; then
+    echo "  ${MODE_LIST[0]}: lượt đã xong (của cả kế hoạch hay chạy riêng) được dùng lại; chưa có thì train trước," \
+      "vì $ONLY lấy ngân sách Gaussian từ nó"
+  fi
   if [ "${#VARIANT_LIST[@]}" -gt 0 ]; then
     echo "  biến thể (thư mục <chế_độ>_<tag>_s<seed>, cùng ngân sách Gaussian với default):"
     for entry in "${VARIANT_LIST[@]}"; do
@@ -111,7 +172,7 @@ print_plan() {
     done
   fi
   for i in "${!BENCHES[@]}"; do
-    echo "  ${BENCHES[$i]}: ${SCENE_SETS[$i]} | B0 Inria: $([ "${B0S[$i]}" = 1 ] && echo có || echo không)"
+    echo "  ${BENCHES[$i]}: ${SCENE_SETS[$i]} | B0 Inria: $(b0_plan_text "$i")"
   done
   if [ -n "$DEPTH_RUNS" ]; then
     echo "  loss độ sâu ($DEPTH_RUNS): kiểm tra điểm SfM của mọi ảnh train trước khi train (depth_check_<benchmark>);" \
@@ -131,13 +192,20 @@ print_plan() {
     echo "  sau mỗi seed: lọc Gaussian (opacity < $FILTER_OPACITY, trục lớn nhất > $FILTER_SCALE × scene_scale)" \
       "rồi chấm lại; bảng trước / sau khi lọc trong báo cáo"
   fi
-  echo "  bảng so sánh: với ${MODE_LIST[0]}${AGAINST:+; thêm một bảng so với $AGAINST}"
-  echo "  giữ mọi file kết quả (checkpoint, PLY, ảnh render, video${POST_FILTER:+, bản đã lọc}) của mọi seed"
+  if [ "${#MODE_LIST[@]}" -gt 0 ]; then
+    echo "  bảng so sánh: với ${MODE_LIST[0]}${AGAINST:+; thêm một bảng so với $AGAINST}"
+    echo "  giữ mọi file kết quả (checkpoint, PLY, ảnh render, video${POST_FILTER:+, bản đã lọc}) của mọi seed"
+  else
+    echo "  bảng: B0 so với số liệu Inria công bố"
+  fi
+  if [ -n "$ONLY" ] && [ "$ONLY" != b0 ]; then
+    echo "  đối chiếu ${MODE_LIST[0]} với B0 tự chạy: chỉ khi đã có B0 (chạy riêng b0 hoặc cả kế hoạch); chưa có thì ghi chú"
+  fi
   for warning in "${WARNINGS[@]}"; do
     echo "  CẢNH BÁO: $warning"
   done
   echo "  ước lượng (RTX 4090, chưa phải số đo): khoảng $GPU_HOURS giờ GPU, thêm khoảng $DISK_GB GB trên volume" \
-    "(VOLUME_GB=$VOLUME)"
+    "(VOLUME_GB=$VOLUME)$([ "$ESTIMATE_SCOPE" = plan ] && [ -n "$ONLY" ] && echo '; đây là ước lượng của cả kế hoạch')"
 }
 
 if [ "$ACTION" = plan ]; then
@@ -151,6 +219,8 @@ if [ "$ACTION" = plan ]; then
   echo
   echo "Các bước: ${MONO_RUNS:+depth_anything (bash scripts/setup/setup_depth_anything.sh), }env_check, space_check," \
     "${BENCHES[*]/#/fetch_}"
+  B0_ENV=""
+  if [ -n "$ONLY" ] && [ "$ONLY" != b0 ]; then B0_ENV="B0_CHECK=if_present "; fi
   for i in "${!BENCHES[@]}"; do
     if [ -n "$DEPTH_RUNS" ]; then
       echo "  depth_check_${BENCHES[$i]}: python -m src.training.depth_check --test-every $TEST_EVERY" \
@@ -161,8 +231,9 @@ if [ "$ACTION" = plan ]; then
     fi
   done
   for seed in "${SEED_LIST[@]}"; do
+    [ "${#MODE_LIST[@]}" -gt 0 ] || break  # chi B0: khong co luot gsplat
     for i in "${!BENCHES[@]}"; do
-      echo "  gsplat_${BENCHES[$i]}_s$seed: MODES=\"$MODES\"${VARIANTS:+ VARIANTS=\"$VARIANTS\"} SEEDS=$seed" \
+      echo "  gsplat_${BENCHES[$i]}_s$seed: ${B0_ENV}MODES=\"$MODES\"${VARIANTS:+ VARIANTS=\"$VARIANTS\"} SEEDS=$seed" \
         "SCENES=\"${SCENE_SETS[$i]}\" bash scripts/run_train.sh ${BENCHES[$i]} gsplat"
       if [ -n "$POST_FILTER" ]; then
         echo "  filter_${BENCHES[$i]}_s$seed: python -m src.training.prune --min-opacity $FILTER_OPACITY" \
@@ -171,6 +242,11 @@ if [ "$ACTION" = plan ]; then
     done
   done
   for bench in "${BENCHES[@]}"; do
+    if [ "${#MODE_LIST[@]}" -eq 0 ]; then
+      echo "  report_$bench: python -m src.evaluation.compare_reference --model-root <B0 của $bench> (B0 so với số Inria" \
+        "công bố, không GPU)"
+      continue
+    fi
     echo "  report_$bench: MODES=\"$MODES\"${VARIANT_TAGS:+ TAGS=\"$VARIANT_TAGS\"} bash scripts/run_evaluate.sh $bench"
     for against in "${AGAINST_LIST[@]}"; do
       echo "  report_${bench}_vs_$against: BASELINE=$against MODES=\"$OTHER_MODES\"${VARIANT_TAGS:+ TAGS=\"$VARIANT_TAGS\"}" \
@@ -178,12 +254,13 @@ if [ "$ACTION" = plan ]; then
     done
   done
   echo "  pack"
-  echo "Chạy: VOLUME_GB=$VOLUME bash scripts/pod/run_experiment.sh $NAME --background"
+  echo "Chạy: VOLUME_GB=$VOLUME bash scripts/pod/run_experiment.sh $NAME${ONLY:+ --only $ONLY} --background"
   exit 0
 fi
 if [ "$ACTION" = background ]; then
   print_plan
-  exec bash "$REPO_DIR/scripts/pod/job.sh" start "exp_$NAME" -- bash "$REPO_DIR/scripts/pod/run_experiment.sh" "$NAME"
+  exec bash "$REPO_DIR/scripts/pod/job.sh" start "$RUN_NAME" -- bash "$REPO_DIR/scripts/pod/run_experiment.sh" "$NAME" \
+    "${ONLY_ARGS[@]}"
 fi
 
 # ---------------------------------------------------------------------------------------------------- chay
@@ -191,20 +268,20 @@ cd "$REPO_DIR" || exit 1
 export MPLBACKEND=Agg
 # shellcheck source=/dev/null
 . "$REPO_DIR/scripts/lib/gpu_lock.sh"
-gpu_lock_acquire "run_experiment $NAME"
+gpu_lock_acquire "run_experiment $RUN_NAME"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 REPORT_DIR="$WS/outputs/reports"
-REPORT="$REPORT_DIR/experiment_${NAME}_$STAMP"
-PKG="$WS/ket_qua_$(date +%m%d_%H%M%S).tar.gz"
+REPORT="$REPORT_DIR/${RUN_NAME}_$STAMP"
+PKG="$WS/ket_qua_${RUN_NAME}_$STAMP.tar.gz"
 mkdir -p "$REPORT_DIR/configs" "$WS/outputs/logs"
-if [ -z "${SR3D_JOB_NAME:-}" ]; then  # chay qua job.sh thi log da nam trong $WS/outputs/logs/jobs/exp_<ten>.log
-  LOG="$WS/outputs/logs/experiment_${NAME}_$STAMP.log"
+if [ -z "${SR3D_JOB_NAME:-}" ]; then  # chay qua job.sh thi log da nam trong $WS/outputs/logs/jobs/<ten ban>.log
+  LOG="$WS/outputs/logs/${RUN_NAME}_$STAMP.log"
   exec > >(tee -a "$LOG" {SR3D_GPU_LOCK_FD}>&-) 2>&1  # tee khong giu khoa GPU (scripts/lib/gpu_lock.sh)
   echo "Log: $LOG"
 fi
-PLAN_JSON="$REPORT_DIR/configs/experiment_${NAME}_$STAMP.json"  # ban chup ke hoach da dung (bang chung)
-"$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --export "$NAME" --out "$PLAN_JSON" > /dev/null \
-  || { echo "ERROR: cannot write $PLAN_JSON"; exit 2; }
+PLAN_JSON="$REPORT_DIR/configs/${RUN_NAME}_$STAMP.json"  # ban chup ke hoach da dung (bang chung)
+"$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --export "$NAME" "${ONLY_ARGS[@]}" \
+  --out "$PLAN_JSON" > /dev/null || { echo "ERROR: cannot write $PLAN_JSON"; exit 2; }
 print_plan
 echo "  kế hoạch đã dùng: $PLAN_JSON"
 
@@ -251,6 +328,19 @@ check_envs() {
   command -v nvidia-smi > /dev/null 2>&1 || { echo "ERROR: nvidia-smi not found (no GPU visible)"; return 1; }
   [ -f "$WS/miniforge3/etc/profile.d/conda.sh" ] \
     || { echo "ERROR: no Miniforge in $WS/miniforge3: run bash scripts/pod/run_all.sh first"; return 1; }
+  if [ "${#MODE_LIST[@]}" -gt 0 ]; then  # chi B0 (--only b0): khong can env gs-gsplat
+    check_gsplat_env || return 1
+  fi
+  if [ "$NEEDS_B0" = 1 ]; then
+    [ -d "$WS/code/gaussian-splatting" ] \
+      || { echo "ERROR: no Inria checkout in $WS/code/gaussian-splatting: run bash scripts/pod/run_all.sh first"; return 1; }
+    env_ready gs-inria "import torch, diff_gaussian_rasterization, simple_knn._C, fused_ssim; assert torch.cuda.is_available()" \
+      || return 1
+  fi
+}
+
+# shellcheck disable=SC2329  # goi qua check_envs
+check_gsplat_env() {
   [ -f "$WS/code/gsplat/examples/simple_trainer.py" ] \
     || { echo "ERROR: no gsplat checkout in $WS/code/gsplat: run bash scripts/pod/run_all.sh first"; return 1; }
   env_ready gs-gsplat "import torch, fused_ssim; from gsplat import csrc; x = torch.rand(1, 3, 16, 16, device='cuda'); fused_ssim.fused_ssim(x, x)" \
@@ -275,12 +365,6 @@ check_envs() {
     echo "ERROR: the gsplat smoke test of the plan failed (simple_trainer.py arguments of a mode or variant, the code"
     echo "       variants on the GPU, or Depth Anything V2; see the FAIL lines above)"
     return 1
-  fi
-  if [ "$NEEDS_B0" = 1 ]; then
-    [ -d "$WS/code/gaussian-splatting" ] \
-      || { echo "ERROR: no Inria checkout in $WS/code/gaussian-splatting: run bash scripts/pod/run_all.sh first"; return 1; }
-    env_ready gs-inria "import torch, diff_gaussian_rasterization, simple_knn._C, fused_ssim; assert torch.cuda.is_available()" \
-      || return 1
   fi
 }
 
@@ -318,8 +402,8 @@ seed_space() {  # seed_space [benchmark...]: dat NEED[seed], FINISHED[seed] theo
     for bench in "${BENCHES[@]}"; do without+=("$bench:$run"); done
   done
   if [ "${#without[@]}" -gt 0 ]; then only+=(--without "${without[@]}"); fi
-  text="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --space "$NAME" "${only[@]}")" \
-    || return 1
+  text="$("$PY" -m src.training.experiment --configs "$REPO_DIR/configs" --ws "$WS" --space "$NAME" "${ONLY_ARGS[@]}" \
+    "${only[@]}")" || return 1
   while IFS='|' read -r key seed need finished runs _; do
     [ "$key" = seed ] || continue
     NEED[$seed]="$need"
@@ -344,6 +428,10 @@ space_check() {
   echo "Measuring the space used in $WS (du; can take a few minutes on a network volume)..."
   total="$(du_bytes "$WS")"
   own="$(own_bytes)"
+  if [ "${#MODE_LIST[@]}" -eq 0 ] && [[ "$total" =~ ^[0-9]+$ ]]; then  # chi B0: khong co luot gsplat de tinh theo seed
+    b0_space "$total"
+    return
+  fi
   if ! [[ "$total" =~ ^[0-9]+$ && "$own" =~ ^[0-9]+$ ]] || ! seed_space; then
     echo "WARN: could not measure the space used; free space is not checked (volume ${VOLUME} GB)"
     return 0
@@ -363,7 +451,8 @@ space_check() {
     return 0
   fi
   echo "Dự kiến khi xong: $(gb $((total + rest))) GB / volume $VOLUME GB (lượt chưa xong tính theo lượt cùng cảnh, cùng" \
-    "chế độ đã xong ở seed khác; chưa có thì theo ước lượng $DISK_GB GB của kế hoạch, gồm cả dữ liệu, B0, ảnh thu nhỏ)."
+    "chế độ đã xong ở seed khác; chưa có thì khoảng $(gb "$RUN_ESTIMATE") GB mỗi lượt: ước lượng dung lượng của cả kế" \
+    "hoạch chia đều cho mọi lượt, gồm cả dữ liệu, B0, ảnh thu nhỏ)."
   if [ $((total + NEED[$first] + MARGIN)) -gt "$LIMIT" ]; then
     echo "ERROR: seed $first (about $(gb "${NEED[$first]}") GB more) would not fit in a ${VOLUME} GB volume (2 GB kept"
     echo "       free): enlarge the volume on Runpod and set VOLUME_GB to its new size, or free some space"
@@ -426,6 +515,49 @@ post_filter() {  # post_filter <chi so benchmark> <seed>: loc Gaussian moi luot 
 }
 
 
+# shellcheck disable=SC2329  # goi qua run_step
+b0_report() {  # b0_report <chi so benchmark>: bang B0 so voi so lieu Inria cong bo (chi B0, --only b0; khong GPU)
+  local bench="${BENCHES[$1]}" config root text rc=0
+  config="$REPORT_DIR/configs/${bench}_$STAMP.json"
+  config_export_benchmark "$bench" "$config" || return 1
+  root="$(registry_value "$bench" results.inria_b0)" || return 1
+  text="$(PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m src.evaluation.compare_reference --config "$config" \
+    --model-root "$root" --out "${REPORT}_$bench.json")" || rc=$?
+  printf '%s\n' "$text" | sed '/^Đã ghi tóm tắt: /d' > "${REPORT}_$bench.md"  # bang, khong co dong ghi file JSON
+  return "$rc"
+}
+
+
+# shellcheck disable=SC2329  # goi qua space_check
+b0_space() {  # b0_space <byte dang dung>: chi B0 (--only b0); con canh B0 chua co ket qua thi can them DISK_GB
+  local total="$1" need=0 limit i missing
+  limit="$(awk -v gb="$VOLUME" 'BEGIN { printf "%.0f", gb * 1e9 }')"
+  for i in "${!BENCHES[@]}"; do
+    [ "${B0S[$i]}" = 1 ] || continue
+    if ! missing="$(b0_missing "$i")"; then  # cung tieu chi voi bang so sanh: results.json hong = chua co
+      echo "WARN: could not read the B0 results of ${BENCHES[$i]}; free space for B0 is not checked (volume ${VOLUME} GB)"
+      return 0
+    fi
+    [ -z "$missing" ] || need="$(awk -v gb="$DISK_GB" 'BEGIN { printf "%.0f", gb * 1e9 }')"
+  done
+  if [ "$need" = 0 ]; then
+    echo "Đang dùng $(gb "$total") GB; mọi cảnh B0 đã có kết quả: không cần thêm chỗ."
+    return 0
+  fi
+  if [ "$ESTIMATE_SCOPE" = plan ]; then  # khong co estimate.only.b0: uoc luong cua ca ke hoach qua lon cho B0
+    echo "Đang dùng $(gb "$total") GB / volume $VOLUME GB; kế hoạch không có ước lượng riêng cho B0 (estimate.only.b0):" \
+      "không kiểm tra chỗ trống cho B0."
+    return 0
+  fi
+  echo "Đang dùng $(gb "$total") GB; B0 còn cảnh chưa có kết quả: cần thêm khoảng $(gb "$need") GB (ước lượng của" \
+    "kế hoạch) / volume $VOLUME GB."
+  if [ $((total + need + MARGIN)) -gt "$limit" ]; then
+    echo "ERROR: B0 (about $(gb "$need") GB more) would not fit in a ${VOLUME} GB volume (2 GB kept free): enlarge the"
+    echo "       volume on Runpod and set VOLUME_GB to its new size, or free some space (SPACE_CHECK=0: start anyway)"
+    return 1
+  fi
+}
+
 drop_depth_runs() {  # drop_depth_runs <chi so benchmark>: depth_check khong dat thi bo cac luot co loss do sau
   local bench="${BENCHES[$1]}" mode entry vmode vtag dropped=""
   { [ -n "$DEPTH_RUNS" ] && [ -n "${RC[depth_check_$bench]:-}" ] && ! ok "depth_check_$bench"; } || return 0
@@ -476,11 +608,24 @@ needs() {  # needs <chi so benchmark>: ly do bo qua khi chua san sang
   fi
 }
 
-write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi src.evaluation.overview) va .md
+b0_summary_line() {  # b0_summary_line <chi so benchmark>: chay rieng mot che do: default co duoc doi chieu voi B0 khong
+  local missing bench="${BENCHES[$1]}"
+  if ! missing="$(b0_missing "$1")"; then
+    echo "- $bench: không đọc được kết quả B0 tự chạy"
+  elif [ -z "$missing" ]; then
+    echo "- $bench: B0 tự chạy đã có cho mọi cảnh: \`${MODE_LIST[0]}\` được đối chiếu với B0 từng cảnh (bảng bên dưới)"
+  else
+    echo "- $bench: chưa có B0 tự chạy đủ cho $missing: \`${MODE_LIST[0]}\` chưa được đối chiếu đủ với B0 từng cảnh." \
+      "Chạy \`--only b0\` (notebook \`b0_inria.ipynb\`), rồi chạy lại lệnh này để lập lại bảng (lượt đã xong không" \
+      "train lại)"
+  fi
+}
+
+write_summary() {  # bang cac buoc: <ten ban>_<thoi gian>.tsv (doc boi src.evaluation.overview) va .md
   local name status repo_commit i
   repo_commit="$(git -C "$REPO_DIR" rev-parse --short HEAD 2> /dev/null || echo unknown)"
   {
-    printf '# experiment %s %s | repo %s%s\n' "$NAME" "$STAMP" "$repo_commit" \
+    printf '# experiment %s %s | repo %s%s\n' "$NAME${ONLY:+ --only $ONLY}" "$STAMP" "$repo_commit" \
       "$([ -n "$(git -C "$REPO_DIR" status --porcelain 2> /dev/null | head -c 1)" ] && echo ' (có thay đổi chưa commit)')"
     printf '# step\tstatus\texit\tseconds\tnote\n'
     for name in "${STEPS[@]}"; do
@@ -493,11 +638,16 @@ write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi sr
     done
   } > "$REPORT.tsv"
   {
-    echo "# Thực nghiệm $NAME ($STAMP)"
+    echo "# Thực nghiệm $NAME${ONLY:+ (chỉ $ONLY)} ($STAMP)"
     echo
-    echo "- $DESCRIPTION"
-    echo "- Kế hoạch: \`configs/experiments/$NAME.yaml\`, bản đã dùng: \`$PLAN_JSON\`; repo $repo_commit"
-    echo "- Chế độ: $MODES; seed: $SEEDS"
+    echo "- Tên bản: \`$RUN_NAME\` (việc nền, báo cáo, log và gói kết quả \`$(basename "$PKG")\` mang tên này)"
+    echo "- ${ONLY:+Một phần của kế hoạch: }$DESCRIPTION"
+    echo "- Kế hoạch: \`configs/experiments/$NAME.yaml\`${ONLY:+ (\`--only $ONLY\`)}, bản đã dùng: \`$PLAN_JSON\`; repo $repo_commit"
+    if [ "${#MODE_LIST[@]}" -gt 0 ]; then
+      echo "- Chế độ: $MODES; seed: $SEEDS"
+    else
+      echo "- Chỉ B0 (3DGS gốc của Inria), so với số liệu Inria công bố"
+    fi
     if [ "${#VARIANT_LIST[@]}" -gt 0 ]; then
       echo "- Biến thể: ${VARIANT_LIST[*]}"
     fi
@@ -508,6 +658,9 @@ write_summary() {  # bang cac buoc: experiment_<ten>_<thoi gian>.tsv (doc boi sr
       echo "- Depth Anything V2 chưa sẵn sàng (bước depth_anything lỗi): không train $MONO_DROPPED trên mọi benchmark"
     fi
     for i in "${!BENCHES[@]}"; do
+      if [ -n "$ONLY" ] && [ "${#MODE_LIST[@]}" -gt 0 ] && [[ " $B0_REFERENCE " == *" ${BENCHES[$i]} "* ]]; then
+        b0_summary_line "$i"
+      fi
       if [ -n "${DROPPED[${BENCHES[$i]}]:-}" ] && ! ready "$i"; then
         echo "- ${BENCHES[$i]}: kiểm tra điểm SfM không đạt và ${MODE_LIST[0]} dùng loss độ sâu, không train lượt" \
           "gsplat nào"
@@ -589,7 +742,10 @@ else
     done
   fi
   # bien moi truong cua nguoi dung khong duoc doi ke hoach: thu muc ket qua, cau hinh, tham so mcmc, bien the, chay thu
-  CLEAN=(env -u OUT_ROOT -u B0_ROOT -u CONFIG -u MCMC_SET -u VARIANTS -u FORCE QUICK=0)
+  CLEAN=(env -u OUT_ROOT -u B0_ROOT -u CONFIG -u MCMC_SET -u VARIANTS -u FORCE -u B0_CHECK QUICK=0)
+  if [ -n "$ONLY" ] && [ "$ONLY" != b0 ]; then  # chay rieng mot che do: B0 khong thuoc lan chay nay
+    CLEAN+=(B0_CHECK=if_present)
+  fi
   for i in "${!BENCHES[@]}"; do
     bench="${BENCHES[$i]}"
     [ "${B0S[$i]}" = 1 ] || continue
@@ -601,6 +757,7 @@ else
   done
   STOP=""
   for seed in "${SEED_LIST[@]}"; do
+    [ "${#MODE_LIST[@]}" -gt 0 ] || break  # chi B0 (--only b0): khong co luot gsplat
     if [ -z "$STOP" ] && ! room_for_seed "$seed"; then
       STOP="không đủ chỗ trống cho seed $seed (VOLUME_GB=$VOLUME)"
       echo "Dừng train: $STOP. Các lượt đã xong được giữ; tăng dung lượng volume, đặt VOLUME_GB rồi chạy lại để làm nốt."
@@ -625,6 +782,14 @@ else
   done
   for i in "${!BENCHES[@]}"; do
     bench="${BENCHES[$i]}"
+    if [ "${#MODE_LIST[@]}" -eq 0 ]; then  # chi B0: bang B0 so voi so lieu Inria cong bo
+      if [ -n "${RC[b0_$bench]:-}" ]; then
+        run_step "report_$bench" b0_report "$i"
+      else
+        skip_step "report_$bench" "b0_$bench không chạy"
+      fi
+      continue
+    fi
     modes="$(bench_modes "$i")"  # che do bi bo vi kiem tra diem SfM khong vao bang (khong thi moi canh deu "thieu")
     others="${modes#"${MODE_LIST[0]}"}"  # cac che do ngoai baseline, cho bang so voi tung moc trong also_against
     others="${others# }"
@@ -650,7 +815,7 @@ write_summary
 run_step pack bash "$REPO_DIR/scripts/pod/pack_results.sh" "$PKG"
 
 FAILED=0
-printf '\n========== TÓM TẮT thực nghiệm %s (%s)\n' "$NAME" "$STAMP"
+printf '\n========== TÓM TẮT %s: thực nghiệm %s (%s)\n' "$RUN_NAME" "$NAME${ONLY:+ --only $ONLY}" "$STAMP"
 for name in "${STEPS[@]}"; do
   if [ -n "${RC[$name]:-}" ]; then
     if [ "${RC[$name]}" = 0 ]; then

@@ -5,8 +5,10 @@ Mọi số liệu trong file này là dữ liệu tổng hợp để kiểm tra 
 
 import json
 import os
+import re
 import subprocess
 import tarfile
+from pathlib import Path
 
 from src.evaluation.overview import build, main
 from shell_env import REPO
@@ -96,14 +98,21 @@ def test_overview_shows_the_latest_experiment(tmp_path):
     text = "\n".join(build(ws, None))
     assert "Thực nghiệm (scripts/pod/run_experiment.sh): chưa có" in text
     reports = ws / "outputs" / "reports"
-    write(reports / "experiment_main_20261019_120000.tsv",
+    write(reports / "main_20261019_120000.tsv",  # tên bản của cả kế hoạch main
           "# experiment main 20261019_120000 | repo abc1234\n# step\tstatus\texit\tseconds\tnote\n"
           "fetch_mipnerf360\tOK\t0\t600\t\ngsplat_mipnerf360_s44\tSKIP\t\t\tkhông đủ chỗ trống cho seed 44\n")
+    write(reports / "run_all_20261019_130000.tsv", "# run_all 20261019_130000 | repo abc1234\n")  # không phải thực nghiệm
+    os.utime(reports / "main_20261019_120000.tsv", (100, 100))
     text = "\n".join(build(ws, None))
-    assert f"== Thực nghiệm (experiment_main_20261019_120000.tsv); bảng so sánh: {reports}" in text
+    assert f"== Thực nghiệm (main_20261019_120000.tsv); bảng so sánh: {reports}" in text
     assert "experiment main 20261019_120000 | repo abc1234" in text
     assert "fetch_mipnerf360             OK             0:10:00" in text
     assert "gsplat_mipnerf360_s44        BỎ QUA         không đủ chỗ trống cho seed 44" in text
+    write(reports / "gsplat_mcmc_20261019_140000.tsv",  # chạy riêng mcmc (notebook gsplat_mcmc.ipynb), mới hơn
+          "# experiment main --only mcmc 20261019_140000 | repo abc1234\n# step\tstatus\texit\tseconds\tnote\n"
+          "env_check\tOK\t0\t5\t\n")
+    text = "\n".join(build(ws, None))
+    assert "== Thực nghiệm (gsplat_mcmc_20261019_140000.tsv)" in text and "experiment main --only mcmc" in text
 
 
 def test_uploaded_scene_not_yet_prepared_is_listed(tmp_path):
@@ -230,7 +239,7 @@ def test_pack_results_keeps_small_files_and_skips_heavy_ones(tmp_path):
         "outputs/custom_scenes/v/colmap/input/00001.jpg", "outputs/custom_scenes/v/colmap/sparse/0/images.bin",
         "outputs/benchmarks/mipnerf360/gsplat/room/.images_2_png_0123456789ab/frame_00001.png",
         "outputs/custom_scenes/v/default_s42/videos/traj_29999.mp4",
-        "outputs/checkpoints/custom_scene/v/default_s42.ply",
+        "outputs/checkpoints/custom_scene/v/gsplat_default_v_s42.ply",
         "data/custom_scenes/v/v.mp4", "ket_qua_1016_0900.tar.gz",
     ]
     for name in keep + skip:
@@ -249,3 +258,19 @@ def test_pack_results_keeps_small_files_and_skips_heavy_ones(tmp_path):
     assert not names & set(skip)
     assert not [name for name in names if name.startswith("outputs/links")]
     assert not package.with_name("pkg.tar.gz.part").exists()
+
+
+def test_pack_results_names_the_package_after_the_version(tmp_path):
+    """Ô gói kết quả của mỗi notebook: `--name <tên bản>` -> ket_qua_<tên bản>_<năm tháng ngày>_<giờ phút giây>.tar.gz."""
+    ws = tmp_path / "ws"
+    write(ws / "outputs" / "reports" / "gsplat_mcmc_20261028_101405.md", "x")
+    script = str(REPO / "scripts" / "pod" / "pack_results.sh")
+    env = {**os.environ, "WS": str(ws)}
+    out = subprocess.run(["bash", script, "--name", "gsplat_mcmc"], env=env, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stdout + out.stderr
+    package = Path(out.stdout.strip().splitlines()[-1])
+    assert package.parent == ws and re.fullmatch(r"ket_qua_gsplat_mcmc_\d{8}_\d{6}\.tar\.gz", package.name)
+    with tarfile.open(package) as tar:
+        assert "outputs/reports/gsplat_mcmc_20261028_101405.md" in tar.getnames()
+    bad = subprocess.run(["bash", script, "--name", "a b"], env=env, capture_output=True, text=True, timeout=60)
+    assert bad.returncode == 2 and "--name needs a name" in bad.stdout

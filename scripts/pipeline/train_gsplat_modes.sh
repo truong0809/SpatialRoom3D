@@ -25,6 +25,10 @@
 #                  bien the tham so (thuong do scripts/pod/run_experiment.sh dat theo muc variants cua ke hoach):
 #                  <che_do>:<tag>:<khoa>=<gia_tri>[,<khoa>=<gia_tri>...]; che do phai co trong MODES (khong phai
 #                  default); tham so them sau MCMC_SET; ket qua vao <che_do>_<tag>_s<seed>
+#   B0_CHECK=required   (mac dinh) doi chieu default voi luot B0 tu chay cua moi canh; chua co B0 thi buoc doi chieu
+#                       INCOMPLETE va script ket thuc voi exit 1 (luot train van giu). if_present: chi doi chieu khi moi
+#                       canh da co ket qua B0 du chi so (results.json hong = chua co), chua co thi ghi chu
+#                       (scripts/pod/run_experiment.sh --only <che do>: B0 khong thuoc lan chay do)
 #   WS=/workspace  ENV_NAME=gs-gsplat  CONFIG=<file JSON>   (du lieu phai co san)
 #   OUT_ROOT, B0_ROOT   mac dinh lay tu configs/<benchmark>.yaml (results.gsplat | gsplat_quick, results.inria_b0):
 #                       $WS/outputs/benchmarks/<benchmark>/{gsplat,gsplat_quick,inria_b0}
@@ -34,7 +38,7 @@
 set -euo pipefail
 export MPLBACKEND=Agg  # xem setup_gsplat.sh: MPLBACKEND cua Jupyter lam matplotlib bao loi trong env gs-gsplat
 
-usage() { sed -n '2,32p' "$0"; exit 2; }
+usage() { sed -n '2,36p' "$0"; exit 2; }
 [ "$#" -eq 1 ] || usage
 BENCH="$1"
 [[ "$BENCH" =~ ^[a-z0-9_]+$ ]] || usage
@@ -68,6 +72,8 @@ if [ "$QUICK" = "1" ]; then
 fi
 OUT_ROOT="${OUT_ROOT:-$(registry_results "$RESULTS_KEY")}"
 B0_ROOT="${B0_ROOT:-$(registry_results inria_b0)}"
+B0_CHECK="${B0_CHECK:-required}"
+[[ "$B0_CHECK" =~ ^(required|if_present)$ ]] || die "B0_CHECK must be required or if_present, not '$B0_CHECK'"
 SEEDS="${SEEDS:-42}"
 MCMC_SET="${MCMC_SET-$(read_cfg gsplat.mcmc_set "")}"
 read -r -a SEED_LIST <<< "$SEEDS"
@@ -241,19 +247,20 @@ CHECK_ARGS=(--reference-config "$CONFIG" --scenes "${SCENES[@]}")
 if [ "${#VARIANT_TAG[@]}" -gt 0 ]; then
   CHECK_ARGS+=(--tags "${VARIANT_TAG[@]}")  # cac bien the vua train; luot co tag khac (ke hoach khac) bi de ngoai
 fi
-if [ "$SUBSET" = 0 ]; then
+# canh chua co ket qua B0 du chi so (cung tieu chi voi bang so sanh; results.json hong khi pod tat giua chung = chua co)
+B0_MISSING_TEXT="$(b0_missing_scenes "$B0_ROOT" "$(read_cfg method ours_30000)" "${SCENES[@]}")" \
+  || die "cannot read the Inria B0 results in $B0_ROOT"
+read -r -a B0_MISSING <<< "$B0_MISSING_TEXT"
+if [ "$SUBSET" = 0 ] && [ "$B0_CHECK" = required ]; then
   [ -d "$B0_ROOT" ] || echo "WARN: no own Inria run in $B0_ROOT (run bash scripts/run_train.sh $BENCH b0): the B0 check will be INCOMPLETE"
   CHECK_ARGS+=(--b0-root "$B0_ROOT")
+elif [ "${#B0_MISSING[@]}" -eq 0 ]; then
+  CHECK_ARGS+=(--b0-root "$B0_ROOT")
+elif [ "$SUBSET" = 1 ]; then
+  echo "NOTE: part of the benchmark's scenes only, without an own Inria B0 run for ${B0_MISSING[*]}: no B0 check"
 else
-  B0_MISSING=()
-  for scene in "${SCENES[@]}"; do
-    [ -f "$B0_ROOT/$scene/results.json" ] || B0_MISSING+=("$scene")
-  done
-  if [ "${#B0_MISSING[@]}" -eq 0 ]; then
-    CHECK_ARGS+=(--b0-root "$B0_ROOT")
-  else
-    echo "NOTE: part of the benchmark's scenes only, without an own Inria B0 run for ${B0_MISSING[*]}: no B0 check"
-  fi
+  echo "NOTE: no own Inria B0 run yet for ${B0_MISSING[*]} (B0_CHECK=if_present): no B0 check; after B0 has run" \
+    "(bash scripts/run_train.sh $BENCH b0), bash scripts/run_evaluate.sh $BENCH compares against it"
 fi
 if [ "$QUICK" = "1" ]; then
   step "4. Report of the quick runs (checks the whole report path; Inria checks are N/A at $QUICK_STEPS steps)"

@@ -101,7 +101,7 @@ chọn frame, rồi đi chung bước COLMAP và huấn luyện với video. M�
 1. Tạo thư mục `/workspace/data/custom_scenes/<tên_cảnh>/`.
 2. Mở thư mục đó trong thanh file của Jupyter, rồi chọn nhiều ảnh cùng lúc trong hộp Upload (hoặc kéo thả nhiều file).
 3. Chỉ ảnh nằm trực tiếp trong thư mục được đọc. Thư mục con, file ẩn và file không phải JPG/JPEG/PNG bị bỏ qua và được liệt kê trong báo cáo.
-4. Chạy `bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/<tên_cảnh> <tên_cảnh> --background`, hoặc ô 8 của `app/notebooks/runpod.ipynb`. Ảnh gốc không bị sửa; mọi thứ sinh ra nằm trong `/workspace/outputs/custom_scenes/<tên_cảnh>/`.
+4. Chạy `bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/<tên_cảnh> <tên_cảnh> --background`, hoặc ô 8 của `app/notebooks/runpod.ipynb` (hoặc ô 7 của `gsplat_default.ipynb`: chỉ `default`; của `gsplat_mcmc.ipynb`: `default` nếu chưa có, rồi `mcmc`). Ảnh gốc không bị sửa; mọi thứ sinh ra nằm trong `/workspace/outputs/custom_scenes/<tên_cảnh>/`.
 
 **Sau khi chạy**, xem `outputs/custom_scenes/<tên_cảnh>/colmap/sfm_report.json`, hoặc ô 9 của notebook:
 - kết luận COLMAP;

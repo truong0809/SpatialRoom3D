@@ -8,13 +8,26 @@
 # rieng khi can xem 3D).
 # Bo qua thu muc *.prev_* (lan chay cu da duoc thay bang --force / --rerun-incomplete).
 #
-# Cach chay: bash scripts/pod/pack_results.sh [file_goi.tar.gz]
+# Cach chay: bash scripts/pod/pack_results.sh [--name <ten ban>] [file_goi.tar.gz]
 #   mac dinh: $WS/ket_qua_<thang><ngay>_<gio><phut><giay>.tar.gz (khong de goi truoc); dong cuoi in duong dan goi.
+#   --name <ten ban>: $WS/ket_qua_<ten ban>_<nam><thang><ngay>_<gio><phut><giay>.tar.gz (vd. --name gsplat_mcmc, o goi
+#   ket qua cua notebook cung ten); noi dung goi khong doi (moi ket qua nhe tren volume).
 
 set -uo pipefail
 
 WS="${WS:-/workspace}"
-PKG="${1:-$WS/ket_qua_$(date +%m%d_%H%M%S).tar.gz}"
+LABEL=""
+if [ "${1:-}" = --name ]; then
+  [[ "${2:-}" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --name needs a name (letters, digits, '.', '_', '-')"; exit 2; }
+  LABEL="$2"
+  shift 2
+fi
+if [ -n "$LABEL" ]; then
+  DEFAULT_PKG="$WS/ket_qua_${LABEL}_$(date +%Y%m%d_%H%M%S).tar.gz"
+else
+  DEFAULT_PKG="$WS/ket_qua_$(date +%m%d_%H%M%S).tar.gz"
+fi
+PKG="${1:-$DEFAULT_PKG}"
 case "$PKG" in
   /*) ;;
   *) PKG="$PWD/$PKG" ;;

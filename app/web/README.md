@@ -7,5 +7,5 @@ Dự kiến, chỉ làm khi luồng chính đã chạy ổn định trên pod:
 - xem mô hình 3D (file PLY của một lượt train) trong trình duyệt.
 
 Hiện tại:
-- chạy bằng notebook `app/notebooks/runpod.ipynb` hoặc giao diện dòng lệnh `python -m app.cli`;
-- mô hình 3D của một lượt: `bash scripts/run_render.sh custom <cảnh>` đưa file PLY vào `/workspace/outputs/checkpoints/custom_scene/<cảnh>/`, tải file đó về rồi mở bằng một trình xem 3D Gaussian Splatting.
+- chạy bằng notebook `app/notebooks/runpod.ipynb` (hoặc ba notebook chạy riêng từng phương pháp cùng thư mục) hoặc giao diện dòng lệnh `python -m app.cli`;
+- mô hình 3D của một lượt: `bash scripts/run_render.sh custom <cảnh>` đưa file PLY vào `/workspace/outputs/checkpoints/custom_scene/<cảnh>/gsplat_<chế độ>_<cảnh>_s<seed>.ply`, tải file đó về rồi mở bằng một trình xem 3D Gaussian Splatting.

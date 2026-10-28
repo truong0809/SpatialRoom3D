@@ -32,7 +32,7 @@ Bố cục (chi tiết và ba luồng dữ liệu: `docs/design/architecture.md`
 
 ## 2. Truy cập repo private từ pod
 
-Repo `truong0809/SpatialRoom3D` là private. Pod dùng **deploy key chỉ đọc**: khóa chỉ có quyền đọc đúng một repo này, không push được. Ô 2 và ô 3 của `app/notebooks/runpod.ipynb` làm các bước dưới đây.
+Repo `truong0809/SpatialRoom3D` là private. Pod dùng **deploy key chỉ đọc**: khóa chỉ có quyền đọc đúng một repo này, không push được. Ô 2 và ô 3 của `app/notebooks/runpod.ipynb` (giống hệt ở ba notebook chạy riêng từng phương pháp) làm các bước dưới đây.
 
 ```bash
 mkdir -p /workspace/.ssh && chmod 700 /workspace/.ssh

@@ -139,6 +139,35 @@ def test_deep_blending_gsplat_commands_are_unchanged(sh):
     assert sorted((ws / "outputs" / "logs").glob("modes_db_*.log"))
 
 
+B0_RESULTS = '{"ours_30000": {"SSIM": 0.9, "PSNR": 29.4, "LPIPS": 0.24}}'
+
+
+def test_b0_check_if_present_compares_with_b0_only_once_it_exists(sh):
+    db = sh.ws.joinpath(*DB)
+    for scene in ("drjohnson", "playroom"):
+        make_scene(db, scene)
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", B0_CHECK="if_present")  # chạy riêng default / mcmc
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "no own Inria B0 run yet for drjohnson playroom (B0_CHECK=if_present): no B0 check" in out.stdout
+    compare = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line]
+    assert "--b0-root" not in compare[0] and "--reference-config" in compare[0] and "--strict" in compare[0]
+    b0 = out_dir(sh, "deep_blending", "inria_b0")
+    (b0 / "drjohnson").mkdir(parents=True)
+    (b0 / "drjohnson" / "results.json").write_text(B0_RESULTS, encoding="utf-8")
+    (b0 / "playroom").mkdir(parents=True)
+    (b0 / "playroom" / "results.json").write_text('{"ours_30000": {"PSNR": 29', encoding="utf-8")  # pod tắt khi đang ghi
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", B0_CHECK="if_present")
+    assert out.returncode == 0 and "no own Inria B0 run yet for playroom (B0_CHECK=if_present)" in out.stdout
+    assert "--b0-root" not in [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line][-1]
+    (b0 / "playroom" / "results.json").write_text(B0_RESULTS, encoding="utf-8")
+    (sh.root / "calls.txt").unlink()
+    assert run(sh, "run_gsplat_modes.sh", "deep_blending", B0_CHECK="if_present").returncode == 0
+    compare = [line for line in calls(sh.root) if "src.evaluation.compare_modes" in line]
+    assert f"--b0-root {b0} " in compare[0]  # đã có B0 cho mọi cảnh: đối chiếu như khi chạy cả kế hoạch
+    out = run(sh, "run_gsplat_modes.sh", "deep_blending", B0_CHECK="maybe")
+    assert out.returncode != 0 and "B0_CHECK must be required or if_present" in out.stdout + out.stderr
+
+
 def test_quick_deep_blending_writes_to_the_quick_folder(sh):
     db = sh.ws.joinpath(*DB)
     for scene in ("drjohnson", "playroom"):

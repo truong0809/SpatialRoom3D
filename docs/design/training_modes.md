@@ -151,7 +151,7 @@ Kết quả không cải thiện vẫn được báo cáo đầy đủ (`docs/PR
 | `src/training/depth_check.py` | Trước khi train lượt có `depth_loss`: mọi ảnh train có điểm SfM nằm trong ảnh (Parser của gsplat, không GPU) |
 | `src/training/prune.py`, `scripts/run_filter.sh` | Lọc Gaussian của một lượt đã xong (opacity thấp, trục quá lớn so với `scene_scale` của gsplat) rồi chấm lại bằng lệnh đánh giá đã ghi; kết quả trong `<lượt>/filtered/` (`docs/design/experiments.md` mục 4) |
 | `scripts/run_evaluate.sh` | Lập lại bảng so sánh từ kết quả đã có (benchmark hoặc cảnh tự chụp), mọi chế độ đã chạy (`MODES`, `SCENES`, `BASELINE` để chọn), không train |
-| `src/rendering/render.py`, `scripts/run_render.sh` | Render lại ảnh test và video quỹ đạo từ checkpoint của một lượt đã xong (thư mục mới, không train, không ghi đè); xuất PLY của bước cuối vào `outputs/checkpoints/` |
+| `src/rendering/render.py`, `scripts/run_render.sh` | Render lại ảnh test và video quỹ đạo từ checkpoint của một lượt đã xong (thư mục mới, không train, không ghi đè); xuất PLY của bước cuối vào `outputs/checkpoints/<luồng>/<cảnh>/gsplat_<chế độ>_<cảnh>_s<seed>.ply` |
 
 ## 6. Cách chạy trên pod
 

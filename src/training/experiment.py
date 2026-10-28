@@ -5,6 +5,7 @@ module này; module chỉ đọc và kiểm tra cấu hình, không chạy gì.
     python3 -m src.training.experiment --plan main                        # các dòng "khóa|giá trị" cho bash
     python3 -m src.training.experiment --export main --out kế_hoạch.json  # bản chụp kế hoạch đã kiểm tra
     python3 -m src.training.experiment --space main                       # chỗ còn cần cho các lượt chưa xong
+    python3 -m src.training.experiment --plan main --only mcmc            # chỉ phần của một phương pháp (b0 | chế độ)
 
 Kiểm tra:
   * `modes` có trong train_modes của configs/base.yaml và gồm chế độ baseline (default); `also_against` (tùy chọn):
@@ -27,7 +28,13 @@ Kiểm tra:
   * `seeds` là số nguyên không âm, không trùng;
   * mỗi `benchmarks[].dataset` là một luồng `kind: benchmark` có mục download (src/datasets/fetch.py), `scenes` thuộc
     danh sách cảnh của luồng, `b0` là true / false;
-  * `estimate.gpu_hours`, `estimate.disk_gb`: số dương (chỉ để in và kiểm tra chỗ trống).
+  * `estimate.gpu_hours`, `estimate.disk_gb`: số dương (chỉ để in và kiểm tra chỗ trống); `estimate.only` (tùy chọn):
+    ước lượng khi chạy riêng một phương pháp, `{b0 | <chế độ>: {gpu_hours, disk_gb}}`.
+Chạy riêng một phương pháp (`--only`, select_method): `b0` = các bước B0 của kế hoạch; một chế độ = chế độ đó cùng
+baseline (dùng lại lượt baseline đã xong); cùng cảnh, seed, protocol, thư mục kết quả với cả kế hoạch.
+Tên bản (`run_name`): tên việc nền, báo cáo, log và gói kết quả của một lần chạy: cả kế hoạch là tên kế hoạch (`main`,
+`tune_mcmc`); một phương pháp của `main` là tên notebook của nó (`b0_inria`, `gsplat_default`, `gsplat_mcmc`), của kế
+hoạch khác thì thêm tên kế hoạch đứng trước. Hai lần chạy khác nhau không được trùng tên bản.
 Chỗ còn cần (`--space`, xem `space_needs`): mỗi lượt gsplat chưa xong của một seed tính bằng dung lượng thật của lượt cùng
 cảnh, cùng chế độ / biến thể đã xong ở seed khác (lớn nhất, gồm cả bản đã lọc trong `filtered/`); chưa có thì bằng phần
 chia đều của `estimate.disk_gb` cho mọi lượt. Kế hoạch có `post_filter`: lượt đã xong mà chưa lọc với đúng ngưỡng còn cần
@@ -56,6 +63,20 @@ SET_KEY = re.compile(r"[A-Za-z0-9_.-]+")
 SET_TEXT = re.compile(r"[A-Za-z0-9_.+-]+")  # giá trị trong dòng `variants|` của --plan (không dấu cách, ':' hay ',')
 FILTER_KEYS = ("min_opacity", "max_scale")
 DEPTH_FLAG = "depth-loss"  # simple_trainer.py @6e8c837: Config.depth_loss
+B0 = "b0"  # --only b0: phần B0 Inria của kế hoạch (select_method); không phải tên một chế độ gsplat
+MAIN = "main"  # thực nghiệm chính: chạy riêng từng phương pháp mang đúng tên notebook (app/notebooks/<tên bản>.ipynb)
+# tên của việc nền / báo cáo khác (scripts/pod/*, scripts/pipeline/*, ô 7 của runpod.ipynb): tên bản không được bắt đầu như vậy
+OTHER_PREFIXES = ("run_all", "scene_", "fetch_", "filter_", "render_", "baseline_", "compare_", "modes_", "setup_",
+                  "env_", "conda_env_", "pip_freeze_")
+
+
+def run_name(plan: str, only: str | None = None) -> str:
+    """Tên bản của một lần chạy (việc nền, báo cáo, log, gói kết quả): `main`; `b0_inria`, `gsplat_<chế độ>` (một
+    phương pháp của main, đúng tên notebook); `<kế hoạch>_b0_inria`, `<kế hoạch>_gsplat_<chế độ>` (kế hoạch khác)."""
+    if only is None:
+        return plan
+    label = "b0_inria" if only == B0 else f"gsplat_{only}"
+    return label if plan == MAIN else f"{plan}_{label}"
 
 
 def experiment_path(config_dir: Path, name: str) -> Path:
@@ -173,8 +194,8 @@ def _post_filter(raw, where: str) -> dict | None:
     return {"min_opacity": float(opacity), "max_scale": float(scale)}
 
 
-def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/workspace") -> dict:
-    """Đọc và kiểm tra một kế hoạch; lỗi là ValueError có tên file."""
+def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/workspace", only: str | None = None) -> dict:
+    """Đọc và kiểm tra một kế hoạch; lỗi là ValueError có tên file. `only`: chỉ phần của một phương pháp (select_method)."""
     path = experiment_path(config_dir, name)
     if not path.is_file():
         available = sorted(p.stem for p in (Path(config_dir) / EXPERIMENTS).glob("*.yaml"))
@@ -196,6 +217,8 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
         raise ValueError(f"{where}: modes must include the baseline mode {baseline!r}")
     if len(set(modes)) != len(modes):
         raise ValueError(f"{where}: modes are listed twice")
+    if B0 in modes:
+        raise ValueError(f"{where}: the mode name {B0!r} is reserved for the Inria B0 runs (--only b0); rename the mode")
     modes = [baseline] + [mode for mode in modes if mode != baseline]  # baseline chạy trước, các chế độ khác lấy ngân sách từ nó
     also = raw.get("also_against") or []
     if (not isinstance(also, list) or any(mode not in modes or mode == baseline for mode in also)
@@ -216,7 +239,7 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
     datasets = registry.get("datasets") or {}
     plan_benches = []
     depth_runs, mono_runs = set(), set()
-    warnings = []
+    warnings, warning_runs = [], []  # cảnh báo và hai lượt của mỗi cảnh báo (select_method giữ cảnh báo của lượt còn chạy)
     for index, bench in enumerate(benches):
         here = f"{where}: benchmarks[{index}]"
         if not isinstance(bench, dict):
@@ -256,6 +279,7 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
             for other, _ in twins:
                 warnings.append(f"{run} and {other} train the same configuration on {dataset} ({detail}): both are "
                                 "trained, as separate rows of the comparison table")
+                warning_runs.append([run, other])
             twins.append((run, mode))
             if spec.args.get(DEPTH_FLAG) is True:
                 depth_runs.add(run)
@@ -269,6 +293,7 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
         raise ValueError(f"{where}: estimate must be a mapping")
     gpu_hours = _number(estimate.get("gpu_hours"), f"{where}: estimate.gpu_hours")
     disk_gb = _number(estimate.get("disk_gb"), f"{where}: estimate.disk_gb")
+    method_estimates = _method_estimates(estimate.get("only"), where, modes)
     run_mode = {**{mode: mode for mode in modes}, **{variant["run"]: variant["mode"] for variant in variants}}
     runs = list(run_mode)
     depth_runs = [run for run in runs if run in depth_runs]
@@ -276,7 +301,9 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
     test_every = sorted({resolve_mode(train_modes, run_mode[run]).protocol["test_every"] for run in depth_runs})
     if len(test_every) > 1:
         raise ValueError(f"{where}: the depth-loss runs {depth_runs} use different test_every values {test_every}")
-    return {
+    # phần chia đều của estimate.disk_gb cho mỗi lượt gsplat của CẢ kế hoạch (space_needs), kể cả khi chỉ chạy một phần
+    plan_runs = sum(len(bench["scenes"]) for bench in plan_benches) * len(runs) * len(seeds)
+    plan = {
         "name": name,
         "description": str(raw.get("description") or ""),
         "config_file": str(path),
@@ -294,7 +321,113 @@ def load_experiment(name: str, config_dir: Path = CONFIG_DIR, ws: str = "/worksp
         "seeds": seeds,
         "benchmarks": plan_benches,
         "estimate": {"gpu_hours": gpu_hours, "disk_gb": disk_gb},
+        "estimate_scope": "plan",
+        "method_estimates": method_estimates,
+        "run_estimate_bytes": round(disk_gb * 1e9 / plan_runs),
+        "b0_reference": [bench["dataset"] for bench in plan_benches if bench["b0"]],  # B0 của cả kế hoạch
         "warnings": warnings,
+        "warning_runs": warning_runs,
+        "only": None,
+    }
+    plan = plan if only is None else select_method(plan, only)
+    plan["run_name"] = run_name(name, only)
+    _check_run_name(name, config_dir, only, modes, sorted(registry.get("datasets") or {}))
+    return plan
+
+
+def _run_text(plan: str, only: str | None) -> str:
+    return f"`{plan}`" if only is None else f"`{plan} --only {only}`"
+
+
+def _check_run_name(name: str, config_dir: Path, only: str | None, modes: list[str], datasets: list[str]) -> None:
+    """Tên bản của lần chạy này (run_name) không được trùng tên bản của một lần chạy khác: hai bên sẽ ghi chung việc nền,
+    báo cáo, log và gói kết quả. Lần chạy khác = cả kế hoạch khác, hoặc một phương pháp (b0, chế độ) của kế hoạch khác
+    hay của chính kế hoạch này. Cũng không được là tên của việc nền / báo cáo loại khác: tên một luồng dữ liệu,
+    b0_ / gsplat_ / gsplat_quick_<luồng> (ô 7 của runpod.ipynb), hay bắt đầu bằng OTHER_PREFIXES."""
+    mine = run_name(name, only)
+    others = set(datasets) | {f"{kind}_{dataset}" for kind in ("b0", "gsplat", "gsplat_quick") for dataset in datasets}
+    if mine in others or mine.startswith(OTHER_PREFIXES):
+        raise ValueError(f"{_run_text(name, only)} would be named {mine}, which is the name of another kind of job or "
+                         f"report (a dataset, b0_/gsplat_/gsplat_quick_<dataset>, or {'/'.join(OTHER_PREFIXES)}...): "
+                         f"rename {EXPERIMENTS}/{name}.yaml")
+    runs = {(name, method): run_name(name, method) for method in (None, B0, *modes) if method != only}
+    for other in sorted(path.stem for path in (Path(config_dir) / EXPERIMENTS).glob("*.yaml")):
+        if other == name or not NAME.fullmatch(other):
+            continue
+        try:
+            other_modes = (read_yaml(experiment_path(config_dir, other)) or {}).get("modes") or []
+        except (OSError, ValueError):
+            other_modes = []
+        if not isinstance(other_modes, list):
+            other_modes = []
+        for method in (None, B0, *[mode for mode in other_modes if isinstance(mode, str)]):
+            runs[(other, method)] = run_name(other, method)
+    for (plan, method), text in sorted(runs.items(), key=lambda item: (item[0][0], item[0][1] or "")):
+        if text == mine:
+            raise ValueError(f"{_run_text(name, only)} and {_run_text(plan, method)} would both be named {mine} (job, "
+                             f"reports, results package): rename {EXPERIMENTS}/{name}.yaml"
+                             + ("" if plan == name else f" or {EXPERIMENTS}/{plan}.yaml"))
+
+
+def _method_estimates(raw, where: str, modes: list[str]) -> dict:
+    """estimate.only (tùy chọn): ước lượng khi chạy riêng một phương pháp (select_method), {b0 | chế_độ: {gpu_hours,
+    disk_gb}}. Mục b0 của kế hoạch không có B0 (vd. chép từ main rồi bỏ B0) không dùng tới: --only b0 báo lỗi riêng."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where}: estimate.only must map b0 or a mode of the plan to {{gpu_hours, disk_gb}}")
+    estimates = {}
+    for method, values in raw.items():
+        here = f"{where}: estimate.only.{method}"
+        if method != B0 and method not in modes:
+            raise ValueError(f"{here}: expected b0 or one of the plan's modes {modes}")
+        if not isinstance(values, dict) or set(values) != {"gpu_hours", "disk_gb"}:
+            raise ValueError(f"{here} must be a mapping with gpu_hours and disk_gb")
+        estimates[method] = {"gpu_hours": _number(values["gpu_hours"], f"{here}.gpu_hours"),
+                             "disk_gb": _number(values["disk_gb"], f"{here}.disk_gb")}
+    return estimates
+
+
+def select_method(plan: dict, method: str) -> dict:
+    """Phần của MỘT phương pháp trong kế hoạch (scripts/pod/run_experiment.sh --only): cùng benchmark, cảnh, seed, protocol
+    và thư mục kết quả, nên lượt chạy riêng và lượt của cả kế hoạch là một (lượt đã xong ở bên này được bên kia bỏ qua).
+
+    - `b0`: chỉ B0 Inria trên các benchmark có `b0: true`; không có lượt gsplat.
+    - một chế độ của kế hoạch: chế độ đó, cùng baseline (default) khi chế độ khác baseline: lượt baseline đã xong được dùng
+      lại, chưa có thì train trước, vì các chế độ khác lấy ngân sách Gaussian từ nó. Không B0, không biến thể, không bảng
+      `also_against`.
+    """
+    baseline = plan["modes"][0]
+    if method == B0:
+        benches = [dict(bench) for bench in plan["benchmarks"] if bench["b0"]]
+        if not benches:
+            raise ValueError(f"--only b0: no benchmark of the plan {plan['name']} has b0: true")
+        modes = []
+    elif method in plan["modes"]:
+        benches = [{**bench, "b0": False} for bench in plan["benchmarks"]]
+        modes = [baseline] if method == baseline else [baseline, method]
+    else:
+        raise ValueError(f"--only {method}: expected b0 or one of the modes of the plan {plan['name']} {plan['modes']}")
+    kept = [index for index, pair in enumerate(plan["warning_runs"]) if set(pair) <= set(modes)]
+    depth_runs = [run for run in plan["depth_runs"] if run in modes]
+    estimate = plan["method_estimates"].get(method)
+    return {
+        **plan,
+        "only": method,
+        "modes": modes,
+        "also_against": [],
+        "variants": [],
+        "variant_lines": [],
+        "runs": list(modes),
+        "depth_runs": depth_runs,
+        "depth_test_every": plan["depth_test_every"] if depth_runs else None,
+        "mono_runs": [run for run in plan["mono_runs"] if run in modes],
+        "post_filter": plan["post_filter"] if modes else None,
+        "benchmarks": benches,
+        "estimate": dict(estimate) if estimate else dict(plan["estimate"]),
+        "estimate_scope": "method" if estimate else "plan",
+        "warnings": [plan["warnings"][index] for index in kept],
+        "warning_runs": [plan["warning_runs"][index] for index in kept],
     }
 
 
@@ -368,7 +501,7 @@ def space_needs(plan: dict, config_dir: Path = CONFIG_DIR, ws: str = "/workspace
             for run in plan["runs"]:
                 for seed in plan["seeds"]:
                     runs.append(((bench["dataset"], scene, run), seed, root / scene / f"{run}_s{seed}"))
-    estimate = round(plan["estimate"]["disk_gb"] * 1e9 / len(runs))
+    estimate = plan["run_estimate_bytes"]  # phần chia đều cho mỗi lượt của cả kế hoạch, kể cả khi chỉ chạy một phần
     if datasets is not None:
         unknown = sorted(set(datasets) - {bench["dataset"] for bench in plan["benchmarks"]})
         if unknown:
@@ -422,7 +555,10 @@ def plan_lines(plan: dict) -> list[str]:
              f"mono_runs|{words(plan['mono_runs'])}",
              f"post_filter|{'' if post is None else f'{post[FILTER_KEYS[0]]!r} {post[FILTER_KEYS[1]]!r}'}",
              f"seeds|{words(plan['seeds'])}",
-             f"gpu_hours|{plan['estimate']['gpu_hours']:g}", f"disk_gb|{plan['estimate']['disk_gb']:g}"]
+             f"gpu_hours|{plan['estimate']['gpu_hours']:g}", f"disk_gb|{plan['estimate']['disk_gb']:g}",
+             f"estimate_scope|{plan['estimate_scope']}", f"only|{plan['only'] or ''}",
+             f"run_estimate_bytes|{plan['run_estimate_bytes']}", f"b0_reference|{words(plan['b0_reference'])}",
+             f"run_name|{plan['run_name']}"]
     for bench in plan["benchmarks"]:
         lines.append(f"bench|{bench['dataset']}|{1 if bench['b0'] else 0}|{words(bench['scenes'])}")
     lines += [f"warning|{text.replace('|', '/')}" for text in plan.get("warnings") or []]
@@ -441,10 +577,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--without", nargs="*", metavar="BENCHMARK:LƯỢT",
                         help="với --space: các lượt không train (vd. bị bỏ vì kiểm tra điểm SfM không đạt)")
     parser.add_argument("--out", type=Path, help="file JSON cho --export")
+    parser.add_argument("--only", metavar="PHƯƠNG_PHÁP",
+                        help="chỉ phần của một phương pháp: b0 hoặc một chế độ của kế hoạch (select_method)")
     args = parser.parse_args(argv)
     ws = args.ws.rstrip("/") or "/"
     try:
-        plan = load_experiment(args.plan or args.export or args.space, args.configs, ws)
+        plan = load_experiment(args.plan or args.export or args.space, args.configs, ws, args.only)
         space = space_needs(plan, args.configs, ws, args.datasets, args.without) if args.space else None
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)

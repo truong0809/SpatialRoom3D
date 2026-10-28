@@ -41,7 +41,7 @@ Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep 
 
 ## Chạy trên Runpod
 
-Cần một pod Secure Cloud có GPU NVIDIA từ 24 GB VRAM (Ampere, Ada hoặc Hopper), driver hỗ trợ CUDA ≥ 12.8, gắn network volume cùng data center tại `/workspace`. Cách dễ nhất là notebook [`app/notebooks/runpod.ipynb`](app/notebooks/runpod.ipynb), làm theo [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md). Chạy bằng lệnh, từ `/workspace/SpatialRoom3D`:
+Cần một pod Secure Cloud có GPU NVIDIA từ 24 GB VRAM (Ampere, Ada hoặc Hopper), driver hỗ trợ CUDA ≥ 12.8, gắn network volume cùng data center tại `/workspace`. Cách dễ nhất là notebook [`app/notebooks/runpod.ipynb`](app/notebooks/runpod.ipynb), làm theo [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md). Chạy riêng từng phương pháp của thực nghiệm chính: [`b0_inria.ipynb`](app/notebooks/b0_inria.ipynb), [`gsplat_default.ipynb`](app/notebooks/gsplat_default.ipynb), [`gsplat_mcmc.ipynb`](app/notebooks/gsplat_mcmc.ipynb) (cùng dữ liệu, protocol và thư mục kết quả; mục 5.1.1 của hướng dẫn). Mỗi bản có một tên dùng chung cho việc nền, báo cáo, log và gói kết quả: `main` (code tổng), `b0_inria`, `gsplat_default`, `gsplat_mcmc` (tên notebook); PLY xuất ra là `gsplat_<chế độ>_<cảnh>_s<seed>.ply`. Chạy bằng lệnh, từ `/workspace/SpatialRoom3D`:
 
 ```bash
 bash scripts/pod/run_all.sh --background      # cài và kiểm tra 3 env conda (không train, không tải dữ liệu)
@@ -54,6 +54,7 @@ bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong2/phong2.mp4 ph
 # Thực nghiệm (tự tải dữ liệu benchmark còn thiếu): main = thực nghiệm chính, tune_mcmc = dò tham số mcmc
 bash scripts/pod/run_experiment.sh main --plan                       # in kế hoạch, ước lượng (không chạy gì)
 VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background   # chạy thực nghiệm trong một việc nền
+VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --only mcmc --background   # chỉ một phương pháp: b0, default hoặc mcmc
 VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background
 bash scripts/run_filter.sh custom phong1 mcmc_s42                    # lọc Gaussian một lượt rồi chấm lại
 

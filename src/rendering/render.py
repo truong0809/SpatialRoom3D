@@ -9,10 +9,13 @@ Module này KHÔNG train và KHÔNG ghi đè gì của lượt gốc:
     `<lượt>/render_<quỹ đạo>_<thời gian>/` và chọn quỹ đạo video (`--render-traj-path interp | ellipse | spiral`).
     gsplat ghi ảnh test (renders/), chỉ số (stats/) và video (videos/) vào thư mục đó; `render_meta.json` ghi lệnh,
     thời gian, mã thoát. Chỉ dùng chức năng có sẵn của gsplat (không có thuật toán render mới);
-  - xuất (`--export <thư mục>`): đưa PLY cuối của lượt vào `<thư mục>/<cảnh>/<lượt>.ply` (để tải về / mở bằng trình
-    xem 3D), bằng liên kết cứng khi được (không tốn thêm chỗ trên volume; file xuất dùng chung dữ liệu với PLY của
-    lượt: chỉ đọc / tải về, không sửa tại chỗ), không thì chép. Không ghi đè: tên đó đã là một PLY khác (vd. lượt cũ
-    trước khi train lại) thì xuất thành `<lượt>_<thời điểm train xong>.ply`.
+  - xuất (`--export <thư mục>`): đưa PLY cuối của lượt vào `<thư mục>/<cảnh>/gsplat_<chế độ>_<cảnh>_s<seed>.ply`
+    (vd. `gsplat_mcmc_drjohnson_s42.ply`: tên bản như notebook `gsplat_mcmc.ipynb`, kèm cảnh và seed, để tải về vẫn
+    biết của lượt nào; biến thể: `gsplat_<chế độ>_<tag>_<cảnh>_s<seed>.ply`; lượt chạy thử 3.000 vòng thêm `_quick`) để
+    mở bằng trình xem 3D, bằng liên kết
+    cứng khi được (không tốn thêm chỗ trên volume; file xuất dùng chung dữ liệu với PLY của lượt: chỉ đọc / tải về,
+    không sửa tại chỗ), không thì chép. Không ghi đè: tên đó đã là một PLY khác (vd. lượt cũ trước khi train lại) thì
+    xuất thành `<tên đó>_<thời điểm train xong>.ply`.
 Render dừng nếu mô hình COLMAP của cảnh đã đổi sau khi train (vd. làm lại COLMAP): checkpoint chỉ khớp với camera cũ.
 Xuất PLY và `--dry-run` không cần GPU.
 
@@ -139,19 +142,34 @@ def _same_file(source: Path, target: Path) -> bool:
     return os.path.samefile(source, target) or filecmp.cmp(source, target, shallow=False)
 
 
+def export_name(run: Path, scene: str) -> str:
+    """Tên file PLY xuất ra (không có đuôi): `gsplat_<lượt bỏ _s<seed>>_<cảnh>_s<seed>`, vd. lượt mcmc_s42 của drjohnson
+    -> gsplat_mcmc_drjohnson_s42 (tên bản như notebook gsplat_mcmc.ipynb, kèm cảnh và seed). Lượt chạy thử (thư mục kết
+    quả gsplat_quick) thêm `_quick`, để không trùng tên với lượt chuẩn khi tải về; lượt cũ đã đổi tên `.prev_<thời gian>`
+    giữ phần đó sau cùng."""
+    run = Path(run)
+    quick = "_quick" if run.parent.parent.name == "gsplat_quick" else ""
+    match = re.fullmatch(r"(.+)_s(\d+)((?:\.prev_[A-Za-z0-9_]+)?)", run.name)
+    if not match:
+        return f"gsplat_{run.name}_{scene}{quick}"
+    base, seed, previous = match.groups()
+    return f"gsplat_{base}_{scene}_s{seed}{quick}{previous}"
+
+
 def export_ply(run: Path, meta: dict, export_root: Path) -> tuple[Path, str]:
-    """Đưa PLY cuối vào <export_root>/<cảnh>/<lượt>.ply; trả về (đích, "hardlink" | "copy" | "exists").
+    """Đưa PLY cuối vào <export_root>/<cảnh>/<export_name>.ply; trả về (đích, "hardlink" | "copy" | "exists").
 
     Tên đó đã là một PLY khác (lượt cũ trước khi train lại, đã đổi tên .prev_*): xuất thành
-    <lượt>_<thời điểm train xong>.ply, không ghi đè.
+    <export_name>_<thời điểm train xong>.ply, không ghi đè.
     """
     source = final_ply(run)
     scene = str(meta.get("scene") or Path(run).parent.name)
-    target = Path(export_root) / scene / f"{Path(run).name}.ply"
+    name = export_name(run, scene)
+    target = Path(export_root) / scene / f"{name}.ply"
     if target.exists() and not _same_file(source, target):
         digits = re.sub(r"\D", "", str(meta.get("finished") or ""))[:14]
         stamp = f"{digits[:8]}_{digits[8:]}" if len(digits) == 14 else f"{dt.datetime.now():%Y%m%d_%H%M%S}"
-        target = target.with_name(f"{Path(run).name}_{stamp}.ply")
+        target = target.with_name(f"{name}_{stamp}.ply")
     if target.exists():
         if _same_file(source, target):
             return target, "exists"
@@ -183,7 +201,8 @@ def main(argv: list[str] | None = None, runner=None) -> int:
     parser = argparse.ArgumentParser(description="Render lại / xuất PLY của một lượt gsplat đã train (không train)")
     parser.add_argument("--run", type=Path, required=True, help="thư mục lượt chạy (có run_meta.json)")
     parser.add_argument("--traj", default="interp", choices=TRAJECTORIES, help="quỹ đạo video (mặc định interp)")
-    parser.add_argument("--export", type=Path, help="xuất PLY cuối vào <thư mục>/<cảnh>/<lượt>.ply")
+    parser.add_argument("--export", type=Path,
+                        help="xuất PLY cuối vào <thư mục>/<cảnh>/gsplat_<chế độ>_<cảnh>_s<seed>.ply")
     parser.add_argument("--no-render", action="store_true", help="chỉ xuất PLY, không render (không cần GPU)")
     parser.add_argument("--dry-run", action="store_true", help="chỉ in lệnh render, không chạy, không ghi gì")
     parser.add_argument("--python", default=sys.executable, help="Python của env gs-gsplat (mặc định: python này)")

@@ -243,6 +243,31 @@ def test_config_python_is_chosen_before_conda_activate_shadows_python3(tmp_path)
     assert out.stdout.split() == [str(Path(sys.executable).parent / "python3"), "db"]
 
 
+def test_b0_missing_scenes_uses_the_criterion_of_the_comparison_tables(tmp_path):
+    """config.sh: `b0_missing_scenes` = cảnh mà bảng so sánh sẽ coi là thiếu B0 (compare_reference.load_scene khác OK),
+    dùng khi chạy riêng một phương pháp (B0_CHECK=if_present, chỗ trống của --only b0)."""
+    root = tmp_path / "inria_b0"
+    cases = {
+        "ok": '{"ours_30000": {"SSIM": 0.9, "PSNR": 29.4, "LPIPS": 0.24}}',
+        "truncated": '{"ours_30000": {"PSNR": 29',  # pod tắt khi đang ghi
+        "null": '{"ours_30000": {"SSIM": 0.9, "PSNR": null, "LPIPS": 0.24}}',
+        "nan": '{"ours_30000": {"SSIM": 0.9, "PSNR": NaN, "LPIPS": 0.24}}',
+        "iteration_7000": '{"ours_7000": {"SSIM": 0.8, "PSNR": 25.0, "LPIPS": 0.3}}',
+    }
+    for scene, text in cases.items():
+        (root / scene).mkdir(parents=True)
+        (root / scene / "results.json").write_text(text, encoding="utf-8")
+    script = f'REPO_DIR="{REPO}"; WS="{tmp_path}"; . "$REPO_DIR/scripts/lib/config.sh"; b0_missing_scenes "$@"'
+    env = {"PATH": f"{Path(sys.executable).parent}{os.pathsep}/usr/bin:/bin", "HOME": str(tmp_path)}
+    out = subprocess.run(["bash", "-c", script, "_", str(root), "ours_30000", *cases, "absent"], capture_output=True,
+                         text=True, env=env, timeout=60)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert out.stdout.split() == ["truncated", "null", "nan", "iteration_7000", "absent"]
+    out = subprocess.run(["bash", "-c", script, "_", str(tmp_path / "no_b0"), "ours_30000", "ok"], capture_output=True,
+                         text=True, env=env, timeout=60)
+    assert out.returncode == 0 and out.stdout.split() == ["ok"]  # chưa có thư mục B0: mọi cảnh đều thiếu
+
+
 def test_custom_prepared_must_follow_the_results_folder(tmp_path, capsys):
     """Script đặt COLMAP ở <results.gsplat>/<cảnh>/colmap: ghi đè chỉ một trong hai khóa thì báo lỗi, không đoán."""
     configs = config_copy(tmp_path)

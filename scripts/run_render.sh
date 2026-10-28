@@ -8,8 +8,9 @@
 #
 # Bien tuy chon:
 #   TRAJ=interp|ellipse|spiral   quy dao cua video (mac dinh interp: noi suy giua cac vi tri camera da chup)
-#   EXPORT=1 (mac dinh) | 0      dua PLY cuoi vao $WS/outputs/checkpoints/<luong>/<canh>/<luot>.ply (lien ket cung
-#                                neu duoc, khong ton them cho; ten da la PLY khac thi <luot>_<luc train xong>.ply)
+#   EXPORT=1 (mac dinh) | 0      dua PLY cuoi vao $WS/outputs/checkpoints/<luong>/<canh>/gsplat_<che do>_<canh>_s<seed>.ply
+#                                (vd. gsplat_mcmc_phong1_s42.ply; lien ket cung neu duoc, khong ton them cho; ten da la
+#                                PLY khac thi them _<luc train xong>)
 #   RENDER=1 (mac dinh) | 0      0: chi xuat PLY (khong can GPU, khong can env)
 #   QUICK=1                      benchmark: luot chay thu (gsplat_quick), PLY vao checkpoints/<luong>_quick/
 #   WS=/workspace  ENV_NAME=gs-gsplat
@@ -17,7 +18,7 @@
 
 set -euo pipefail
 
-usage() { sed -n '2,16p' "$0"; exit 2; }
+usage() { sed -n '2,17p' "$0"; exit 2; }
 die() { echo "ERROR: $*"; exit 1; }
 [ "$#" -ge 2 ] && [ "$#" -le 3 ] || usage
 WHAT="$1"

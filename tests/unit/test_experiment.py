@@ -8,6 +8,7 @@ file thưa (sparse): `du -b` đếm kích thước khai báo nhưng file không 
 
 import json
 import os
+import re
 import shutil
 
 import pytest
@@ -25,7 +26,7 @@ STUBS = {
         'case " ${FAKE_FETCH_FAIL:-} " in *" $1 "*) echo "ERROR: fake download failure"; exit 1 ;; esac\n',
     "scripts/run_train.sh":
         'echo "train $* | MODES=${MODES-} SEEDS=${SEEDS-} SCENES=${SCENES-} QUICK=${QUICK-unset}'
-        ' MCMC_SET=${MCMC_SET-unset} OUT_ROOT=${OUT_ROOT-unset} FORCE=${FORCE-unset}'
+        ' MCMC_SET=${MCMC_SET-unset} OUT_ROOT=${OUT_ROOT-unset} FORCE=${FORCE-unset} B0_CHECK=${B0_CHECK-unset}'
         ' VARIANTS=${VARIANTS-unset}" >> "$CALLS"\n'
         'if [ "$2" = gsplat ] && [ -n "${FAKE_RUN_SIZE:-}" ]; then\n'
         '  runs="$MODES"\n'
@@ -97,8 +98,11 @@ def steps(sh, prefix):
 
 
 def summary_tsv(sh, name="main"):
-    """Bảng các bước của lượt chạy gần nhất (bảng so sánh tổng hợp: cùng tên, đuôi .md)."""
-    return sorted((sh.ws / "outputs" / "reports").glob(f"experiment_{name}_*.tsv"))[-1]
+    """Bảng các bước của lượt chạy gần nhất của `name` (`<kế hoạch>` hoặc `<kế hoạch>_<phương pháp>`; bảng so sánh tổng
+    hợp: cùng tên, đuôi .md). `name` là tên bản (main, gsplat_mcmc...); không lẫn bảng từng benchmark hay bản khác."""
+    pattern = re.compile(rf"{name}_\d{{8}}_\d{{6}}\.tsv")
+    return sorted(path for path in (sh.ws / "outputs" / "reports").glob(f"{name}_*.tsv")
+                  if pattern.fullmatch(path.name))[-1]
 
 
 def summary_rows(sh, name="main"):
@@ -171,7 +175,7 @@ def test_plan_mode_prints_the_steps_and_runs_nothing(sh):
 
 def test_runs_every_step_in_order_and_user_variables_cannot_change_the_plan(sh):
     out = experiment(sh, "main", MCMC_SET="opacity_reg=0.5", OUT_ROOT="/elsewhere", QUICK=1, SEEDS=7, FORCE=1,
-                     MODES="default", BASELINE="mcmc")
+                     MODES="default", BASELINE="mcmc", B0_CHECK="if_present")
     assert out.returncode == 0, out.stdout + out.stderr
     order = [line.split(" | ")[0] for line in calls(sh.root)]
     db, m360 = "SCENES=drjohnson playroom", "SCENES=room counter kitchen bonsai"
@@ -181,12 +185,13 @@ def test_runs_every_step_in_order_and_user_variables_cannot_change_the_plan(sh):
                           "train deep_blending b0",
                           *[f"train {bench} gsplat" for _ in range(3) for bench in ("deep_blending", "mipnerf360")],
                           "evaluate deep_blending", "evaluate mipnerf360"]
-    assert order[-1].startswith(f"pack {sh.ws / 'ket_qua_'}") and order[-1].endswith(".tar.gz")
+    assert order[-1] == f"pack {sh.ws / ('ket_qua_' + summary_tsv(sh).stem + '.tar.gz')}"  # ket_qua_main_<thời gian>
     trains = [line for line in calls(sh.root) if line.startswith("train ")]
     assert f"{db} QUICK=0 MCMC_SET=unset OUT_ROOT=unset FORCE=unset" in trains[0]  # B0
     for line, (bench_scenes, seed) in zip(trains[1:], [(db, 42), (m360, 42), (db, 43), (m360, 43), (db, 44),
                                                        (m360, 44)]):
         assert f"MODES=default mcmc SEEDS={seed} {bench_scenes} QUICK=0 MCMC_SET=unset OUT_ROOT=unset" in line
+        assert " B0_CHECK=unset " in line  # cả kế hoạch: B0 chạy trước trong cùng việc, đối chiếu bắt buộc
     assert [line for line in calls(sh.root) if line.startswith("evaluate")] == [
         f"evaluate deep_blending | BASELINE=unset MODES=default mcmc {db} QUICK=unset TAGS=",
         f"evaluate mipnerf360 | BASELINE=unset MODES=default mcmc {m360} QUICK=unset TAGS="]  # lượt có tag: để ngoài
@@ -196,8 +201,9 @@ def test_runs_every_step_in_order_and_user_variables_cannot_change_the_plan(sh):
     text = summary_tsv(sh).with_suffix(".md").read_text(encoding="utf-8")
     assert "| gsplat_mipnerf360_s44 | OK |" in text and "| bảng so sánh deep_blending |" in text
     assert "## mipnerf360: room counter kitchen bonsai" in text and "so với" not in text
-    assert sorted((sh.ws / "outputs" / "reports" / "configs").glob("experiment_main_*.json"))
-    assert "TÓM TẮT thực nghiệm main" in out.stdout and sh.lock_free()
+    assert sorted((sh.ws / "outputs" / "reports" / "configs").glob("main_*.json"))
+    assert "TÓM TẮT main: thực nghiệm main (" in out.stdout and sh.lock_free()
+    assert "  tên bản: main (việc nền, báo cáo, log và gói kết quả mang tên này)" in out.stdout
 
 
 def test_a_plan_with_an_extra_mode_adds_the_table_against_mcmc(sh):
@@ -348,10 +354,242 @@ def test_space_after_a_stop_in_the_middle_of_a_seed(sh):
 def test_background_runs_as_one_queued_job(sh):
     out = experiment(sh, "main", "--background")
     assert out.returncode == 0, out.stdout + out.stderr
-    assert "Đã chạy nền 'exp_main'" in out.stdout
-    state = sh.wait_state("exp_main", "DONE", "FAILED", timeout=120)
-    assert state["state"] == "DONE", sh.log("exp_main")
-    assert "TÓM TẮT thực nghiệm main" in sh.log("exp_main") and len(steps(sh, "train")) == 7
+    assert "Đã chạy nền 'main'" in out.stdout
+    state = sh.wait_state("main", "DONE", "FAILED", timeout=120)
+    assert state["state"] == "DONE", sh.log("main")
+    assert "TÓM TẮT main: thực nghiệm main (" in sh.log("main") and len(steps(sh, "train")) == 7
+
+
+# ----------------------------------------------------------------------------------- chạy riêng một phương pháp
+def gsplat_runs(plan):
+    return {(bench["dataset"], scene, run, seed) for bench in plan["benchmarks"] for scene in bench["scenes"]
+            for run in plan["runs"] for seed in plan["seeds"]}
+
+
+def b0_scenes(plan):
+    return {(bench["dataset"], scene) for bench in plan["benchmarks"] if bench["b0"] for scene in bench["scenes"]}
+
+
+def test_only_selects_the_part_of_one_method():
+    whole = load_experiment("main", REPO / "configs", "/workspace")
+    b0, default, mcmc = (load_experiment("main", REPO / "configs", "/workspace", only)
+                         for only in ("b0", "default", "mcmc"))
+    assert (b0["modes"], b0["runs"], b0["post_filter"]) == ([], [], None)
+    assert [(b["dataset"], b["b0"]) for b in b0["benchmarks"]] == [("deep_blending", True)]  # chỉ benchmark có B0
+    assert default["modes"] == ["default"] and mcmc["modes"] == ["default", "mcmc"]  # mcmc cần ngân sách của default
+    assert not any(bench["b0"] for bench in default["benchmarks"] + mcmc["benchmarks"])
+    # chạy riêng đủ ba phương pháp = đúng các lượt của cả kế hoạch (cùng thư mục, cùng seed)
+    assert gsplat_runs(default) | gsplat_runs(mcmc) == gsplat_runs(whole) and gsplat_runs(default) < gsplat_runs(mcmc)
+    assert b0_scenes(b0) == b0_scenes(whole) and not b0_scenes(default) | b0_scenes(mcmc)
+    assert [m["estimate"] for m in (b0, default, mcmc)] == [{"gpu_hours": 1, "disk_gb": 5}, {"gpu_hours": 6, "disk_gb": 30},
+                                                            {"gpu_hours": 12, "disk_gb": 54}]
+    assert {m["estimate_scope"] for m in (b0, default, mcmc)} == {"method"} and whole["estimate_scope"] == "plan"
+    assert {m["run_estimate_bytes"] for m in (whole, b0, default, mcmc)} == {round(56e9 / 36)}  # phần của mỗi lượt
+    assert plan_lines(mcmc)[-6:] == ["only|mcmc", f"run_estimate_bytes|{round(56e9 / 36)}",
+                                     "b0_reference|deep_blending",  # B0 của cả kế hoạch: bảng đối chiếu khi đã có
+                                     "run_name|gsplat_mcmc",  # tên bản = tên notebook gsplat_mcmc.ipynb
+                                     "bench|deep_blending|0|drjohnson playroom",
+                                     "bench|mipnerf360|0|room counter kitchen bonsai"]
+    assert [m["run_name"] for m in (whole, b0, default, mcmc)] == ["main", "b0_inria", "gsplat_default", "gsplat_mcmc"]
+    assert load_experiment("tune_mcmc", REPO / "configs", "/workspace", "mcmc")["run_name"] == "tune_mcmc_gsplat_mcmc"
+    assert {tuple(m["b0_reference"]) for m in (whole, b0, default, mcmc)} == {("deep_blending",)}
+    with pytest.raises(ValueError, match="expected b0 or one of the modes"):
+        load_experiment("main", REPO / "configs", "/workspace", "mcmc_x")
+    with pytest.raises(ValueError, match="no benchmark of the plan tune_mcmc has b0: true"):
+        load_experiment("tune_mcmc", REPO / "configs", "/workspace", "b0")
+    assert main(["--configs", str(REPO / "configs"), "--plan", "main", "--only", "nope"]) == 2
+
+
+def test_only_drops_variants_extra_tables_and_unrelated_warnings(tmp_path):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    tune = load_experiment("tune_mcmc", configs, "/workspace", "mcmc")
+    assert (tune["runs"], tune["variants"], tune["also_against"], tune["mono_runs"]) == (["default", "mcmc"], [], [], [])
+    assert tune["post_filter"] == {"min_opacity": 0.02, "max_scale": 0.1} and tune["estimate_scope"] == "plan"
+    base = yaml.safe_load((configs / "base.yaml").read_text(encoding="utf-8"))
+    base["train_modes"]["modes"]["default2"] = {"description": "như default", "preset": "default", "args": {}}
+    (configs / "base.yaml").write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    raw = yaml.safe_load((configs / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw.update(name="twin", modes=["default", "mcmc", "default2"])
+    raw["estimate"].pop("only")
+    (configs / "experiments" / "twin.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    assert len(load_experiment("twin", configs, "/workspace")["warnings"]) == 2  # default2 = default trên 2 benchmark
+    assert len(load_experiment("twin", configs, "/workspace", "default2")["warnings"]) == 2
+    assert load_experiment("twin", configs, "/workspace", "mcmc")["warnings"] == []
+
+
+@pytest.mark.parametrize("only, message", [
+    ({"b0": {"gpu_hours": 1}}, "estimate.only.b0 must be a mapping with gpu_hours and disk_gb"),
+    ({"mcmc_x": {"gpu_hours": 1, "disk_gb": 2}}, "estimate.only.mcmc_x: expected b0 or one of the plan's modes"),
+    ({"default": {"gpu_hours": 0, "disk_gb": 2}}, "estimate.only.default.gpu_hours must be a positive number"),
+    ([1], "estimate.only must map b0 or a mode of the plan"),
+])
+def test_bad_method_estimates_are_rejected(tmp_path, only, message):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    raw = yaml.safe_load((configs / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw["estimate"]["only"] = only
+    (configs / "experiments" / "bad.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        load_experiment("bad", configs, "/workspace")
+
+
+def test_a_mode_named_b0_is_rejected(tmp_path):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    base = yaml.safe_load((configs / "base.yaml").read_text(encoding="utf-8"))
+    base["train_modes"]["modes"]["b0"] = {"description": "x", "preset": "mcmc", "args": {"noise_lr": 1},
+                                         "cap_max": {"policy": "match_baseline"}}
+    (configs / "base.yaml").write_text(yaml.safe_dump(base, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    raw = yaml.safe_load((configs / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw.update(name="bad", modes=["default", "b0"])
+    raw["estimate"].pop("only")
+    (configs / "experiments" / "bad.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="the mode name 'b0' is reserved"):
+        load_experiment("bad", configs, "/workspace")
+
+
+def test_two_runs_cannot_share_a_run_name(tmp_path):
+    configs = tmp_path / "configs"
+    shutil.copytree(REPO / "configs", configs)
+    raw = yaml.safe_load((configs / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw.update(name="gsplat_mcmc")  # kế hoạch trùng tên bản của main --only mcmc (notebook gsplat_mcmc.ipynb)
+    (configs / "experiments" / "gsplat_mcmc.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    message = ("`main --only mcmc` and `gsplat_mcmc` would both be named gsplat_mcmc (job, reports, results package): "
+               "rename experiments/main.yaml or experiments/gsplat_mcmc.yaml")
+    with pytest.raises(ValueError, match=re.escape(message)):
+        load_experiment("main", configs, "/workspace", "mcmc")
+    with pytest.raises(ValueError, match=re.escape("`gsplat_mcmc` and `main --only mcmc` would both be named")):
+        load_experiment("gsplat_mcmc", configs, "/workspace")
+    assert load_experiment("main", configs, "/workspace", "default")["run_name"] == "gsplat_default"
+    (configs / "experiments" / "gsplat_mcmc.yaml").unlink()
+    raw.update(name="tune")  # kế hoạch tune và tune_mcmc: tên bản khác nhau (tune_gsplat_mcmc / tune_mcmc)
+    (configs / "experiments" / "tune.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    assert load_experiment("tune", configs, "/workspace", "mcmc")["run_name"] == "tune_gsplat_mcmc"
+    assert load_experiment("tune_mcmc", configs, "/workspace")["run_name"] == "tune_mcmc"
+    # tên của việc nền / báo cáo loại khác: luồng dữ liệu, việc của ô 7 (b0_ / gsplat_<benchmark>), run_all, scene_...
+    for other in ("mipnerf360", "gsplat_deep_blending", "b0_deep_blending", "run_all", "scene_phong1", "modes_db"):
+        raw.update(name=other)
+        (configs / "experiments" / f"{other}.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+        with pytest.raises(ValueError, match=re.escape(f"`{other}` would be named {other}, which is the name of another")):
+            load_experiment(other, configs, "/workspace")
+        (configs / "experiments" / f"{other}.yaml").unlink()
+
+
+def test_only_mcmc_trains_default_then_mcmc_without_b0(sh):
+    out = experiment(sh, "main", "--only", "mcmc")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "Thực nghiệm main (chỉ mcmc), một phần của kế hoạch: default / mcmc" in out.stdout
+    assert "chưa có thì train trước" in out.stdout
+    assert ("deep_blending: drjohnson playroom | B0 Inria: không chạy trong lần này (chạy bằng --only b0); chưa có cho"
+            " drjohnson playroom: default chưa được đối chiếu với B0") in out.stdout
+    assert "mipnerf360: room counter kitchen bonsai | B0 Inria: không\n" in out.stdout  # B0 không thuộc kế hoạch
+    assert "khoảng 1.6 GB mỗi lượt: ước lượng dung lượng của cả kế hoạch chia đều cho mọi lượt" in out.stdout
+    assert "TÓM TẮT gsplat_mcmc: thực nghiệm main --only mcmc (" in out.stdout
+    assert "  tên bản: gsplat_mcmc (việc nền, báo cáo, log và gói kết quả mang tên này)" in out.stdout
+    assert steps(sh, "smoke") == [f"smoke --examples-dir {sh.ws / 'code' / 'gsplat' / 'examples'} --modes default mcmc"]
+    trains = [line for line in calls(sh.root) if line.startswith("train ")]
+    assert [line.split(" | ")[0] for line in trains] == ["train deep_blending gsplat", "train mipnerf360 gsplat"] * 3
+    assert all("MODES=default mcmc " in line and " B0_CHECK=if_present " in line for line in trains)
+    assert [line.split(" | ")[1].split(" SCENES")[0] for line in calls(sh.root) if line.startswith("evaluate")] == [
+        "BASELINE=unset MODES=default mcmc"] * 2
+    rows = summary_rows(sh, "gsplat_mcmc")
+    assert [name for name, _ in rows][:4] == ["env_check", "space_check", "fetch_deep_blending", "fetch_mipnerf360"]
+    assert "b0_deep_blending" not in dict(rows) and all(status == "OK" for _, status in rows)
+    text = summary_tsv(sh, "gsplat_mcmc").with_suffix(".md").read_text(encoding="utf-8")
+    stamp = summary_tsv(sh, "gsplat_mcmc").stem
+    assert f"- Tên bản: `gsplat_mcmc` (việc nền, báo cáo, log và gói kết quả `ket_qua_{stamp}.tar.gz` mang tên này)" in text
+    assert text.startswith("# Thực nghiệm main (chỉ mcmc)") and "(`--only mcmc`)" in text
+    assert "- Một phần của kế hoạch: default / mcmc" in text
+    assert ("- deep_blending: chưa có B0 tự chạy đủ cho drjohnson playroom: `default` chưa được đối chiếu đủ với B0 từng"
+            " cảnh") in text and "- mipnerf360:" not in text
+    assert sorted((sh.ws / "outputs" / "reports" / "configs").glob("gsplat_mcmc_*.json"))
+    assert steps(sh, "pack")[-1] == f"pack {sh.ws / f'ket_qua_{stamp}.tar.gz'}"  # ket_qua_gsplat_mcmc_<thời gian>
+
+
+def test_only_default_trains_only_the_baseline(sh):
+    out = experiment(sh, "main", "--only", "default", "--plan")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "khoảng 6 giờ GPU, thêm khoảng 30 GB" in out.stdout and "--only default --background" in out.stdout
+    out = experiment(sh, "main", "--only", "default")
+    assert out.returncode == 0, out.stdout + out.stderr
+    trains = [line for line in calls(sh.root) if line.startswith("train ")]
+    assert len(trains) == 6 and all("MODES=default SEEDS=" in line for line in trains)
+    assert steps(sh, "smoke") == [f"smoke --examples-dir {sh.ws / 'code' / 'gsplat' / 'examples'} --modes default"]
+    b0 = sh.ws / "outputs" / "benchmarks" / "deep_blending" / "inria_b0"
+    for scene in ("drjohnson", "playroom"):  # B0 đã chạy xong (vd. bằng --only b0)
+        (b0 / scene).mkdir(parents=True)
+        (b0 / scene / "results.json").write_text('{"ours_30000": {"SSIM": 0.9, "PSNR": 29.4, "LPIPS": 0.24}}')
+    out = experiment(sh, "main", "--only", "default")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert ("B0 Inria: không chạy trong lần này (chạy bằng --only b0); đã có cho mọi cảnh: default được đối chiếu"
+            " với B0") in out.stdout
+    text = summary_tsv(sh, "gsplat_default").with_suffix(".md").read_text(encoding="utf-8")
+    assert "- deep_blending: B0 tự chạy đã có cho mọi cảnh: `default` được đối chiếu với B0 từng cảnh" in text
+
+
+def test_only_b0_runs_the_inria_runs_and_their_table(sh):
+    out = experiment(sh, "main", "--only", "b0", "--plan")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "chỉ B0" in out.stdout and "gsplat_" not in out.stdout and "khoảng 1 giờ GPU, thêm khoảng 5 GB" in out.stdout
+    assert steps(sh, "fetch") == ["fetch deep_blending drjohnson playroom --dry-run"]  # không cần Mip-NeRF 360
+    (sh.root / "calls.txt").unlink()
+    out = experiment(sh, "main", "--only", "b0")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert not steps(sh, "smoke")  # chỉ env gs-inria
+    assert [line.split(" | ")[0] for line in calls(sh.root)][:-1] == ["fetch deep_blending drjohnson playroom",
+                                                                      "train deep_blending b0"]
+    assert "B0 còn cảnh chưa có kết quả: cần thêm khoảng 5.0 GB" in out.stdout
+    rows = summary_rows(sh, "b0_inria")
+    assert rows == [["env_check", "OK"], ["space_check", "OK"], ["fetch_deep_blending", "OK"],
+                    ["b0_deep_blending", "OK"], ["report_deep_blending", "OK"]]
+    text = summary_tsv(sh, "b0_inria").with_suffix(".md").read_text(encoding="utf-8")
+    assert "Chỉ B0 (3DGS gốc của Inria)" in text and "| drjohnson | THIẾU KẾT QUẢ |" in text  # B0 giả không ghi gì
+    assert "Kết luận: **INCOMPLETE**" in text and "Đã ghi tóm tắt" not in text  # bảng, không có dòng ghi file JSON
+    assert "TÓM TẮT b0_inria: thực nghiệm main --only b0 (" in out.stdout
+    out = experiment(sh, "main", "--only", "b0", VOLUME_GB=6)  # 5 GB ước lượng + 2 GB chừa lại > 6 GB
+    assert out.returncode == 1 and "B0 (about 5.0 GB more) would not fit in a 6 GB volume" in out.stdout
+    done = sh.ws / "outputs" / "benchmarks" / "deep_blending" / "inria_b0" / "drjohnson"
+    done.mkdir(parents=True)
+    done.joinpath("results.json").write_text('{"ours_30000": {"PSNR": 29', encoding="utf-8")  # hỏng: chưa có kết quả
+    out = experiment(sh, "main", "--only", "b0", VOLUME_GB=6)
+    assert out.returncode == 1 and "B0 (about 5.0 GB more) would not fit" in out.stdout
+    raw = yaml.safe_load((sh.repo / "configs" / "experiments" / "main.yaml").read_text(encoding="utf-8"))
+    raw.update(name="solo")
+    raw["estimate"].pop("only")  # không có ước lượng riêng cho B0: ước lượng 56 GB của cả kế hoạch không dùng cho B0
+    (sh.repo / "configs" / "experiments" / "solo.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True),
+                                                                    encoding="utf-8")
+    out = experiment(sh, "solo", "--only", "b0", VOLUME_GB=6)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "không có ước lượng riêng cho B0 (estimate.only.b0): không kiểm tra chỗ trống cho B0" in out.stdout
+
+
+def test_separate_methods_then_the_whole_plan_train_each_run_once(sh):
+    for only in ("b0", "default", "mcmc"):
+        out = experiment(sh, "main", "--only", only, FAKE_RUN_SIZE="1M")
+        assert out.returncode == 0, out.stdout + out.stderr
+    b0_calls = [line for line in calls(sh.root) if line.startswith("train deep_blending b0")]
+    done = {path.parent for path in (sh.ws / "outputs" / "benchmarks").glob("*/gsplat/*/*/summary.json")}
+    assert len(done) == 36  # 6 cảnh × 2 chế độ × 3 seed: đủ các lượt gsplat của main
+    stamps = {path: path.joinpath("summary.json").stat().st_mtime_ns for path in done}
+    out = experiment(sh, "main", FAKE_RUN_SIZE="1M")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "Seed 42: 12/12 lượt gsplat đã xong, không cần thêm chỗ" in out.stdout
+    assert {path: path.joinpath("summary.json").stat().st_mtime_ns for path in done} == stamps  # không train lại
+    # bước B0 của cả kế hoạch gọi đúng như --only b0 (cùng cảnh, cùng biến): cảnh đã có kết quả thì B0 bỏ qua
+    # (scripts/pipeline/train_inria_b0.sh, test_benchmarks.py::test_b0_skips_finished_scenes_and_uses_images_dir_for_mipnerf)
+    assert [line for line in calls(sh.root) if line.startswith("train deep_blending b0")] == b0_calls * 2
+
+
+def test_background_with_only_names_the_job_after_the_method(sh):
+    out = experiment(sh, "main", "--only", "b0", "--background")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "Đã chạy nền 'b0_inria'" in out.stdout  # tên bản = tên notebook b0_inria.ipynb
+    state = sh.wait_state("b0_inria", "DONE", "FAILED", timeout=120)
+    assert state["state"] == "DONE", sh.log("b0_inria")
+    assert "TÓM TẮT b0_inria: thực nghiệm main --only b0" in sh.log("b0_inria")
+    assert steps(sh, "train") == ["train deep_blending b0"]
+    assert experiment(sh, "main", "--only").returncode == 2 and experiment(sh, "main", "--only", "Bad!").returncode == 2
 
 
 # ------------------------------------------------------------------------- biến thể, loss độ sâu, lọc Gaussian

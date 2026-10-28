@@ -18,7 +18,10 @@ SpatialRoom3D/
 ├── app/                         ứng dụng
 │   ├── cli/                       python -m app.cli <lệnh>: một lệnh cho mọi bước, gọi đúng script trong scripts/
 │   ├── web/                       giao diện web: chưa làm (giai đoạn 5), README giữ chỗ
-│   ├── notebooks/runpod.ipynb     notebook chạy trên pod: kiểm tra máy, khóa deploy, lấy code, cài môi trường, ...
+│   ├── notebooks/                 notebook chạy trên pod, sinh bằng build_notebooks.py (không sửa tay file .ipynb):
+│   │                              runpod.ipynb: code tổng (kiểm tra máy, khóa deploy, lấy code, cài môi trường, ...);
+│   │                              b0_inria.ipynb, gsplat_default.ipynb, gsplat_mcmc.ipynb: mỗi notebook chạy riêng
+│   │                              một phương pháp của thực nghiệm chính (run_experiment.sh main --only <b0|default|mcmc>)
 │   └── __init__.py
 ├── src/                         mã nguồn chính, package `src` (chạy từ gốc repo: python -m src.<gói>.<module>)
 │   ├── input/                     sources.py: nguồn là video hay thư mục ảnh, đủ ảnh không
@@ -111,19 +114,21 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 │   │   ├── gsplat/<cảnh>/<chế_độ>[_<tag>]_s<seed>/   tag: biến thể tham số của một kế hoạch (vd. mcmc_or0001_s42)
 │   │   │                                            .mono_depth_<dấu COLMAP>/: depth prior của cảnh (biến thể mono)
 │   │   └── gsplat_quick/<cảnh>/<chế_độ>_s<seed>/   chạy thử 3.000 vòng
-│   ├── checkpoints/<luồng>/<cảnh>/<lượt>.ply   PLY đã xuất để tải về / xem 3D (liên kết cứng tới PLY của lượt)
+│   ├── checkpoints/<luồng>/<cảnh>/gsplat_<chế_độ>_<cảnh>_s<seed>.ply   PLY đã xuất để tải về / xem 3D (tên bản,
+│   │                                 cảnh, seed; liên kết cứng tới PLY của lượt)
 │   ├── panels/<luồng>_<cảnh>_<thời_gian>/       ảnh so sánh các lượt, video xếp chồng (scripts/run_panels.sh)
-│   ├── reports/                      báo cáo; reports/configs/: bản JSON của cấu hình benchmark đã dùng
+│   ├── reports/                      báo cáo (thực nghiệm: <tên bản>_<thời_gian>.*); reports/configs/: bản JSON của
+│   │                                 cấu hình benchmark và kế hoạch đã dùng
 │   ├── logs/                         log; logs/jobs/: log của việc chạy nền
 │   └── jobs/                         trạng thái việc chạy nền
 ├── miniforge3/                     env conda gs-inria, gs-gsplat, gs-tools
 ├── code/                           gaussian-splatting (Inria 54c035f), gsplat (6e8c837),
 │                                   depth_anything_v2 (a561b84 + trọng số bản Small, chỉ biến thể mono)
-├── ket_qua_*.tar.gz                gói kết quả nhẹ để tải về
+├── ket_qua_*.tar.gz                gói kết quả nhẹ để tải về (thực nghiệm, notebook: ket_qua_<tên bản>_<thời_gian>.tar.gz)
 └── .ssh/                           deploy key chỉ đọc (không bao giờ gửi đi)
 ```
 
-Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipnerf360`): `outputs/reports/modes_db_*.md`, `outputs/reports/baseline_db_summary_*.json`, `outputs/reports/compare_db_*.md`. Thực nghiệm (`scripts/pod/run_experiment.sh`): `outputs/reports/experiment_<tên>_<thời_gian>.*`; tải dữ liệu: `outputs/reports/fetch_<benchmark>_<thời_gian>.json`.
+Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipnerf360`): `outputs/reports/modes_db_*.md`, `outputs/reports/baseline_db_summary_*.json`, `outputs/reports/compare_db_*.md`. Thực nghiệm (`scripts/pod/run_experiment.sh`): `outputs/reports/<tên bản>_<thời_gian>.*`, tên bản là tên kế hoạch (`main`, `tune_mcmc`) hoặc, khi chạy riêng một phương pháp của `main`, tên notebook (`b0_inria`, `gsplat_default`, `gsplat_mcmc`; `docs/design/experiments.md` mục 2.5); tải dữ liệu: `outputs/reports/fetch_<benchmark>_<thời_gian>.json`.
 
 ## 3. Ba luồng dữ liệu, không trộn
 
@@ -142,13 +147,13 @@ Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipne
 - gsplat với Mip-NeRF 360 (`data_factor` 2 / 4) đọc một bản xem dữ liệu gồm các liên kết, ghi ảnh PNG thu nhỏ vào `outputs/benchmarks/mipnerf360/gsplat/<cảnh>/.images_<N>_png_<dấu mô hình>/`, không ghi gì vào `data/`.
 - `run_all.sh` chỉ cài / kiểm tra môi trường: không train, không chạy benchmark, không đọc luồng dữ liệu nào. Chạy luồng nào là do người dùng chọn.
 - Mỗi lượt train có thư mục riêng `<cảnh>/<chế_độ>_s<seed>`. Lượt cũ khác cấu hình không bị ghi đè: báo lỗi, hoặc đổi tên thành `.prev_<thời_gian>` khi được phép thay. Riêng B0: cảnh đã có `results.json` thì bỏ qua (không so cấu hình); `FORCE=1` chạy lại, lượt cũ được đổi tên `<cảnh>.prev_<thời_gian>`.
-- Render lại (`run_render.sh`) thêm một thư mục mới `render_<quỹ_đạo>_<thời_gian>/` trong lượt đó, không sửa file nào của lượt; dừng nếu mô hình COLMAP của cảnh đã đổi sau khi train. Lọc Gaussian (`run_filter.sh`) cũng vậy, với thư mục `filtered/` (checkpoint và PLY đã lọc, lượt chấm lại, `filter_meta.json`); lọc lại với ngưỡng khác thì `filtered/` cũ đổi tên `filtered.prev_<thời_gian>`. Xuất PLY không ghi đè: tên đã là một PLY khác thì xuất thành `<lượt>_<thời điểm train xong>.ply`; lượt chạy thử của benchmark xuất vào `checkpoints/<benchmark>_quick/`.
+- Render lại (`run_render.sh`) thêm một thư mục mới `render_<quỹ_đạo>_<thời_gian>/` trong lượt đó, không sửa file nào của lượt; dừng nếu mô hình COLMAP của cảnh đã đổi sau khi train. Lọc Gaussian (`run_filter.sh`) cũng vậy, với thư mục `filtered/` (checkpoint và PLY đã lọc, lượt chấm lại, `filter_meta.json`); lọc lại với ngưỡng khác thì `filtered/` cũ đổi tên `filtered.prev_<thời_gian>`. Xuất PLY (`gsplat_<chế_độ>_<cảnh>_s<seed>.ply`) không ghi đè: tên đã là một PLY khác thì thêm `_<thời điểm train xong>` vào tên; lượt chạy thử của benchmark xuất vào `checkpoints/<benchmark>_quick/`.
 
 ## 4. Dữ liệu nằm ở đâu
 
 | Nơi | Có gì | Còn khi tắt / đổi pod? |
 |---|---|---|
-| Git (GitHub, repo private `truong0809/SpatialRoom3D`) | Code, cấu hình, tài liệu, test, `app/notebooks/runpod.ipynb`, notebook demo tham khảo. **Không có** dataset, video, ảnh, checkpoint, PLY, log, `configs/local.yaml`, khóa (`.gitignore`) | Có |
+| Git (GitHub, repo private `truong0809/SpatialRoom3D`) | Code, cấu hình, tài liệu, test, 4 notebook của `app/notebooks/` cùng bộ sinh `build_notebooks.py`, notebook demo tham khảo. **Không có** dataset, video, ảnh, checkpoint, PLY, log, `configs/local.yaml`, khóa (`.gitignore`) | Có |
 | Ổ của pod (container disk, `/`) | Khóa GPU `/run/lock/spatialroom3d-gpu.lock` | Không: mất khi Stop / Terminate |
 | Network volume (`/workspace` trên Runpod) | Mọi thứ ở mục 2 | Có, nếu pod mới gắn cùng volume (cùng data center) |
 
@@ -181,7 +186,8 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
    - ô 3: clone code vào `/workspace/SpatialRoom3D` (lần sau: `git pull --ff-only`);
    - ô 4: `bash scripts/pod/run_all.sh --background` (chỉ cài môi trường);
    - đưa dữ liệu của bạn lên, rồi ô 6: kiểm tra dữ liệu (chỉ đọc); dữ liệu benchmark tải được ở ô 7;
-   - ô 7 (thực nghiệm chính, tải dữ liệu, benchmark) hoặc ô 8 (cảnh tự chụp) với dữ liệu bạn chọn.
+   - ô 7 (thực nghiệm chính, tải dữ liệu, benchmark) hoặc ô 8 (cảnh tự chụp) với dữ liệu bạn chọn;
+   - chạy riêng một phương pháp của thực nghiệm chính: `b0_inria.ipynb`, `gsplat_default.ipynb` hoặc `gsplat_mcmc.ipynb` (ô 1–5 giống hệt `runpod.ipynb`, ô 6 chạy phương pháp; `docs/USAGE_GUIDE.md` mục 5.1.1). Kết quả nằm cùng chỗ với code tổng, lượt đã xong không train lại.
 3. Pod mới gắn lại cùng volume: chạy lại ô 1, 3 (cập nhật code) và 4 (env đã có thì chỉ kiểm tra lại).
 4. GPU khác loại:
    - `setup_gsplat.sh` tự build lại gsplat và fused-ssim khi compute capability của GPU khác lần build trước (ghi trong dấu build của env);
@@ -194,7 +200,7 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
 Repo này bắt đầu ngày 19/10/2026 bằng một commit duy nhất, từ bản cấu trúc hoàn chỉnh của repo trước `truong0809/3D-Indoor-Scene-Reconstruction-from-Images` (commit `8037a66` cùng các thay đổi chưa commit ngày 17–19/10/2026). Lịch sử trước đó nằm ở repo cũ; repo cũ và volume cũ không bị sửa.
 
 - Phần đã chạy trên pod ngày 17/10/2026 (cài 3 env, B0 Inria, gsplat `default` / `mcmc` trên Deep Blending, chạy nền và khóa GPU) được dời chỗ và đổi tên gói, không viết lại thuật toán. Hai chế độ, protocol và phiên bản CUDA / PyTorch / gsplat không đổi. Lệnh huấn luyện sinh ra cho Deep Blending giống lệnh đã chạy ngày 17/10/2026, chỉ khác đường dẫn và tên module (`tests/unit/test_benchmarks.py`).
-- Phần viết sau ngày 17/10/2026, **chưa chạy trên pod**: đầu vào thư mục ảnh và các kiểm tra trước khi train, kết luận FAIL khi mô hình COLMAP không có điểm 3D, cấu hình YAML, bản xem dữ liệu cho `data_factor` > 1 (Mip-NeRF 360), render lại / xuất PLY, CLI, notebook cho volume trống, tải dữ liệu và thực nghiệm trọn vẹn, biến thể tham số, kiểm tra điểm SfM, lọc Gaussian. Các phần này chỉ được kiểm thử trên CPU (stub, runner giả, COLMAP bản CPU trên dữ liệu tổng hợp).
+- Phần viết sau ngày 17/10/2026, **chưa chạy trên pod**: đầu vào thư mục ảnh và các kiểm tra trước khi train, kết luận FAIL khi mô hình COLMAP không có điểm 3D, cấu hình YAML, bản xem dữ liệu cho `data_factor` > 1 (Mip-NeRF 360), render lại / xuất PLY, CLI, notebook cho volume trống (cả 3 notebook chạy riêng từng phương pháp), tải dữ liệu và thực nghiệm trọn vẹn, biến thể tham số, kiểm tra điểm SfM, lọc Gaussian. Các phần này chỉ được kiểm thử trên CPU (stub, runner giả, COLMAP bản CPU trên dữ liệu tổng hợp).
 - Đã bỏ: phần dời dữ liệu của volume cũ, mọi phần tương thích bố cục cũ, lấy code từ file ZIP. Repo này dùng volume mới, trống.
 
 Đối chiếu tên khi đọc báo cáo / log cũ:
