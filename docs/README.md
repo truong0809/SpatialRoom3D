@@ -18,6 +18,7 @@ Giới thiệu dự án, luồng xử lý và cách chạy nhanh: [README](../RE
 | [research/reading_list.md](research/reading_list.md) | Danh sách tài liệu khảo sát |
 | [research/demo_review.md](research/demo_review.md) | Kiểm tra notebook demo 3DGS-MCMC của nhóm và repo SpatialScene3D (bản gốc của notebook: [research/references/demo_3dgs_mcmc/](research/references/demo_3dgs_mcmc/README.md)) |
 | [handoff/2026-10-28_d17_per_method_runs.md](handoff/2026-10-28_d17_per_method_runs.md) | Bàn giao D17: chạy riêng từng phương pháp của thực nghiệm chính (B0, `default`, `mcmc`), tên bản; thiết kế, thay đổi, kiểm thử, việc còn mở |
+| [handoff/2026-10-29_d18_total_charts.md](handoff/2026-10-29_d18_total_charts.md) | Bàn giao D18: biểu đồ tổng cho báo cáo so sánh (đối chiếu Inria, chênh lệch tổng so với từng mốc, gộp các benchmark); thiết kế, thay đổi, kiểm thử, việc còn mở |
 
 Protocol và lệnh của từng benchmark: [experiments/deep_blending/](../experiments/deep_blending/README.md), [experiments/mipnerf360/](../experiments/mipnerf360/README.md).
 
