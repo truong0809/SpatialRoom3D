@@ -14,6 +14,8 @@
 #   bash scripts/run_evaluate.sh custom                  # moi canh tu chup ("custom_scene", "app" cung duoc)
 #   BASELINE=mcmc MODES="mcmc <che do X>" bash scripts/run_evaluate.sh deep_blending   # so che do X voi mcmc
 # Bao cao: $WS/outputs/reports/compare_<ten>_<thoi gian>.{md,json}; cau hinh benchmark da dung: $WS/outputs/reports/configs/.
+# Bieu do (src.evaluation.charts, can matplotlib): compare_<ten>_<thoi gian>_charts/ (doi chieu Inria, chenh lech tong
+# so voi moc; anh PNG va index.md: cach doc, bang so); bao cao .md co them muc "Bieu do" dan toi cac anh do.
 # Bien tuy chon: WS=/workspace
 #   MODES="default mcmc"   chi cac che do nay (mac dinh: moi che do co luot chay)
 #   SCENES="room counter"  benchmark: chi cac canh nay; mot phan cac canh thi doi chieu so cong bo ghi SKIPPED
@@ -24,10 +26,11 @@
 #   SPLAT_STATS=0          khong tinh thong ke PLY (bang cau truc mo hinh chi co cac luot da tinh truoc do);
 #   SPLAT_STATS=force      tinh lai ca khi da co (lan dau doc moi PLY cuoi: vai phut voi thuc nghiem chinh)
 #   ENV_NAME=gs-gsplat     env co numpy de tinh thong ke PLY (khong co thi python3 cua may neu co numpy)
+#   CHARTS=0               khong ve bieu do (mac dinh ve khi co Python co matplotlib: env gs-gsplat, hoac python3)
 
 set -euo pipefail
 
-usage() { sed -n '2,26p' "$0"; exit 2; }
+usage() { sed -n '2,29p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 WHAT="$1"
 shift
@@ -143,4 +146,5 @@ fi
 REPORT="${REPORT:-$WS/outputs/reports/compare_${NAME}_$STAMP}"
 PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m src.evaluation.compare_modes \
   "${ARGS[@]}" --out "$REPORT.json" --markdown "$REPORT.md"
+make_charts "$REPORT" "$REPORT.json"
 echo "Report: $REPORT.md"

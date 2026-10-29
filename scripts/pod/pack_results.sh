@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pack_results.sh - Dong goi ket qua nhe de tai ve tu pod (vai MB):
-#   - $WS/outputs/reports, $WS/outputs/logs, $WS/outputs/jobs (bao cao, log, trang thai viec chay nen);
+#   - $WS/outputs/reports, $WS/outputs/logs, $WS/outputs/jobs (bao cao kem anh bieu do *_charts/, log, trang thai viec chay nen);
 #   - phan con lai cua $WS/outputs: JSON (ca *.jsonl, vd. nhat ky hook sr3d_hooks.jsonl), CSV, log, cau hinh
 #     (cfg_args, *.yml, *.txt) va mot anh render moi lan chay, ke ca bao cao frame / COLMAP va log COLMAP cua canh
 #     tu chup (outputs/custom_scenes/<canh>/colmap/).

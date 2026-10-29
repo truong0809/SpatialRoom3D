@@ -44,6 +44,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
 | Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `EXP = "main"`, `CHAY = True`), theo dõi ở ô 5 |
 | Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 8 giờ), rồi vòng ghép khi đã có file kế hoạch | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, sau đó `EXP = "tune_mcmc_combo"`, `CHAY = True`), theo dõi ở ô 5 |
+| Bảng và biểu đồ so sánh của thực nghiệm gần nhất (mục 5.1; không cần GPU) | 7 (`WHAT = "report"`, `EXP = "main"` hoặc kế hoạch khác) |
 | Ảnh so sánh các lượt trên cùng ảnh test và video xếp chồng (mục 4; không cần GPU) | 7 (`WHAT = "panels"`) hoặc 9 (`SO_SANH = True`) |
 | Đưa dữ liệu của bạn lên (mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
 | Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
@@ -60,7 +61,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | 4 | Cài môi trường ở nền: `scripts/pod/run_all.sh` (env `gs-inria`, `gs-tools`, `gs-gsplat`, kèm smoke test). **Không train.** Lần đầu khoảng 80 phút (đo ngày 17/10/2026 trên RTX 4090) | Có (smoke test) |
 | 5 | Theo dõi việc nền, cập nhật mỗi 15 giây; tự dừng khi hết việc | Không |
 | 6 | Kiểm tra dữ liệu (chỉ đọc): thư mục gốc của từng bộ dữ liệu, từng cảnh có `images/` và `sparse/0/` không | Không |
-| 7 | `WHAT` = `experiment` (kế hoạch `EXP`: `main` là thực nghiệm chính, mục 5.1; `tune_mcmc` là dò tham số mcmc, mục 5.2; `CHAY = False` chỉ in kế hoạch), hoặc với benchmark `BENCH`: `check` (kiểm tra dữ liệu), `fetch` (tải dữ liệu về volume), `gsplat` (`default` / `mcmc`), `b0` (3DGS gốc của Inria), `evaluate` (lập lại bảng). Việc chạy nền chỉ chạy khi `CHAY = True`; `gsplat` và `b0` chỉ được xếp hàng khi dữ liệu qua bước kiểm tra (mục 5) | Tùy |
+| 7 | `WHAT` = `experiment` (kế hoạch `EXP`: `main` là thực nghiệm chính, mục 5.1; `tune_mcmc` là dò tham số mcmc, mục 5.2; `CHAY = False` chỉ in kế hoạch), `report` (bảng và biểu đồ của báo cáo mới nhất của `EXP`), hoặc với benchmark `BENCH`: `check` (kiểm tra dữ liệu), `fetch` (tải dữ liệu về volume), `gsplat` (`default` / `mcmc`), `b0` (3DGS gốc của Inria), `evaluate` (lập lại bảng và biểu đồ). Việc chạy nền chỉ chạy khi `CHAY = True`; `gsplat` và `b0` chỉ được xếp hàng khi dữ liệu qua bước kiểm tra (mục 5) | Tùy |
 | 8 | Cảnh tự chụp (`CHAY = True`): ảnh / video → COLMAP → `default` → `mcmc` (mục 3) | Có |
 | 9 | Kết quả một cảnh (kèm dòng "+ đã lọc" dưới lượt đã lọc Gaussian); `XUAT_PLY` (xuất PLY, không cần GPU), `RENDER_LAI` (render lại video quỹ đạo, chạy nền), `LOC` (lọc Gaussian của lượt `RUN` rồi chấm lại, chạy nền; mục 4) | Tùy |
 | 10 | Mọi kết quả và gói kết quả nhẹ `ket_qua_main_<thời_gian>.tar.gz` (tên bản của code tổng) | Không |
@@ -245,7 +246,7 @@ QUICK=1 bash scripts/pod/job.sh start gsplat_db_quick -- bash scripts/run_train.
 bash scripts/pod/job.sh start b0_db -- bash scripts/run_train.sh deep_blending b0          # B0: 3DGS gốc của Inria, chạy nền
 bash scripts/pod/job.sh start gsplat_db -- bash scripts/run_train.sh deep_blending gsplat  # default / mcmc, chạy nền
 SEEDS="42 43 44" bash scripts/pod/job.sh start gsplat_db3 -- bash scripts/run_train.sh deep_blending gsplat
-bash scripts/run_evaluate.sh deep_blending             # lập lại bảng từ kết quả đã có, mọi chế độ (không dùng GPU)
+bash scripts/run_evaluate.sh deep_blending             # lập lại bảng và biểu đồ từ kết quả đã có, mọi chế độ (không dùng GPU)
 ```
 
 - Mip-NeRF 360: thay `deep_blending` bằng `mipnerf360`; chạy một phần cảnh: `SCENES="room counter"`.
@@ -270,6 +271,7 @@ Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "main"`, `VOLUME_GB` = 
 - Chỗ trống được kiểm tra trước khi chạy và trước mỗi seed, chỉ cho các lượt chưa xong: mỗi lượt tính theo dung lượng thật của lượt cùng cảnh, cùng chế độ đã xong ở seed khác (chưa có thì theo ước lượng). Không đủ thì dừng train, các lượt đã xong vẫn giữ; tăng volume rồi chạy lại để làm nốt. `SPACE_CHECK=0` bỏ qua.
 - Pod vẫn tính tiền suốt lượt chạy. `AUTO_STOP = True` ở ô 7 (`AUTO_STOP=1` khi chạy lệnh) dừng pod khi việc cuối cùng xong; chưa thử trên pod.
 - Kết quả: `/workspace/outputs/reports/main_<thời_gian>.md` (các bước, bảng so với `default` của từng benchmark) và gói `/workspace/ket_qua_main_<thời_gian>.tar.gz`; ô 10 cũng in các bước của lượt gần nhất.
+- Biểu đồ tổng của lần chạy: `/workspace/outputs/reports/main_<thời_gian>_charts/`, gồm `01_doi_chieu_inria.png` (`default` so với B0 và số Inria công bố) và `02_so_voi_default.png` (chênh lệch tổng của `mcmc` so với `default` trên mọi cặp (cảnh, seed), gộp hai benchmark, kèm một dòng cho mỗi benchmark); `index.md` ghi cách đọc và bảng số, `main_<thời_gian>.md` dẫn tới các ảnh. Xem trong notebook: ô 7 với `WHAT = "report"` (bảng kẻ sẵn rồi các ảnh, báo cáo mới nhất của `EXP`). Cách đọc, khi nào biểu đồ không vẽ: `docs/design/comparisons.md`, mục Biểu đồ. Cần matplotlib (env `gs-gsplat` có sẵn); `CHARTS=0` thì không vẽ. Trước khi chọn `mcmc_indoor` (mục 5.2, vòng ghép), báo cáo của `main` chỉ dùng để kiểm điều kiện (ảnh đối chiếu Inria); chênh lệch `default` / `mcmc` trên các cảnh ngoài `room` đọc sau khi đã ghi quyết định (`docs/design/experiments.md` mục 3.6, bước 5; notebook in dòng nhắc).
 - Tên bản: `main` là tên của code tổng (việc nền, báo cáo, log, gói kết quả); chạy riêng từng phương pháp mang tên notebook (mục 5.1.1), dò tham số là `tune_mcmc`. Ghi chú, báo cáo đồ án: gọi đúng các tên này (`docs/design/experiments.md` mục 2.5).
 
 #### 5.1.1 Chạy riêng từng phương pháp
@@ -290,7 +292,7 @@ Tên notebook là tên bản. Mang đúng tên đó (ví dụ `gsplat_mcmc`):
 
 File của các bước bên trong giữ tên riêng như khi chạy từng lệnh: `modes_<tag>_*` (bước so sánh của gsplat), `baseline_*` (B0), `configs/<benchmark>_*`; bảng của chúng đã có trong `<tên bản>_<thời_gian>_<benchmark>.md`.
 
-- Tải lên `/workspace` và mở như `runpod.ipynb`. Ô 1–5 giống hệt `runpod.ipynb` (cài cả 3 env, dùng chung); ô 6 chạy phương pháp (`CHAY = False` chỉ in kế hoạch); ô "Bảng" in báo cáo mới nhất `/workspace/outputs/reports/<tên bản>_<thời_gian>.md`.
+- Tải lên `/workspace` và mở như `runpod.ipynb`. Ô 1–5 giống hệt `runpod.ipynb` (cài cả 3 env, dùng chung); ô 6 chạy phương pháp (`CHAY = False` chỉ in kế hoạch); ô "Bảng" in báo cáo mới nhất `/workspace/outputs/reports/<tên bản>_<thời_gian>.md` (kẻ bảng sẵn) rồi các biểu đồ của nó (`<tên bản>_<thời_gian>_charts/`).
 - Chạy riêng `default` hoặc `mcmc` khi chưa có B0: không đối chiếu `default` với B0, không tính là lỗi (`B0_CHECK=if_present`); mọi cảnh Deep Blending đã có B0 thì đối chiếu như code tổng. Kế hoạch in ở ô 6 (`CHAY = False`) và báo cáo ở ô "Bảng" ghi rõ đã đối chiếu hay chưa, cảnh nào còn thiếu B0. Muốn có đối chiếu ngay thì chạy `b0_inria.ipynb` trước. Chạy B0 sau thì lập lại bảng có B0: chạy lại ô 6 của notebook đó (lượt đã xong không train lại), hoặc ô 7 của `runpod.ipynb` với `WHAT = "evaluate"`, `BENCH = "deep_blending"`.
 - B0 chỉ có trên benchmark (chưa có luồng B0 cho cảnh tự chụp).
 - Các notebook sinh từ `app/notebooks/build_notebooks.py` (sửa ở đó rồi chạy `python3 app/notebooks/build_notebooks.py`; không sửa tay file `.ipynb`).
@@ -361,7 +363,7 @@ bash scripts/pod/pack_results.sh               # /workspace/ket_qua_<tháng><ng�
 bash scripts/pod/pack_results.sh --name gsplat_mcmc   # /workspace/ket_qua_gsplat_mcmc_<năm tháng ngày>_<giờ phút giây>.tar.gz
 ```
 
-Gói kết quả gồm báo cáo, log, trạng thái việc nền, JSON / CSV kết quả và một ảnh render mỗi lượt; không có checkpoint, PLY, video, ảnh gốc hay dataset.
+Gói kết quả gồm báo cáo (kèm ảnh biểu đồ so sánh trong `outputs/reports/*_charts/`), log, trạng thái việc nền, JSON / CSV kết quả và một ảnh render mỗi lượt; không có checkpoint, PLY, video, ảnh gốc hay dataset.
 
 ## 8. Khi gặp lỗi
 
@@ -412,6 +414,7 @@ Sự cố môi trường đã biết: `docs/ENVIRONMENT_AUDIT.md` mục 6.
 | Dò tham số `tune_mcmc` (biến thể, kiểm tra điểm SfM), lọc Gaussian | Đã kiểm thử với các bước giả, runner giả; checkpoint PyTorch và PLY của gsplat kiểm tra trên CPU; **chưa chạy trên GPU** | `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py`, `test_prune.py` |
 | Biến thể có code của `tune_mcmc` (`kr`, `mono`, gói `v2`) và `bilagrid`; bước `depth_anything` | Đã kiểm thử trên CPU: bản vá đúng chỗ trong `simple_trainer.py` thật; KR với `MCMCStrategy` thật; loss Pearson bằng PyTorch; kiểm NaN; tải Depth Anything V2 với kho git cục bộ; bước `depth_anything` lỗi thì chỉ bỏ lượt dùng prior. Kiểm tra tay, ngoài bộ test: bản sao có vá phân giải đúng tham số của cả 18 lượt; depth prior với code Depth Anything V2 thật nhưng trọng số ngẫu nhiên. **Chưa train trên GPU, chưa chạy smoke test trên GPU, chưa tải trọng số thật** | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_experiment.py`; `docs/design/experiments.md` mục 3.7; `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox" |
 | Bảng so sánh mở rộng (số cặp và số cảnh tốt hơn, chất lượng theo dung lượng, cấu trúc mô hình), ảnh so sánh và video xếp chồng | Đã kiểm thử trên CPU với PLY, ảnh render và video tổng hợp; **chưa chạy trên kết quả thật** | `tests/unit/test_compare_modes.py`, `tests/unit/test_splat_stats.py`, `tests/unit/test_panels.py` |
+| Biểu đồ tổng (đối chiếu Inria, chênh lệch tổng so với từng mốc, gộp các benchmark), ô "Bảng" và `WHAT = "report"` của notebook | Đã kiểm thử trên báo cáo lập từ lượt giả (số trên ảnh đúng số của bảng số cặp tốt hơn, nhãn số không tràn khung, đủ chữ tiếng Việt trong font), với matplotlib 3.10.5 như env `gs-gsplat`; **chưa vẽ từ kết quả thật** | `tests/unit/test_charts.py`, `test_benchmarks.py`, `test_notebooks.py`, `test_experiment.py` |
 | Trên pod (COLMAP 4.2.1, GPU) bằng repo này | **Chưa chạy** | — |
 
 Tóm tắt các ca với COLMAP thật (sandbox):

@@ -13,6 +13,14 @@
 #   b0_missing_scenes <thu muc B0> <method> <canh>...
 #                                                 in (noi bang dau cach) cac canh chua co ket qua B0 du chi so, cung
 #                                                 tieu chi voi bang so sanh (src.evaluation.compare_reference.load_scene)
+#   make_charts <ten> <bao cao .json>...          bieu do tong (src.evaluation.charts: doi chieu Inria, chenh lech tong so
+#                                                 voi moc; nhieu bao cao cung moc thi gop) vao <ten>_charts/ (anh PNG,
+#                                                 index.md co cach doc va bang so), them muc "Bieu do" vao cuoi <ten>.md
+#                                                 khi file do co. Can matplotlib: python cua env gs-gsplat, khong co thi
+#                                                 python3 cua may; khong co thi chi in NOTE. CHARTS=0: bo qua. Luon tra ve
+#                                                 0: bieu do loi chi in WARN, bang trong bao cao khong doi. Chay voi
+#                                                 MPLBACKEND=Agg (MPLBACKEND cua Jupyter lam matplotlib bao loi khi import,
+#                                                 nhu setup_gsplat.sh)
 
 # python3 cua may, ghi lai luc source file nay: cac script source truoc khi kich hoat env conda, ma sau
 # `conda activate gs-inria` thi python3 la cua env do (khong co PyYAML)
@@ -67,4 +75,29 @@ def done(scene):
 
 print(" ".join(scene for scene in sys.argv[3:] if not done(scene)))
 PY
+}
+
+make_charts() {
+  local name="$1" py="" candidate json reports=() args
+  shift
+  [ "${CHARTS:-1}" != 0 ] || return 0
+  for json in "$@"; do
+    [ ! -f "$json" ] || reports+=("$json")
+  done
+  [ "${#reports[@]}" -gt 0 ] || return 0
+  for candidate in "$WS/miniforge3/envs/gs-gsplat/bin/python" "$SR3D_SYSTEM_PYTHON" "$(command -v python3 || true)"; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ] && MPLBACKEND=Agg "$candidate" -c 'import matplotlib' 2> /dev/null; then
+      py="$candidate"
+      break
+    fi
+  done
+  if [ -z "$py" ]; then
+    echo "NOTE: no Python with matplotlib: no charts for $(basename "$name") (the tables are in the report)"
+    return 0
+  fi
+  args=(--report "${reports[@]}" --out "${name}_charts")
+  [ ! -f "$name.md" ] || args+=(--append-to "$name.md")
+  MPLBACKEND=Agg PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" "$py" -m src.evaluation.charts "${args[@]}" \
+    || echo "WARN: the charts of $(basename "$name") could not be drawn (the tables in the report are not affected)"
+  return 0
 }

@@ -34,7 +34,8 @@ SpatialRoom3D/
 │   │                              mono_depth.py (depth prior bằng Depth Anything V2 Small)
 │   ├── rendering/                 render.py: render lại từ checkpoint, xuất PLY
 │   ├── evaluation/                gsplat_results.py, compare_modes.py, compare_reference.py, overview.py,
-│   │                              splat_stats.py (thống kê PLY), panels.py (ảnh so sánh các lượt)
+│   │                              splat_stats.py (thống kê PLY), panels.py (ảnh so sánh các lượt),
+│   │                              charts.py (biểu đồ tổng của các báo cáo so sánh)
 │   ├── datasets/                  registry.py: đọc configs/*.yaml, kiểm tra dữ liệu từng luồng; fetch.py: tải benchmark
 │   ├── utils/                     gpu_lock.py: khóa GPU dùng chung với script bash
 │   └── __init__.py
@@ -87,7 +88,7 @@ Luồng chính và nơi mỗi bước nằm:
 | Train 3DGS | `src/training/` | `scripts/run_train.sh` |
 | Export PLY / Checkpoint | `src/rendering/render.py` | `scripts/run_render.sh` |
 | Lọc Gaussian, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
-| Evaluate (PSNR / SSIM / LPIPS) | `src/evaluation/` | `scripts/run_evaluate.sh` |
+| Evaluate (PSNR / SSIM / LPIPS): bảng và biểu đồ | `src/evaluation/` (biểu đồ: `charts.py`) | `scripts/run_evaluate.sh` |
 | Ảnh so sánh các lượt | `src/evaluation/panels.py` | `scripts/run_panels.sh` |
 
 Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` (script tự đặt), ví dụ `python -m src.training.run`, `python -m src.reconstruction.colmap_runner`, `python -m src.datasets.registry`.

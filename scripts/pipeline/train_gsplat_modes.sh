@@ -33,7 +33,7 @@
 #   OUT_ROOT, B0_ROOT   mac dinh lay tu configs/<benchmark>.yaml (results.gsplat | gsplat_quick, results.inria_b0):
 #                       $WS/outputs/benchmarks/<benchmark>/{gsplat,gsplat_quick,inria_b0}
 # Ket qua: $OUT_ROOT/<canh>/<che_do>[_<tag>]_s<seed>/; log va bao cao: $WS/outputs/logs,
-#          $WS/outputs/reports/modes_<tag benchmark>[_quick]_<thoi gian>.*
+#          $WS/outputs/reports/modes_<tag benchmark>[_quick]_<thoi gian>.* (bieu do: ..._charts/, CHARTS=0: khong ve)
 
 set -euo pipefail
 export MPLBACKEND=Agg  # xem setup_gsplat.sh: MPLBACKEND cua Jupyter lam matplotlib bao loi trong env gs-gsplat
@@ -266,6 +266,7 @@ if [ "$QUICK" = "1" ]; then
   step "4. Report of the quick runs (checks the whole report path; Inria checks are N/A at $QUICK_STEPS steps)"
   python -m src.evaluation.compare_modes --root "$OUT_ROOT" --baseline "$BASELINE_VARIANT" --modes "${MODE_LIST[@]}" \
     --include-deviating "${CHECK_ARGS[@]}" --out "$REPORT.json" --markdown "$REPORT.md" || FAILED=1
+  make_charts "$REPORT" "$REPORT.json"
 else
   step "4. Compare modes and check the baseline against Inria (published numbers and own B0 run)"
   # --strict: exit 1 neu default (gsplat) khong khop Inria trong nguong - phai xem truoc khi dung lam baseline
@@ -274,6 +275,7 @@ else
     echo "WARN: the gsplat default runs do not match Inria (published or own B0) within tolerance, or a check is incomplete"
     FAILED=1
   fi
+  make_charts "$REPORT" "$REPORT.json"
 fi
 
 echo

@@ -15,10 +15,12 @@
 #   CONFIG=<file JSON>          mac dinh: muc benchmark cua configs/<benchmark>.yaml, chup vao $WS/outputs/reports/configs/
 #   SCENES="..."                chi chay cac canh nay (mac dinh: moi canh cua benchmark)
 # Du lieu phai co san o cho configs/<benchmark>.yaml ghi: thieu thi dung truoc khi train.
+# Ket qua: bang so voi so lieu Inria cong bo $WS/outputs/reports/baseline_<tag>_summary_<thoi gian>.json, bieu do B0
+#          so voi so cong bo canh do (..._charts/, src.evaluation.charts; CHARTS=0: khong ve).
 
 set -euo pipefail
 
-usage() { sed -n '2,17p' "$0"; exit 2; }
+usage() { sed -n '2,19p' "$0"; exit 2; }
 [ "$#" -eq 1 ] || usage
 BENCH="$1"
 [[ "$BENCH" =~ ^[a-z0-9_]+$ ]] || usage
@@ -184,6 +186,7 @@ VERDICT=0
 PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}" \
   python -m src.evaluation.compare_reference --config "$CONFIG" --model-root "$OUT_ROOT" --out "$SUMMARY" \
   --strict || VERDICT=$?
+make_charts "${SUMMARY%.json}" "$SUMMARY"
 
 echo
 if [ "$VERDICT" != 0 ]; then

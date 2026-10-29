@@ -25,7 +25,7 @@ flowchart LR
 | Huấn luyện 3DGS | `src/training/` | `scripts/run_train.sh` |
 | Render lại từ checkpoint, xuất PLY | `src/rendering/` | `scripts/run_render.sh` |
 | Lọc Gaussian sau khi train, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
-| Đánh giá, so sánh các chế độ | `src/evaluation/` | `scripts/run_evaluate.sh` |
+| Đánh giá, so sánh các chế độ (bảng và biểu đồ) | `src/evaluation/` | `scripts/run_evaluate.sh` |
 | Ảnh so sánh các lượt trên cùng ảnh test, video xếp chồng | `src/evaluation/panels.py` | `scripts/run_panels.sh` |
 
 Ảnh chụp được dùng thẳng; video được chọn frame nét. Trước khi train, cảnh được kiểm tra số ảnh, tỉ lệ ảnh COLMAP ghép được, việc tách nhóm và độ phủ góc nhìn.

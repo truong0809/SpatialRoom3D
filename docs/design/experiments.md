@@ -133,12 +133,13 @@ Kiểm tra:
 | `<b0_inria\|gsplat_default\|gsplat_mcmc>_<thời_gian>.*` | Như trên, cho một lần chạy riêng (`--only`), mang tên notebook của phương pháp; `b0_inria`: bảng B0 so với số Inria công bố |
 | `main_<thời_gian>.tsv` | Các bước (đọc bởi `scripts/pod/results.sh`, nhận ra bằng dòng đầu `# experiment ...`) |
 | `main_<thời_gian>_<benchmark>[_vs_<mốc>].{md,json}` | Từng bảng so sánh (`src.evaluation.compare_modes`) |
+| `main_<thời_gian>_charts/` | Biểu đồ tổng của lần chạy (`src.evaluation.charts`, vẽ một lần ở cuối từ mọi bảng; bảng cùng mốc được gộp): đối chiếu Inria, chênh lệch tổng so với từng mốc; ảnh PNG và `index.md` (cách đọc, bảng số); `main_<thời_gian>.md` có mục "Biểu đồ" dẫn tới các ảnh (`docs/design/comparisons.md`) |
 | `configs/main_<thời_gian>.json` | Bản chụp kế hoạch đã dùng, kèm SHA-256 của file kế hoạch |
 | `fetch_<benchmark>_<thời_gian>.json` | Bản ghi tải dữ liệu |
 
 Các lượt train nằm ở `$WS/outputs/benchmarks/<benchmark>/gsplat/<cảnh>/<chế_độ>_s<seed>/` (mục 5).
 
-Ngoài PSNR / SSIM / LPIPS, mỗi bảng so sánh có số cặp (cảnh, seed) và số cảnh tốt hơn, chất lượng theo dung lượng (byte mỗi Gaussian, bản đã lọc) và cấu trúc mô hình đọc từ PLY (tỉ lệ Gaussian gần trong suốt / rất to); ảnh so sánh và video xếp chồng của các lượt: `scripts/run_panels.sh` (`docs/design/comparisons.md`). Cột `Render (ms/ảnh)` gồm cả thời gian khởi động của lượt chấm, không phải tốc độ render. `main.yaml` chưa có `post_filter`, nên `main` không tự lọc. Bảng sau khi lọc và các dòng bản đã lọc của bảng chất lượng theo dung lượng chỉ có cho các lượt đã lọc ở kế hoạch khác: vd. `default`, `mcmc` của `room` sau `tune_mcmc` và vòng ghép, không có cho `mcmc_indoor` hay 5 cảnh còn lại; các dòng đó không dùng để so các chế độ. Thêm `post_filter` vào kế hoạch thì mỗi lượt tốn thêm khoảng 4 phút GPU để lọc và chấm lại (ước lượng như `tune_mcmc`).
+Ngoài PSNR / SSIM / LPIPS, mỗi bảng so sánh có số cặp (cảnh, seed) và số cảnh tốt hơn, chất lượng theo dung lượng (byte mỗi Gaussian, bản đã lọc) và cấu trúc mô hình đọc từ PLY (tỉ lệ Gaussian gần trong suốt / rất to), kèm biểu đồ tổng vẽ từ các bảng (đối chiếu Inria; chênh lệch tổng so với từng mốc trên mọi cặp (cảnh, seed), gộp các benchmark; xem trong notebook: ô "Bảng" của notebook theo phương pháp, hoặc `runpod.ipynb` ô 7 với `WHAT = "report"`); ảnh so sánh và video xếp chồng của các lượt: `scripts/run_panels.sh` (`docs/design/comparisons.md`). Cột `Render (ms/ảnh)` gồm cả thời gian khởi động của lượt chấm, không phải tốc độ render. `main.yaml` chưa có `post_filter`, nên `main` không tự lọc. Bảng sau khi lọc và các dòng bản đã lọc của bảng chất lượng theo dung lượng chỉ có cho các lượt đã lọc ở kế hoạch khác: vd. `default`, `mcmc` của `room` sau `tune_mcmc` và vòng ghép, không có cho `mcmc_indoor` hay 5 cảnh còn lại; các dòng đó không dùng để so các chế độ. Thêm `post_filter` vào kế hoạch thì mỗi lượt tốn thêm khoảng 4 phút GPU để lọc và chấm lại (ước lượng như `tune_mcmc`).
 
 Chỉ gọi là "cải thiện" theo mục 6, và thêm:
 - chênh lệch so với `default` cùng dấu trên phần lớn cảnh, trên cùng 3 seed (cột "Cảnh tốt hơn" của bảng số cặp thắng);
@@ -163,7 +164,7 @@ Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script v
   BASELINE=mcmc MODES="mcmc mcmc_indoor" bash scripts/run_evaluate.sh deep_blending
   BASELINE=mcmc MODES="mcmc mcmc_indoor" SCENES="counter kitchen bonsai" bash scripts/run_evaluate.sh mipnerf360
   ```
-  Khi báo cáo, dòng của `room` vẫn ghi nhưng nói rõ là cảnh đã dùng để chọn tham số. Cách chặt hơn (chưa làm): dò trên một phần ảnh train của `room` tách ra làm tập kiểm định.
+  Mỗi lệnh vẽ biểu đồ cho bảng của nó (`<báo cáo>_charts/`); ảnh tổng gộp hai bảng (biểu đồ tổng của `main` thì gộp cả `room`), chạy từ thư mục gốc của repo: `MPLBACKEND=Agg /workspace/miniforge3/envs/gs-gsplat/bin/python -m src.evaluation.charts --report <hai file .json> --out <thư mục>`. Khi báo cáo, dòng của `room` vẫn ghi nhưng nói rõ là cảnh đã dùng để chọn tham số. Cách chặt hơn (chưa làm): dò trên một phần ảnh train của `room` tách ra làm tập kiểm định.
 - 12 biến thể tham số là tinh chỉnh tham số của một phương pháp có sẵn (3DGS-MCMC trên gsplat) cộng một bước hậu xử lý, không phải thuật toán mới. Ba thành phần của notebook v2 là thay đổi phương pháp ở mức tích hợp: bilateral grid và loss Pearson với độ sâu đơn ảnh là kỹ thuật đã công bố (mục 3.7), Kill-then-Relocate là heuristic của nhóm, không có paper. Không gọi phần nào là thuật toán mới.
 
 ### 3.2 Thiết kế
@@ -259,7 +260,7 @@ Mục đích: chọn bộ tham số cho `mcmc_indoor` trên những lượt chư
    "Đạt" ở bước này là bộ lọc thô, không phải bằng chứng cải thiện. Mô phỏng Monte Carlo (chỉ số theo phân phối chuẩn, tương quan giữa ba chỉ số từ 0 đến 0,8, σ gộp như trên): khi không có hiệu ứng thật, khoảng 13–23 % lần vẫn có cấu hình đạt nếu chỉ có 1 cấu hình, 36–52 % nếu có 4 cấu hình; một hiệu ứng thật cỡ 1σ ở mọi chỉ số đạt khoảng 59–60 %, cỡ 2σ khoảng 87–94 %. Bằng chứng là thực nghiệm chính trên 5 cảnh còn lại.
 
    `mcmc_indoor` trong `configs/base.yaml` mang đúng `set` của cấu hình được chọn (mục 3.1). Bước lọc không thuộc chế độ: lọc là hậu xử lý, báo cáo riêng (mục 4).
-5. **Không dùng 5 cảnh kết luận để chọn.** Bước 1–4 chỉ dùng bảng và ảnh của `room`. Bảng của `main` trên 5 cảnh còn lại đã có trước khi chọn; khi chọn, chúng chỉ dùng để kiểm điều kiện (B0 so với số Inria công bố, `default` so với B0, đủ seed). Việc đối chiếu `default` / `mcmc` với lượt 17/10/2026 của repo trước làm sau khi chọn (P9 của `docs/PROJECT_STATUS.md`). Ghi quyết định và lý do trước khi đọc các bảng đó để kết luận; báo cáo ghi rõ kết quả `default` / `mcmc` trên các cảnh đó đã có trước khi chọn.
+5. **Không dùng 5 cảnh kết luận để chọn.** Bước 1–4 chỉ dùng bảng và ảnh của `room`. Bảng của `main` trên 5 cảnh còn lại (và biểu đồ tổng của lần chạy) đã có trước khi chọn; khi chọn, chúng chỉ dùng để kiểm điều kiện (B0 so với số Inria công bố, `default` so với B0, đủ seed). Việc đối chiếu `default` / `mcmc` với lượt 17/10/2026 của repo trước làm sau khi chọn (P9 của `docs/PROJECT_STATUS.md`). Ghi quyết định và lý do trước khi đọc các bảng đó để kết luận; báo cáo ghi rõ kết quả `default` / `mcmc` trên các cảnh đó đã có trước khi chọn.
 6. **Báo cáo công sức dò:** số cấu hình đã thử (16 biến thể của `tune_mcmc` và các cấu hình của vòng này), tất cả trên `room`; `default` và `mcmc` dùng tham số gốc, không dò. Kết luận về `mcmc_indoor` vẫn dựa trên 5 cảnh còn lại (mục 3.1).
 
 **Ước lượng** trên RTX 4090, chưa phải số đo: 1–4 cấu hình × 2 seed, tức 2–8 lượt, mỗi lượt khoảng 23 phút kể cả lọc và chấm lại, cộng lọc và chấm lại 4 lượt `default`, `mcmc` seed 43, 44 (khoảng 16 phút): khoảng 1–3,5 giờ GPU. Thêm khoảng 10–20 GB: khoảng 1,8 GB mỗi lượt mới, cộng bản đã lọc của 4 lượt kia (tối đa khoảng 6 GB).
@@ -325,7 +326,7 @@ Thư mục dữ liệu và kết quả lấy từ `configs/<benchmark>.yaml` (`d
 | B0 Inria | `$WS/outputs/benchmarks/<benchmark>/inria_b0/<cảnh>/` |
 | gsplat | `$WS/outputs/benchmarks/<benchmark>/gsplat/<cảnh>/<chế_độ>[_<tag>]_s<seed>/` (biến thể: `<tag>`; bản đã lọc: `filtered/` bên trong lượt) |
 | gsplat chạy thử (`QUICK=1`) | `$WS/outputs/benchmarks/<benchmark>/gsplat_quick/<cảnh>/<chế_độ>_s<seed>/` |
-| Báo cáo, log | `$WS/outputs/reports/{baseline_<tag>_summary,modes_<tag>,compare_<tag>}_<thời_gian>.*` (`benchmark.tag`: `db`, `mipnerf360`); thực nghiệm: `$WS/outputs/reports/<tên bản>_<thời_gian>.*` (mục 2.5); `$WS/outputs/logs/` |
+| Báo cáo, log | `$WS/outputs/reports/{baseline_<tag>_summary,modes_<tag>,compare_<tag>}_<thời_gian>.*` (`benchmark.tag`: `db`, `mipnerf360`), biểu đồ của mỗi báo cáo trong `<báo cáo>_charts/`; thực nghiệm: `$WS/outputs/reports/<tên bản>_<thời_gian>.*` (mục 2.5); `$WS/outputs/logs/` |
 
 Không ghi đè lượt gsplat: lượt đã có kết quả OK với cùng cấu hình thì được bỏ qua; khác cấu hình thì báo lỗi. Khi được phép thay, thư mục cũ được đổi tên `.prev_<thời_gian>`. B0 thì khác: cảnh đã có `results.json` (đủ chỉ số `ours_30000`) thì bỏ qua mà không so cấu hình; `FORCE=1` chạy lại, lượt cũ được đổi tên `<cảnh>.prev_<thời_gian>` (không ghi đè).
 

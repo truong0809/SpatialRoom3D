@@ -18,8 +18,9 @@ Biến tùy chọn:
 - `TAGS`: đưa cả các lượt có tag này vào bảng (biến thể của một kế hoạch thực nghiệm, vd. `TAGS="or0001 rbg"` cho `tune_mcmc`). Mặc định lượt có tag bị để ngoài, kèm một dòng cảnh báo ghi số lượt và các tag: bảng của thực nghiệm chính không lẫn các lượt dò tham số nằm cùng thư mục.
 - `REPORT`: tên file báo cáo (không có đuôi).
 - `SPLAT_STATS=0`: không tính thống kê PLY; bảng cấu trúc mô hình chỉ có các lượt đã tính trước đó.
+- `CHARTS=0`: không vẽ biểu đồ (mục Biểu đồ, dưới).
 
-Báo cáo: `$WS/outputs/reports/compare_<tên>_<thời_gian>.{md,json}`. Với benchmark, phần cấu hình benchmark đã dùng (số liệu công bố, ngưỡng) được lưu kèm ở `$WS/outputs/reports/configs/<benchmark>_<thời_gian>.json`.
+Báo cáo: `$WS/outputs/reports/compare_<tên>_<thời_gian>.{md,json}`, biểu đồ trong `compare_<tên>_<thời_gian>_charts/`. Với benchmark, phần cấu hình benchmark đã dùng (số liệu công bố, ngưỡng) được lưu kèm ở `$WS/outputs/reports/configs/<benchmark>_<thời_gian>.json`.
 
 Bảng gồm:
 - số liệu từng cảnh × biến thể (trung bình theo seed);
@@ -38,6 +39,30 @@ Cột `Render (ms/ảnh)` (bảng chính, bảng sau khi lọc) là thời gian 
 - `scene_scale` lấy từ `filtered/filter_meta.json` nếu có, nếu không từ dòng `Scene scale:` trong `train.log`; không có thì các cột theo `scene_scale` để trống.
 - Gói kết quả nhẹ có `splat_stats.json` mà không có PLY: thống kê vẫn được dùng (là của PLY lúc tính), bảng ghi số lượt không kiểm lại được. PLY còn đó mà đã đổi thì thống kê cũ bị bỏ.
 - PLY đọc lỗi thì in `WARN`, bảng vẫn được lập, lượt đó không có dòng cấu trúc.
+
+## Biểu đồ: `src/evaluation/charts.py`
+
+Biểu đồ tổng, vẽ từ chính file JSON của báo cáo (không đọc lại lượt chạy): mỗi phương pháp hơn hay kém mốc bao nhiêu khi gộp mọi cảnh và seed, và mốc có khớp Inria không. Số từng cảnh, chi phí, dung lượng: ở các bảng của báo cáo.
+
+| Ảnh (theo thứ tự) | Vẽ khi | Nội dung |
+|---|---|---|
+| `01_doi_chieu_inria.png`: đối chiếu `default` với Inria | báo cáo đã đối chiếu (PASS / FAIL) | chênh lệch của `default` so với B0 tự chạy từng cảnh và với số công bố, vùng ngưỡng, ✓ / ✗; bảng ghi Inria → mốc. Đứng đầu: đây là điều kiện để dùng `default` làm mốc. Gộp nhiều báo cáo: mỗi báo cáo đã đối chiếu một khung; báo cáo không đối chiếu được (vd. 4 cảnh của Mip-NeRF 360: SKIPPED) ghi lý do ở đầu ảnh |
+| `NN_so_voi_<mốc>.png`: chênh lệch tổng so với `<mốc>` | có phương pháp so được với mốc; mỗi mốc một ảnh (`default`; `mcmc` khi có bảng so với `mcmc`, vd. `tune_mcmc`) | mỗi phương pháp một thanh: chênh lệch trung bình trên mọi cặp (cảnh, seed) chung với mốc; chấm đen: từng cặp; số ghi: chênh lệch trung bình · số cặp tốt hơn / số cặp. Một báo cáo: đúng các số ở bảng số cặp tốt hơn của nó. Gộp nhiều benchmark: dòng `<phương pháp>: tổng` gộp mọi cặp, thêm một dòng (thanh nhạt) cho mỗi benchmark |
+| `01_b0_so_voi_cong_bo.png`: B0 so với số liệu Inria công bố | báo cáo chỉ B0 (`compare_reference`) | B0 từng cảnh, trung bình (kèm chênh lệch) và số công bố với vạch ngưỡng |
+
+- Nơi vẽ: `run_evaluate.sh`, `scripts/pipeline/train_gsplat_modes.sh`, `scripts/pipeline/train_inria_b0.sh` vẽ ngay sau khi lập bảng, vào `<báo cáo>_charts/` cạnh file JSON. `scripts/pod/run_experiment.sh` vẽ một lần ở cuối cho cả lần chạy, từ mọi bảng `<tên bản>_<thời_gian>_<benchmark>[_vs_<mốc>].json` (bảng cùng mốc được gộp), vào `<tên bản>_<thời_gian>_charts/`; từng bảng, kể cả bảng của các bước B0 và gsplat bên trong (`baseline_*`, `modes_*`), không có biểu đồ riêng. Báo cáo `.md` (của thực nghiệm: `<tên bản>_<thời_gian>.md`) có thêm mục "Biểu đồ" ở cuối, dẫn tới các ảnh bằng đường dẫn tương đối.
+- Gộp theo nhãn của phương pháp (tên thư mục lượt bỏ `_s<seed>`): `mcmc` của Deep Blending (`mcmc[opacity_reg=0.001]`) và của Mip-NeRF 360 cùng là `mcmc`; `index.md` ghi nhãn ứng với biến thể nào ở báo cáo nào. Hai báo cáo có chung lượt thì không gộp (mỗi cặp chỉ tính một lần). Dòng tổng tính mọi cặp như nhau, nên benchmark nhiều cảnh hơn nặng hơn: đọc cùng các dòng của từng benchmark.
+- `index.md` của mỗi thư mục: cách đọc và bảng số của từng ảnh (kèm độ lệch chuẩn theo cặp), các ảnh không vẽ kèm lý do (thiếu dữ liệu; phần báo cáo cần cho ảnh hỏng hoặc lập bằng bản cũ của `compare_modes`; vẽ lỗi). Một ảnh không vẽ được thì ảnh khác vẫn vẽ. Lập lại thì ảnh và mục "Biểu đồ" được thay, không nhân đôi; chỉ ảnh và `index.md` do lần trước ghi bị thay, thư mục có `index.md` không do module này ghi thì dừng.
+- Cần matplotlib: python của env `gs-gsplat` (`matplotlib==3.10.5`, ghim trong `configs/environment/gs-gsplat.lock.txt`), không có thì python3 của máy nếu có; luôn chạy với `MPLBACKEND=Agg` (biến `MPLBACKEND` mà Jupyter đặt cho tiến trình con làm matplotlib báo lỗi khi import). Không có matplotlib thì in `NOTE` và chỉ có bảng. `CHARTS=0`: không vẽ. Vẽ lỗi chỉ in `WARN`, bảng không đổi.
+- Trong notebook: ô "Bảng" của `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` và ô 7 của `runpod.ipynb` (`WHAT = "report"`: báo cáo mới nhất của kế hoạch `EXP`; `WHAT = "evaluate"`: ngay sau bảng vừa lập) hiện bảng kẻ sẵn rồi các ảnh. Gói kết quả nhẹ có cả các ảnh; `scripts/pod/results.sh` in đường dẫn thư mục biểu đồ của thực nghiệm gần nhất.
+
+Quy ước trên ảnh:
+- Mọi khung chênh lệch đều "phải là tốt hơn": trục LPIPS đảo chiều (tiêu đề khung ghi "trục đảo"), số ghi vẫn là chênh lệch thật (ΔLPIPS âm là tốt hơn); thanh bắt đầu từ 0. Khung đối chiếu Inria không đảo chiều: ở đó cần gần 0.
+- Số thập phân dấu phẩy, số âm dấu trừ "−", số chữ số như bảng (PSNR 3, SSIM và LPIPS 4); chênh lệch luôn có dấu như bảng.
+- Màu theo phương pháp: `mcmc` cam, các biến thể khác xanh ngọc (`default` xanh dương, B0 xám đậm), dòng của một benchmark nhạt hơn dòng tổng; xanh lá / đỏ chỉ cho trong / ngoài ngưỡng, luôn kèm ✓ / ✗. Màu đã qua bộ kiểm tra bảng màu của skill dataviz (phân biệt được cả với người mù màu); xanh ngọc tương phản thấp với nền nên mọi thanh đều có nhãn số.
+- Đầu mỗi ảnh ghi mốc, các cảnh, seed, các mục điều kiện so với mốc chưa đạt và file báo cáo nguồn, để ảnh tách khỏi báo cáo (vd. chèn vào báo cáo đồ án) vẫn đọc đúng. Biểu đồ không tự kết luận phương pháp nào tốt hơn.
+- Biểu đồ của `main` hiện chênh lệch `default` / `mcmc` trên cả các cảnh dùng để kết luận, nổi hơn bảng; khi in báo cáo của `main`, notebook in thêm một dòng nhắc. Trước khi chọn `mcmc_indoor` (`docs/design/experiments.md` mục 3.6, bước 5), phần của `main` chỉ dùng để kiểm điều kiện: các bước OK (bảng các bước), `default` so với B0 từng cảnh và với số công bố (`01_doi_chieu_inria.png`), B0 so với số công bố (`01_b0_so_voi_cong_bo.png` của lần chạy `--only b0`, hoặc bước `b0_<benchmark>` OK), đủ seed (cột n và cột Seed của bảng), độ lệch chuẩn của `default`, `mcmc` trên `room` (bảng đầu). Chênh lệch trên các cảnh khác đọc ở P9 (`docs/PROJECT_STATUS.md`).
+- Khi `main` có `mcmc_indoor` (chọn bằng `room`): các dòng `mcmc_indoor` của ảnh tổng gộp cả `room`. Kết luận về `mcmc_indoor` dùng bảng và biểu đồ không có `room` (`docs/design/experiments.md` mục 3.1).
 
 ## Ảnh so sánh: `scripts/run_panels.sh`
 

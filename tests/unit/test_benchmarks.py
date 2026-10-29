@@ -10,12 +10,14 @@ Kiểm tra:
 - MODES: default luôn chạy trước, mọi chế độ khác cùng ngân sách Gaussian và cùng quy ước mcmc của benchmark;
 - chạy một phần cảnh: báo cáo không đối chiếu trung bình công bố, chỉ đối chiếu B0 khi có đủ cảnh;
 - cấu hình benchmark đã dùng được chụp thành JSON trong outputs/reports/configs/;
-- scripts/run_evaluate.sh chọn đúng thư mục kết quả.
+- scripts/run_evaluate.sh chọn đúng thư mục kết quả, vẽ biểu đồ cạnh báo cáo khi có matplotlib.
 """
 
+import importlib.util
 import json
 import os
 import subprocess
+import sys
 
 import pytest
 import yaml
@@ -407,6 +409,56 @@ def test_evaluate_writes_model_structure_statistics(sh):
     out = evaluate(sh, "deep_blending")
     assert out.returncode == 0 and "WARN: some PLY files could not be read" in out.stdout
     assert "unsupported format" in out.stderr and "Report:" in out.stdout
+
+
+def write_finished_run(root, scene, mode, seed, psnr):
+    """Một lượt gsplat đã xong (summary.json rút gọn, như src.training.run ghi); số liệu giả."""
+    run = root / scene / f"{mode}_s{seed}"
+    run.mkdir(parents=True)
+    (run / "run_meta.json").write_text("{}", encoding="utf-8")
+    protocol = {"data_factor": 1, "test_every": 8, "max_steps": 30000, "lpips_net": "vgg"}
+    (run / "summary.json").write_text(json.dumps({
+        "run_dir": str(run), "scene": scene, "mode": mode, "seed": seed, "status": "OK", "eval_step": 29999,
+        "metrics": {"PSNR": psnr, "SSIM": 0.9, "LPIPS": 0.24}, "num_gaussians": 1000, "train_seconds": 600.0,
+        "protocol": protocol, "deviations": {}, "split_sha256": "s", "split_rule": "every_n", "split_applied_ok": True,
+        "gsplat_commit": "6e8c837", "gpu": "GPU", "args": {}, "lpips_net": "vgg", "scene_fingerprint": "fp"}),
+        encoding="utf-8")
+
+
+def test_evaluate_draws_charts_beside_the_report(sh):
+    """run_evaluate.sh vẽ biểu đồ cạnh báo cáo (<báo cáo>_charts/, src.evaluation.charts) và thêm mục Biểu đồ vào cuối
+    báo cáo .md; CHARTS=0 thì không vẽ; không có Python nào có matplotlib thì chỉ ghi chú, bảng vẫn được lập."""
+    root = out_dir(sh, "deep_blending", "gsplat")
+    for scene, psnr in (("drjohnson", 29.2), ("playroom", 29.8)):
+        write_finished_run(root, scene, "default", 42, psnr)
+        write_finished_run(root, scene, "mcmc", 42, psnr + 0.1)
+    reports = sh.ws / "outputs" / "reports"
+    # python3 không import được matplotlib (mọi việc khác chuyển cho python3 thật)
+    fake = sh.root / "no_matplotlib" / "python3"
+    fake.parent.mkdir()
+    fake.write_text(f'#!/usr/bin/env bash\nif [ "${{1:-}}" = -c ] && [[ "${{2:-}}" == *matplotlib* ]]; then exit 1; fi\n'
+                    f'exec "{sys.executable}" "$@"\n', encoding="utf-8")
+    fake.chmod(0o755)
+    out = evaluate(sh, "deep_blending", SPLAT_STATS=0, REPORT=reports / "no_mpl", SR3D_SYSTEM_PYTHON=fake,
+                   PATH=f"{fake.parent}:{sh.env['PATH']}")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "NOTE: no Python with matplotlib: no charts for no_mpl (the tables are in the report)" in out.stdout
+    assert not (reports / "no_mpl_charts").exists() and "**Biểu đồ**" not in (reports / "no_mpl.md").read_text()
+    out = evaluate(sh, "deep_blending", SPLAT_STATS=0, REPORT=reports / "no_charts", CHARTS=0)
+    assert out.returncode == 0 and not (reports / "no_charts_charts").exists() and "matplotlib" not in out.stdout
+    if importlib.util.find_spec("matplotlib") is None:
+        pytest.skip("needs matplotlib (env gs-gsplat) to draw the charts")
+    # MPLBACKEND mà Jupyter đặt cho tiến trình con (ô 7 của notebook): không phải backend của env, vẫn phải vẽ được
+    out = evaluate(sh, "deep_blending", SPLAT_STATS=0, REPORT=reports / "with",
+                   MPLBACKEND="module://matplotlib_inline.backend_inline")
+    assert out.returncode == 0, out.stdout + out.stderr
+    charts = reports / "with_charts"
+    assert sorted(path.name for path in charts.iterdir()) == ["01_doi_chieu_inria.png", "02_so_voi_default.png", "index.md"]
+    assert f"Biểu đồ: 2 ảnh trong {charts}" in out.stdout
+    assert out.stdout.rstrip().endswith(f"Report: {reports / 'with.md'}")
+    text = (reports / "with.md").read_text(encoding="utf-8")
+    assert "**Biểu đồ** (`with_charts/`" in text
+    assert "![Chênh lệch tổng so với default](with_charts/02_so_voi_default.png)" in text
 
 
 def test_evaluate_picks_the_result_folder(sh):

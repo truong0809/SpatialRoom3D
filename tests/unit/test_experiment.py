@@ -6,6 +6,7 @@ lại lời gọi kèm các biến môi trường. Bước gsplat giả ghi mỗ
 file thưa (sparse): `du -b` đếm kích thước khai báo nhưng file không chiếm chỗ thật.
 """
 
+import importlib.util
 import json
 import os
 import re
@@ -28,6 +29,7 @@ STUBS = {
         'echo "train $* | MODES=${MODES-} SEEDS=${SEEDS-} SCENES=${SCENES-} QUICK=${QUICK-unset}'
         ' MCMC_SET=${MCMC_SET-unset} OUT_ROOT=${OUT_ROOT-unset} FORCE=${FORCE-unset} B0_CHECK=${B0_CHECK-unset}'
         ' VARIANTS=${VARIANTS-unset}" >> "$CALLS"\n'
+        'echo "${CHARTS-unset}" >> "$CALLS.train_charts"\n'  # bảng của bước B0 / gsplat bên trong: CHARTS
         'if [ "$2" = gsplat ] && [ -n "${FAKE_RUN_SIZE:-}" ]; then\n'
         '  runs="$MODES"\n'
         '  for entry in ${VARIANTS:-}; do runs="$runs $(echo "$entry" | cut -d: -f1)_$(echo "$entry" | cut -d: -f2)"; done\n'
@@ -42,7 +44,8 @@ STUBS = {
         'echo "evaluate $* | BASELINE=${BASELINE-unset} MODES=${MODES-} SCENES=${SCENES-} QUICK=${QUICK-unset}'
         ' TAGS=${TAGS-unset}"'
         ' >> "$CALLS"\n'
-        'printf "| bảng so sánh %s |\\n" "$1" > "$REPORT.md"\n',
+        'printf "| bảng so sánh %s |\\n" "$1" > "$REPORT.md"\n'
+        'echo "${CHARTS-unset}" >> "$CALLS.charts"\n',  # biểu đồ của từng bảng: CHARTS
     "scripts/pod/pack_results.sh": 'echo "pack $*" >> "$CALLS"\n',
     "scripts/setup/setup_depth_anything.sh": 'echo "da2setup $* | WS=${WS-unset}" >> "$CALLS"\nexit "${FAKE_DA2_RC:-0}"\n',
 }
@@ -195,6 +198,9 @@ def test_runs_every_step_in_order_and_user_variables_cannot_change_the_plan(sh):
     assert [line for line in calls(sh.root) if line.startswith("evaluate")] == [
         f"evaluate deep_blending | BASELINE=unset MODES=default mcmc {db} QUICK=unset TAGS=",
         f"evaluate mipnerf360 | BASELINE=unset MODES=default mcmc {m360} QUICK=unset TAGS="]  # lượt có tag: để ngoài
+    # từng bảng không tự vẽ biểu đồ: biểu đồ vẽ một lần ở cuối cho cả lần chạy (gộp các benchmark)
+    assert (sh.root / "calls.txt.charts").read_text(encoding="utf-8").split() == ["0", "0"]
+    assert (sh.root / "calls.txt.train_charts").read_text(encoding="utf-8").split() == ["0"] * 7  # B0 + 6 gsplat
     rows = summary_rows(sh)
     assert [row[0] for row in rows][:4] == ["env_check", "space_check", "fetch_deep_blending", "fetch_mipnerf360"]
     assert all(status == "OK" for _, status in rows)
@@ -546,6 +552,11 @@ def test_only_b0_runs_the_inria_runs_and_their_table(sh):
     text = summary_tsv(sh, "b0_inria").with_suffix(".md").read_text(encoding="utf-8")
     assert "Chỉ B0 (3DGS gốc của Inria)" in text and "| drjohnson | THIẾU KẾT QUẢ |" in text  # B0 giả không ghi gì
     assert "Kết luận: **INCOMPLETE**" in text and "Đã ghi tóm tắt" not in text  # bảng, không có dòng ghi file JSON
+    if importlib.util.find_spec("matplotlib"):  # biểu đồ của lần chạy (src.evaluation.charts): B0 giả chưa có số để vẽ
+        charts = summary_tsv(sh, "b0_inria").with_suffix("")
+        assert f"**Biểu đồ** (`{charts.name}_charts/`" in text and "Không vẽ được biểu đồ nào" in text
+        assert f"Biểu đồ: {charts}_charts/ (ảnh PNG; cách đọc, bảng số: index.md)" in out.stdout
+        assert not list(charts.parent.glob("*_deep_blending_charts"))  # không vẽ riêng từng bảng
     assert "TÓM TẮT b0_inria: thực nghiệm main --only b0 (" in out.stdout
     out = experiment(sh, "main", "--only", "b0", VOLUME_GB=6)  # 5 GB ước lượng + 2 GB chừa lại > 6 GB
     assert out.returncode == 1 and "B0 (about 5.0 GB more) would not fit in a 6 GB volume" in out.stdout

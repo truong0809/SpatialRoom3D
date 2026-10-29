@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -116,7 +117,9 @@ def test_cell_numbers_are_in_order_and_the_tables_point_at_existing_cells():
         assert referenced and referenced <= set(headings), (name, sorted(referenced - set(headings)))
 
 
-def test_the_report_cell_shows_the_newest_summary_of_its_own_runs(tmp_path):
+def test_the_report_cell_shows_the_newest_summary_of_its_own_runs(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "IPython", None)  # như ngoài Jupyter: in chữ, chỉ ghi tên ảnh của biểu đồ
+    monkeypatch.setitem(sys.modules, "IPython.display", None)
     reports = tmp_path / "reports"
     reports.mkdir()
     files = {  # tên: mtime (s); bảng từng benchmark và chế độ mcmc_indoor mới hơn, báo cáo mới nhất có mtime cũ hơn
@@ -127,17 +130,66 @@ def test_the_report_cell_shows_the_newest_summary_of_its_own_runs(tmp_path):
     for file, mtime in files.items():
         (reports / file).write_text(f"# {file}\n", encoding="utf-8")
         os.utime(reports / file, (mtime, mtime))
+    for folder, image in (("gsplat_mcmc_20261029_090000_charts", "02_so_voi_default.png"),
+                          ("gsplat_mcmc_20261029_090000_charts", "01_doi_chieu_inria.png"),
+                          ("gsplat_mcmc_20261029_090000_charts", "index.md"),
+                          ("gsplat_mcmc_20261029_090000_deep_blending_charts", "01_khac.png"),  # không phải của báo cáo
+                          ("gsplat_mcmc_20261028_100000_charts", "01_cu.png")):  # của báo cáo cũ
+        (reports / folder).mkdir(exist_ok=True)
+        (reports / folder / image).write_bytes(b"png")
     code = code_after("gsplat_mcmc.ipynb", "8. Bảng").replace("/workspace/outputs/reports", str(reports))
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         exec(compile(code, "gsplat_mcmc.ipynb[report]", "exec"), {})
-    assert out.getvalue().splitlines()[0] == str(reports / "gsplat_mcmc_20261029_090000.md")
+    lines = out.getvalue().splitlines()
+    assert lines[0] == str(reports / "gsplat_mcmc_20261029_090000.md") and lines[1] == "# gsplat_mcmc_20261029_090000.md"
+    folder = reports / "gsplat_mcmc_20261029_090000_charts"
+    assert lines[-3:] == [f"===== Biểu đồ: {folder} (cách đọc và bảng số của từng biểu đồ: {folder}/index.md)",
+                          "01_doi_chieu_inria.png", "02_so_voi_default.png"]
+    shutil.rmtree(folder)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        exec(compile(code, "gsplat_mcmc.ipynb[report]", "exec"), {})
+    assert out.getvalue().splitlines()[-1].startswith("Báo cáo này chưa có biểu đồ")
     for file in files:
         (reports / file).unlink()
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         exec(compile(code, "gsplat_mcmc.ipynb[report]", "exec"), {})
     assert out.getvalue().startswith("Chưa có báo cáo")
+
+
+def test_the_report_of_the_whole_plan_is_shown_in_cell_7_of_runpod(tmp_path, monkeypatch):
+    """runpod.ipynb ô 7, WHAT = "report": báo cáo tổng mới nhất của kế hoạch EXP (không lấy bảng từng benchmark hay bản
+    chạy riêng một phương pháp) và biểu đồ của nó; không chạy lệnh nào."""
+    monkeypatch.setitem(sys.modules, "IPython", None)
+    monkeypatch.setitem(sys.modules, "IPython.display", None)
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    for file in ("main_20261030_100000.md", "main_20261031_100000.md", "main_20261031_100000_mipnerf360.md",
+                 "gsplat_mcmc_20261101_100000.md", "tune_mcmc_20261102_100000.md"):
+        stamp = file.split("_", 1)[1][:15] if file.startswith("main_") else file
+        (reports / file).write_text(f"# Thực nghiệm main ({stamp})\n" if file.startswith("main_") else f"# {file}\n",
+                                    encoding="utf-8")
+    charts = reports / "main_20261031_100000_charts"
+    charts.mkdir()
+    (charts / "01_doi_chieu_inria.png").write_bytes(b"png")
+    code = code_after("runpod.ipynb", "7. Benchmark").replace("/workspace/outputs/reports", str(reports))
+    code = code.replace('WHAT = "experiment"', 'WHAT = "report"', 1)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        exec(compile(code, "runpod.ipynb[7]", "exec"), {})
+    lines = out.getvalue().splitlines()
+    assert lines[0] == str(reports / "main_20261031_100000.md")
+    # báo cáo của main: nhắc luật chọn mcmc_indoor (docs/design/experiments.md mục 3.6, bước 5) trước bảng
+    assert lines[1].startswith("Nhắc: trước khi chọn mcmc_indoor") and lines[2] == "# Thực nghiệm main (20261031_100000)"
+    assert lines[-1] == "01_doi_chieu_inria.png" and str(charts) in lines[-2]
+    for file in reports.glob("main_*.md"):
+        file.unlink()
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        exec(compile(code, "runpod.ipynb[7]", "exec"), {})
+    assert out.getvalue().startswith("Chưa có báo cáo của main")
 
 
 def test_the_code_cells_are_valid_python_or_bash(tmp_path):

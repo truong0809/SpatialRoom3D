@@ -40,7 +40,10 @@ def make_ws(tmp_path):
     write(reports / "modes_db_quick_20261017_110000.json",
           {"scenes": {"drjohnson": {"default{max_steps=3000}": {"n": 1}, "mcmc{max_steps=3000}": {"n": 1}}},
            "incomplete": []})
-    write(reports / "modes_db_20261017_120000.md", "| Cảnh | Biến thể |\n|---|---|\n| drjohnson | default |\n")
+    write(reports / "modes_db_20261017_120000.md", "| Cảnh | Biến thể |\n|---|---|\n| drjohnson | default |\n\n"
+          "**Biểu đồ** (`modes_db_20261017_120000_charts/`; cách đọc: `modes_db_20261017_120000_charts/index.md`):\n\n"
+          "![Chênh lệch tổng so với default](modes_db_20261017_120000_charts/01_so_voi_default.png)\n")
+    write(reports / "modes_db_20261017_120000_charts" / "01_so_voi_default.png", b"png")
     write(ws / "data" / "custom_scenes" / "video8" / "video8.mp4", b"video")  # nguồn gốc
     scene = ws / "outputs" / "custom_scenes" / "video8" / "colmap"
     write(scene / "frames_report.json", {"source_type": "video", "selected": 300, "candidates": 1200,
@@ -78,6 +81,9 @@ def test_overview_shows_every_section(tmp_path):
     assert "drjohnson" in text and "29.370" in text and "THIẾU KẾT QUẢ" in text and "INCOMPLETE" in text
     assert "Chạy thử gsplat 3000 vòng (modes_db_quick_20261017_110000.json): 2 lượt OK | OK" in text
     assert "| drjohnson | default |" in text
+    # mục Biểu đồ của bảng: chỉ in đường dẫn thư mục ảnh, không in các dòng ảnh Markdown
+    assert f"biểu đồ: {tmp_path / 'ws' / 'outputs' / 'reports' / 'modes_db_20261017_120000_charts'}" in text
+    assert "![" not in text and "**Biểu đồ**" not in text
     assert "chọn 300 / 1200 ứng viên" in text and "fps 4.0 (tự chọn)" in text and "bỏ 3 frame trùng" in text
     assert "COLMAP: WARN | đăng ký 279/300 ảnh (93%) | 37,125 điểm | sai số chiếu lại 0.81 px" in text
     assert "COLMAP tách 2 nhóm ảnh" in text and "only 93% of input images registered" in text
@@ -108,6 +114,14 @@ def test_overview_shows_the_latest_experiment(tmp_path):
     assert "experiment main 20261019_120000 | repo abc1234" in text
     assert "fetch_mipnerf360             OK             0:10:00" in text
     assert "gsplat_mipnerf360_s44        BỎ QUA         không đủ chỗ trống cho seed 44" in text
+    assert "main_20261019_120000_charts" not in text
+    for folder in ("main_20261019_120000_mipnerf360_charts", "main_20261019_1200001_charts"):  # của báo cáo khác
+        (reports / folder).mkdir()
+    text = "\n".join(build(ws, None))
+    assert "mipnerf360_charts" not in text and "1200001_charts" not in text
+    (reports / "main_20261019_120000_charts").mkdir()  # biểu đồ của cả lần chạy (scripts/pod/run_experiment.sh)
+    text = "\n".join(build(ws, None))
+    assert f"   biểu đồ: {reports / 'main_20261019_120000_charts'} (ảnh PNG; cách đọc, bảng số: index.md)" in text
     write(reports / "gsplat_mcmc_20261019_140000.tsv",  # chạy riêng mcmc (notebook gsplat_mcmc.ipynb), mới hơn
           "# experiment main --only mcmc 20261019_140000 | repo abc1234\n# step\tstatus\texit\tseconds\tnote\n"
           "env_check\tOK\t0\t5\t\n")
@@ -214,6 +228,7 @@ def test_pack_results_keeps_small_files_and_skips_heavy_ones(tmp_path):
     ws = tmp_path / "ws"
     keep = [
         "outputs/reports/b0.json", "outputs/reports/compare_db_1.md", "outputs/logs/jobs/run_all.log",
+        "outputs/reports/compare_db_1_charts/02_so_voi_default.png", "outputs/reports/compare_db_1_charts/index.md",
         "outputs/jobs/run_all.state",
         "outputs/custom_scenes/v/default_s42/summary.json", "outputs/custom_scenes/v/default_s42/train.log",
         "outputs/custom_scenes/v/default_s42/cfg.yml",

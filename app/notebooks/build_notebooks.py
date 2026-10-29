@@ -35,7 +35,7 @@ class Notebook:
         self.cells.append({"cell_type": "markdown", "metadata": {}, "source": text.strip("\n").splitlines(keepends=True)})
 
     def code(self, text: str) -> None:
-        text = text.replace("@CODE@", CODE).replace("@REPO_SSH@", REPO_SSH)
+        text = text.replace("@CODE@", CODE).replace("@REPO_SSH@", REPO_SSH).replace("@SHOW_REPORT@", SHOW_REPORT)
         self.cells.append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [],
                            "source": text.strip("\n").splitlines(keepends=True)})
 
@@ -223,6 +223,41 @@ while True:
 """)
 
 
+# Hàm dùng trong các ô in báo cáo (ô "Bảng" của notebook theo phương pháp; runpod.ipynb ô 7, WHAT = "report" / "evaluate"):
+# bảng kẻ sẵn (Markdown của Jupyter) rồi các biểu đồ của báo cáo (src.evaluation.charts). Ngoài Jupyter (test) thì in chữ.
+SHOW_REPORT = r'''
+def show_report(report):
+    """Bảng của báo cáo `report` (.md) và biểu đồ của nó (ảnh trong <báo cáo>_charts/)."""
+    try:
+        from IPython import get_ipython
+        from IPython.display import Image, Markdown, display
+    except ImportError:
+        get_ipython = None
+    if get_ipython is None or get_ipython() is None:  # ngoài Jupyter: in chữ, chỉ ghi tên ảnh
+        display = None
+    text = open(report, encoding="utf-8").read()
+    if text.startswith("# Thực nghiệm main "):  # docs/design/experiments.md mục 3.6, bước 5
+        print("Nhắc: trước khi chọn mcmc_indoor (vòng ghép), báo cáo của main chỉ dùng để kiểm điều kiện: các bước OK, "
+              "đối chiếu Inria (default so với B0 và số công bố), đủ seed, độ lệch chuẩn của default, mcmc trên room. "
+              "Chênh lệch default / mcmc trên các cảnh ngoài room: đọc sau khi đã ghi quyết định.")
+    if display is None:
+        print(text)
+    else:  # ảnh trong báo cáo dẫn bằng đường dẫn tương đối, không hiện được ở đây: hiện riêng bên dưới
+        lines = [line for line in text.splitlines() if not line.startswith(("![", "**Biểu đồ**"))]
+        display(Markdown("\n".join(lines)))
+    folder = report[:-3] + "_charts"
+    if not os.path.isdir(folder):
+        print("Báo cáo này chưa có biểu đồ (cần matplotlib: env gs-gsplat có sẵn; CHARTS=0 thì không vẽ).")
+        return
+    print(f"===== Biểu đồ: {folder} (cách đọc và bảng số của từng biểu đồ: {folder}/index.md)")
+    for path in sorted(glob.glob(f"{folder}/[0-9][0-9]_*.png")):
+        if display is None:
+            print(os.path.basename(path))
+        else:
+            display(Image(filename=path))
+'''.strip("\n")
+
+
 # ------------------------------------------------------------------------------------------- ô cuối (chung)
 def pack(nb: Notebook, number: int, name: str) -> None:
     """Ô xem mọi kết quả và đóng gói; gói mang tên bản của notebook: ket_qua_<tên bản>_<thời gian>.tar.gz."""
@@ -332,6 +367,7 @@ Notebook này nằm trong repo (`app/notebooks/runpod.ipynb`), dùng cho **pod m
 | Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
 | Cảnh tự chụp: thư mục ảnh hoặc video (tốn GPU) | 8 (`CHAY = True`), theo dõi ở ô 5, kết quả ở ô 9 |
 | Ảnh so sánh các lượt trên cùng ảnh test (vùng cắt phóng to, bản đồ sai số) và video xếp chồng (không cần GPU) | 7 (`WHAT = "panels"`) hoặc 9 (`SO_SANH = True`) |
+| Bảng và biểu đồ so sánh của thực nghiệm gần nhất (không cần GPU) | 7 (`WHAT = "report"`) |
 | Xem mọi kết quả, đóng gói để tải về | 10 |
 | Dừng mọi việc đang chạy | 11 (`DUNG=1`) |
 | Chạy riêng một phương pháp của thực nghiệm chính (B0, `default` hoặc `mcmc`): cùng dữ liệu, cùng thư mục kết quả, lượt đã xong ở đây hay ở đó đều được dùng lại | notebook `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` (`app/notebooks/` của repo; sau ô 3 cũng có ở `/workspace/SpatialRoom3D/app/notebooks/`: tải lên hoặc chép vào `/workspace` như notebook này) |
@@ -379,11 +415,12 @@ Chọn `WHAT` (và `BENCH` với các việc của một benchmark). Việc ch�
 | `WHAT` | Việc | Ghi chú |
 |---|---|---|
 | `"experiment"` | Một thực nghiệm theo kế hoạch `EXP` trong `configs/experiments/` (`scripts/pod/run_experiment.sh`). `EXP = "main"`: **thực nghiệm chính**, tải dữ liệu còn thiếu → B0 trên Deep Blending → `default`, `mcmc` với seed 42, 43, 44 trên Deep Blending (2 cảnh) và 4 cảnh trong nhà của Mip-NeRF 360 → bảng so sánh → gói kết quả. `EXP = "tune_mcmc"`: **dò tham số mcmc** trên `room`, seed 42: `default`, `mcmc` và 16 biến thể của `mcmc` (depth prior, Kill-then-Relocate, bilateral grid của notebook v2 và gói v2, chạy trước; 12 tham số), lọc Gaussian sau khi train, bảng so với `default`, với `mcmc` và trước / sau khi lọc; tự tải Depth Anything V2 Small cho depth prior (không tải được thì chỉ bỏ hai lượt dùng nó). `EXP = "tune_mcmc_combo"`: **vòng ghép**, 2 seed mới trên `room`, sau `main` (file kế hoạch viết khi có kết quả `tune_mcmc`) | Một việc nền. Ước lượng: `main` khoảng 12 giờ GPU, thêm khoảng 56 GB trên volume; `tune_mcmc` khoảng 8 giờ GPU (khoảng 6,7 giờ khi chạy sau `main`), thêm khoảng 35 GB; vòng ghép khoảng 1–3,5 giờ GPU, thêm khoảng 10–20 GB (giữ mọi file). Đặt `VOLUME_GB` đúng dung lượng volume. `CHAY = False`: chỉ in kế hoạch và dữ liệu đã có. Luôn chạy đầy đủ; `BENCH`, `SEEDS`, `SCENES` không dùng |
+| `"report"` | In báo cáo mới nhất của thực nghiệm `EXP` (`/workspace/outputs/reports/<EXP>_<thời gian>.md`): các bước, bảng của từng benchmark (kẻ bảng sẵn), rồi biểu đồ tổng của lần chạy (ảnh trong `<EXP>_<thời gian>_charts/`: đối chiếu Inria, chênh lệch tổng so với từng mốc, gộp các benchmark; cách đọc và bảng số ở `index.md` của thư mục đó) | Không dùng GPU, chạy ngay. Bản chạy riêng một phương pháp (`b0_inria`, `gsplat_default`, `gsplat_mcmc`): ô "Bảng" của notebook đó. Trước khi chọn `mcmc_indoor` (vòng ghép), báo cáo của `main` chỉ dùng để kiểm điều kiện (ảnh đối chiếu Inria `01_doi_chieu_inria.png`; ô này in dòng nhắc; `docs/design/comparisons.md`, mục Biểu đồ) |
 | `"check"` | Kiểm tra dữ liệu: bố cục từng cảnh (`scripts/prepare_data.sh <benchmark>`) | Không dùng GPU, chạy ngay |
 | `"fetch"` | Tải `BENCH` về volume (`scripts/pod/fetch_data.sh`): chỉ cảnh còn thiếu (chọn bằng `SCENES`), chỉ các thư mục cần dùng; xóa file zip sau khi giải nén | Không dùng GPU nhưng chạy nền, xếp hàng như việc khác. Deep Blending: `tandt_db.zip` của Inria (650 MB). Mip-NeRF 360: tải cả `360_v2.zip` (7 cảnh) dù chỉ chọn vài cảnh |
 | `"gsplat"` | `default` rồi `mcmc` cùng số Gaussian, 30.000 vòng, bảng so sánh (`scripts/run_train.sh <benchmark> gsplat`) | Tốn GPU. `QUICK = True`: chạy thử 3.000 vòng (thư mục riêng). `SEEDS = "42 43 44"` để đủ 3 seed (cần trước khi nói "cải thiện") |
 | `"b0"` | 3DGS gốc của Inria, đối chiếu số liệu công bố (`scripts/run_train.sh <benchmark> b0`) | Tốn GPU. Mốc đối chiếu cho `default` |
-| `"evaluate"` | Lập lại bảng so sánh từ kết quả đã có, mọi chế độ đã chạy (`scripts/run_evaluate.sh`); `SCENES` chọn cảnh, `TAGS` đưa thêm các biến thể có tag (vd. 16 biến thể của `tune_mcmc`: `"mono kr bilagrid v2 or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth rs30k sh2"`) | Không dùng GPU, chạy ngay |
+| `"evaluate"` | Lập lại bảng so sánh và biểu đồ từ kết quả đã có, mọi chế độ đã chạy (`scripts/run_evaluate.sh`; ô này hiện biểu đồ ngay sau bảng); `SCENES` chọn cảnh, `TAGS` đưa thêm các biến thể có tag (vd. 16 biến thể của `tune_mcmc`: `"mono kr bilagrid v2 or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth rs30k sh2"`) | Không dùng GPU, chạy ngay |
 | `"panels"` | Ảnh so sánh các lượt của từng cảnh trong `SCENES` trên cùng ảnh test (ảnh gốc, render, vùng cắt phóng to, bản đồ sai số) và video quỹ đạo của các lượt xếp chồng (`scripts/run_panels.sh`); `PANEL_RUNS` chọn lượt, để trống = các lượt seed 42 không có tag | Không dùng GPU, chạy ngay. Kết quả: `/workspace/outputs/panels/<benchmark>[_quick]_<cảnh>_<thời gian>/` (không vào gói kết quả nhẹ) |
 
 - Thực nghiệm chính: khoảng 56 GB (giữ mọi file) cộng môi trường conda khoảng 15–20 GB, nên volume 100 GB đủ theo ước lượng. Chạy cả `main`, `tune_mcmc`, vòng ghép trên cùng volume, rồi thêm chế độ mới vào `main`: nên dùng 170 GB. Tăng volume trên trang Runpod (tăng được, không giảm được) rồi đặt `VOLUME_GB` bằng dung lượng mới. Trước khi chạy và trước mỗi seed, việc kiểm tra chỗ trống; không đủ thì dừng train, các lượt đã xong vẫn giữ.
@@ -393,11 +430,11 @@ Chọn `WHAT` (và `BENCH` với các việc của một benchmark). Việc ch�
 - Chạy một phần cảnh: `SCENES = "playroom"` (Deep Blending), `SCENES = "room counter"` (Mip-NeRF 360).
 """)
     nb.code(r"""
-WHAT = "experiment"       # "experiment", "check", "fetch", "gsplat", "b0", "evaluate" hoặc "panels"
+WHAT = "experiment"       # "experiment", "report", "check", "fetch", "gsplat", "b0", "evaluate" hoặc "panels"
 CHAY = False              # True: cho phép việc chạy nền (experiment, fetch, gsplat, b0)
 VOLUME_GB = 100           # experiment: dung lượng thật của network volume (GB)
 AUTO_STOP = False         # experiment: True = dừng pod khi việc cuối cùng xong (chưa thử trên pod)
-EXP = "main"              # experiment: "main" (thực nghiệm chính), "tune_mcmc" (dò tham số mcmc trên room), "tune_mcmc_combo" (vòng ghép)
+EXP = "main"              # experiment, report: "main" (thực nghiệm chính), "tune_mcmc" (dò tham số mcmc trên room), "tune_mcmc_combo" (vòng ghép)
 BENCH = "deep_blending"   # check, fetch, gsplat, b0, evaluate: "deep_blending" hoặc "mipnerf360"
 QUICK = False             # True: chạy thử 3.000 vòng (gsplat, evaluate, panels)
 SEEDS = "42"              # vd. "42 43 44" (gsplat)
@@ -405,7 +442,7 @@ SCENES = ""               # để trống = mọi cảnh của benchmark (fetch,
 TAGS = ""                 # evaluate: tag các biến thể đưa thêm vào bảng, vd. "or0001 rbg" (tune_mcmc)
 PANEL_RUNS = ""           # panels: lượt đem so, vd. "mcmc_s42 mcmc_indoor_s42" (trống = seed 42, không có tag)
 
-import os, subprocess
+import glob, os, re, subprocess
 repo = "@CODE@"
 env = dict(os.environ, SEEDS=SEEDS, QUICK="1" if QUICK else "0")
 if SCENES.strip():
@@ -416,7 +453,9 @@ if TAGS.strip():
 def run(cmd, tail=6000):
     out = subprocess.run(cmd, capture_output=True, text=True, errors="replace", cwd=repo, env=env)
     print(out.stdout[-tail:] + out.stderr[-3000:])
-    return out.returncode
+    return out
+
+@SHOW_REPORT@
 
 if WHAT == "experiment":
     # kế hoạch trong configs/experiments/ quyết định chế độ, seed, cảnh; không phải biến của ô này
@@ -428,10 +467,23 @@ if WHAT == "experiment":
         print("=> Chưa chạy: đây là kế hoạch. Đặt CHAY = True để xếp hàng (tốn GPU nhiều giờ).")
     else:
         run(["bash", f"{repo}/scripts/pod/run_experiment.sh", EXP, "--background"])
+elif WHAT == "report":
+    # báo cáo tổng mới nhất của kế hoạch EXP (không lấy bảng từng benchmark, không lấy bản chạy riêng một phương pháp)
+    reports = sorted(path for path in glob.glob(f"/workspace/outputs/reports/{EXP}_*.md")
+                     if re.fullmatch(re.escape(EXP) + r"_\d{8}_\d{6}\.md", os.path.basename(path)))
+    if reports:
+        print(reports[-1])
+        show_report(reports[-1])
+    else:
+        print(f"Chưa có báo cáo của {EXP}: chạy WHAT = \"experiment\" với CHAY = True, chờ việc nền xong (ô 5).")
 elif WHAT == "check":
     run(["bash", f"{repo}/scripts/prepare_data.sh", BENCH])
 elif WHAT == "evaluate":
-    run(["bash", f"{repo}/scripts/run_evaluate.sh", BENCH])
+    # phần cuối của lệnh (lỗi, đường dẫn), rồi bảng kẻ sẵn và biểu đồ của báo cáo vừa lập
+    out = run(["bash", f"{repo}/scripts/run_evaluate.sh", BENCH], tail=1500)
+    made = re.findall(r"^Report: (.+\.md)$", out.stdout, re.M)
+    if made:
+        show_report(made[-1])
 elif WHAT == "panels":
     env = dict(env, VIDEO="1")
     if not SCENES.split():
@@ -445,14 +497,15 @@ elif WHAT == "fetch":
          "bash", f"{repo}/scripts/pod/fetch_data.sh", BENCH, *SCENES.split()])
 elif WHAT in ("gsplat", "b0"):
     # kiểm tra dữ liệu trước (không cần GPU): thiếu thì không xếp hàng
-    if run(["bash", f"{repo}/scripts/prepare_data.sh", BENCH], tail=2000) != 0:
+    if run(["bash", f"{repo}/scripts/prepare_data.sh", BENCH], tail=2000).returncode != 0:
         print(f"=> Không xếp hàng {WHAT}: dữ liệu {BENCH} chưa có hoặc sai bố cục (tải: WHAT = \"fetch\"; chỗ đặt: ô 6).")
     else:
         job = f"{WHAT}_quick_{BENCH}" if WHAT == "gsplat" and QUICK else f"{WHAT}_{BENCH}"
         run(["bash", f"{repo}/scripts/pod/job.sh", "start", job, "--",
              "bash", f"{repo}/scripts/run_train.sh", BENCH, WHAT])
 else:
-    print(f"WHAT = {WHAT!r}: chọn \"experiment\", \"check\", \"fetch\", \"gsplat\", \"b0\", \"evaluate\" hoặc \"panels\".")
+    print(f"WHAT = {WHAT!r}: chọn \"experiment\", \"report\", \"check\", \"fetch\", \"gsplat\", \"b0\", \"evaluate\" hoặc"
+          " \"panels\".")
 """)
     nb.md("""
 ## 8. Cảnh tự chụp (thư mục ảnh hoặc video) → COLMAP → train `default` → train `mcmc`
@@ -637,7 +690,7 @@ def method_notebook(method: str) -> Notebook:
     if gsplat:
         when.append((f"Cảnh tự chụp: thư mục ảnh hoặc video → COLMAP → {info['scene_title']} (tốn GPU)",
                      f"{numbers['scene']} (`CHAY = True`), theo dõi ở ô 5, kết quả ở ô {numbers['results']}"))
-    when += [("Bảng của lần chạy benchmark gần nhất", str(numbers["report"]))]
+    when += [("Bảng và biểu đồ so sánh của lần chạy benchmark gần nhất", str(numbers["report"]))]
     if gsplat:
         when.append(("Kết quả một cảnh tự chụp, xuất PLY", str(numbers["results"])))
     when += [("Xem mọi kết quả, đóng gói để tải về", str(numbers["pack"])),
@@ -712,18 +765,20 @@ else:
 """)
         nb.code(scene_code(info["scene_what"], modes=info["modes"]))
     nb.md(f"""
-## {numbers['report']}. Bảng của lần chạy benchmark gần nhất (đọc file, không cần GPU)
+## {numbers['report']}. Bảng và biểu đồ của lần chạy benchmark gần nhất (đọc file, không cần GPU)
 
-In báo cáo mới nhất của ô {numbers['run']} (`/workspace/outputs/reports/{label}_<thời gian>.md`): {info['report']}. Việc nền chưa xong thì báo cáo chưa có hoặc là của lần trước.
+In báo cáo mới nhất của ô {numbers['run']} (`/workspace/outputs/reports/{label}_<thời gian>.md`, kẻ bảng sẵn): {info['report']}; rồi các biểu đồ của lần chạy (ảnh trong `/workspace/outputs/reports/{label}_<thời gian>_charts/`, gộp các benchmark; cách đọc và bảng số ở `index.md` của thư mục đó; gói kết quả nhẹ có cả các ảnh này). Việc nền chưa xong thì báo cáo chưa có hoặc là của lần trước.
 """)
     nb.code(fr"""
 import glob, os, re
+@SHOW_REPORT@
+
 # chỉ báo cáo tổng của lần chạy riêng này (không lấy bảng từng benchmark, không lấy chế độ khác có tên bắt đầu như vậy)
 reports = sorted(path for path in glob.glob("/workspace/outputs/reports/{label}_*.md")
                  if re.fullmatch(r"{label}_\d{{8}}_\d{{6}}\.md", os.path.basename(path)))
 if reports:
     print(reports[-1])
-    print(open(reports[-1], encoding="utf-8").read())
+    show_report(reports[-1])
 else:
     print("Chưa có báo cáo: chạy ô {numbers['run']} với CHAY = True, chờ việc nền xong (ô 5).")
 """)

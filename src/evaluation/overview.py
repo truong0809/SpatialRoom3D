@@ -13,6 +13,7 @@ Nguồn đọc (mới nhất theo thời gian sửa file):
     outputs/reports/modes_db_quick_*.json       lượt chạy thử 3000 vòng (chỉ kiểm tra luồng chạy)
     outputs/reports/<tên bản>_<thời gian>.tsv   các bước của thực nghiệm gần nhất (dòng đầu `# experiment ...`; tên bản:
                                                 main, gsplat_mcmc...; bảng so sánh: file .md cùng tên)
+    outputs/reports/<báo cáo>_charts/           biểu đồ của các báo cáo trên (src.evaluation.charts): chỉ in đường dẫn
     data/custom_scenes/<cảnh>/               nguồn gốc (ảnh / video) của cảnh tự chụp
     <out-root>/<cảnh>/colmap/{frames_report,sfm_report}.json, <out-root>/<cảnh>/<chế độ>_s<seed>/ (và filtered/
     của lượt đó khi đã lọc Gaussian bằng scripts/run_filter.sh)
@@ -79,6 +80,13 @@ def _step_rows(path: Path, width: int) -> list[str]:
     return lines
 
 
+def charts_line(report: Path) -> list[str]:
+    """Dòng chỉ tới biểu đồ của một báo cáo (src.evaluation.charts): <báo cáo>_charts/ (thực nghiệm: một thư mục cho cả
+    lần chạy); không có thì không in gì."""
+    folder = report.with_name(report.stem + "_charts")
+    return [f"   biểu đồ: {folder} (ảnh PNG; cách đọc, bảng số: index.md)"] if folder.is_dir() else []
+
+
 def run_all_section(ws: Path) -> list[str]:
     path = latest(ws / "outputs" / "reports", "run_all_*.tsv")
     if path is None:
@@ -106,7 +114,7 @@ def experiment_section(ws: Path) -> list[str]:
         return ["== Thực nghiệm (scripts/pod/run_experiment.sh): chưa có "
                 "(kế hoạch: bash scripts/pod/run_experiment.sh main --plan)"]
     return ([f"== Thực nghiệm ({path.name}); bảng so sánh: {path.with_suffix('.md')}"]
-            + _step_rows(path, 28))
+            + charts_line(path) + _step_rows(path, 28))
 
 
 # ------------------------------------------------------------------------------------------------- B0
@@ -136,7 +144,7 @@ def b0_section(ws: Path) -> list[str]:
                          f"{delta.get('LPIPS', 0):>+7.3f}")
     tolerance = ", ".join(f"{name} ±{value}" for name, value in (data.get("tolerance") or {}).items())
     lines.append(f"   Kết luận: {data.get('verdict', '?')}" + (f" (ngưỡng {tolerance})" if tolerance else ""))
-    return lines
+    return lines + charts_line(path)
 
 
 # --------------------------------------------------------------------------------- gsplat Deep Blending
@@ -160,7 +168,9 @@ def modes_section(ws: Path) -> list[str]:
                      "(khi cần: bash scripts/run_train.sh deep_blending gsplat)")
     else:
         lines.append(f"== gsplat đầy đủ trên Deep Blending, bảng mới nhất ({full.name}):")
-        lines += ["   " + row for row in full.read_text(encoding="utf-8", errors="replace").splitlines()]
+        lines += ["   " + row for row in full.read_text(encoding="utf-8", errors="replace").splitlines()
+                  if not row.startswith(("![", "**Biểu đồ**"))]  # mục Biểu đồ của báo cáo: chỉ in đường dẫn, dòng dưới
+        lines += charts_line(full)
     return lines
 
 

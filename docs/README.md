@@ -13,7 +13,7 @@ Giới thiệu dự án, luồng xử lý và cách chạy nhanh: [README](../RE
 | [design/architecture.md](design/architecture.md) | Cây thư mục, bố cục `/workspace`, ba luồng dữ liệu, khai báo đường dẫn, nguồn gốc mã nguồn |
 | [design/training_modes.md](design/training_modes.md) | Hai chế độ huấn luyện `default` và `mcmc`: protocol, giao thức so sánh, thành phần |
 | [design/experiments.md](design/experiments.md) | Benchmark (Deep Blending, Mip-NeRF 360), thực nghiệm chính, dò tham số `mcmc`, lọc Gaussian sau khi train |
-| [design/comparisons.md](design/comparisons.md) | Bảng so sánh các chế độ (`scripts/run_evaluate.sh`) |
+| [design/comparisons.md](design/comparisons.md) | Bảng và biểu đồ so sánh các chế độ (`scripts/run_evaluate.sh`, `src/evaluation/charts.py`) |
 | [data/capture_protocol.md](data/capture_protocol.md) | Quy trình quay video và chụp ảnh không gian nội thất |
 | [research/reading_list.md](research/reading_list.md) | Danh sách tài liệu khảo sát |
 | [research/demo_review.md](research/demo_review.md) | Kiểm tra notebook demo 3DGS-MCMC của nhóm và repo SpatialScene3D (bản gốc của notebook: [research/references/demo_3dgs_mcmc/](research/references/demo_3dgs_mcmc/README.md)) |

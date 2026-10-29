@@ -40,11 +40,13 @@
 # Ket qua: $WS/outputs/reports/<ten ban>_<thoi gian>.{md,tsv}, bang tung benchmark _<benchmark>[_vs_<moc>].{md,json}
 #          (bien the cua ke hoach vao bang qua TAGS; luot co tag cua ke hoach khac bi de ngoai);
 #          luot loc Gaussian: <luot>/filtered/ (bang truoc / sau khi loc nam trong bang so sanh);
+#          bieu do tong cua ca lan chay: <ten ban>_<thoi gian>_charts/ (doi chieu Inria, chenh lech tong so voi
+#          tung moc, gop cac benchmark; src.evaluation.charts; CHARTS=0: khong ve);
 #          goi $WS/ket_qua_<ten ban>_<thoi gian>.tar.gz
 
 set -uo pipefail
 
-usage() { sed -n '2,43p' "$0"; exit 2; }
+usage() { sed -n '2,45p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 case "$1" in -h|--help) usage ;; esac
 NAME="$1"
@@ -741,8 +743,9 @@ else
       fi
     done
   fi
-  # bien moi truong cua nguoi dung khong duoc doi ke hoach: thu muc ket qua, cau hinh, tham so mcmc, bien the, chay thu
-  CLEAN=(env -u OUT_ROOT -u B0_ROOT -u CONFIG -u MCMC_SET -u VARIANTS -u FORCE -u B0_CHECK QUICK=0)
+  # bien moi truong cua nguoi dung khong duoc doi ke hoach: thu muc ket qua, cau hinh, tham so mcmc, bien the, chay thu;
+  # CHARTS=0: bang cua cac buoc B0 / gsplat ben trong khong ve bieu do rieng (bieu do ve mot lan o cuoi)
+  CLEAN=(env -u OUT_ROOT -u B0_ROOT -u CONFIG -u MCMC_SET -u VARIANTS -u FORCE -u B0_CHECK QUICK=0 CHARTS=0)
   if [ -n "$ONLY" ] && [ "$ONLY" != b0 ]; then  # chay rieng mot che do: B0 khong thuoc lan chay nay
     CLEAN+=(B0_CHECK=if_present)
   fi
@@ -793,8 +796,9 @@ else
     modes="$(bench_modes "$i")"  # che do bi bo vi kiem tra diem SfM khong vao bang (khong thi moi canh deu "thieu")
     others="${modes#"${MODE_LIST[0]}"}"  # cac che do ngoai baseline, cho bang so voi tung moc trong also_against
     others="${others# }"
-    run_step "report_$bench" env -u QUICK -u BASELINE MODES="$modes" TAGS="$VARIANT_TAGS" SCENES="${SCENE_SETS[$i]}" \
-      REPORT="${REPORT}_$bench" bash "$REPO_DIR/scripts/run_evaluate.sh" "$bench"
+    # CHARTS=0: bieu do ve mot lan o cuoi cho ca lan chay (gop cac benchmark), khong ve cho tung bang (nhu CLEAN)
+    run_step "report_$bench" env -u QUICK -u BASELINE CHARTS=0 MODES="$modes" TAGS="$VARIANT_TAGS" \
+      SCENES="${SCENE_SETS[$i]}" REPORT="${REPORT}_$bench" bash "$REPO_DIR/scripts/run_evaluate.sh" "$bench"
     for against in "${AGAINST_LIST[@]}"; do
       if [[ " ${DROPPED[$bench]:-} " == *" $against "* ]]; then
         skip_step "report_${bench}_vs_$against" "$against không train trên $bench (kiểm tra điểm SfM không đạt)"
@@ -804,7 +808,7 @@ else
         skip_step "report_${bench}_vs_$against" "$against không train (bước depth_anything lỗi)"
         continue
       fi
-      run_step "report_${bench}_vs_$against" env -u QUICK BASELINE="$against" MODES="$others" \
+      run_step "report_${bench}_vs_$against" env -u QUICK CHARTS=0 BASELINE="$against" MODES="$others" \
         TAGS="$VARIANT_TAGS" SCENES="${SCENE_SETS[$i]}" REPORT="${REPORT}_${bench}_vs_$against" \
         bash "$REPO_DIR/scripts/run_evaluate.sh" "$bench"
     done
@@ -812,6 +816,9 @@ else
 fi
 
 write_summary
+# bieu do tong cua ca lan chay (moi bang _<benchmark>[_vs_<moc>].json; cac bang cung moc duoc gop), muc "Bieu do"
+# o cuoi $REPORT.md; truoc buoc goi ket qua de goi co ca anh
+make_charts "$REPORT" "$REPORT"_*.json
 run_step pack bash "$REPO_DIR/scripts/pod/pack_results.sh" "$PKG"
 
 FAILED=0
@@ -830,6 +837,7 @@ for name in "${STEPS[@]}"; do
   fi
 done
 echo "Bảng so sánh và tóm tắt: $REPORT.md"
+[ ! -d "${REPORT}_charts" ] || echo "Biểu đồ: ${REPORT}_charts/ (ảnh PNG; cách đọc, bảng số: index.md)"
 [ "${RC[pack]:-1}" = 0 ] && echo "Gói kết quả nhẹ để tải về: $PKG"
 if [ "$FAILED" = 1 ]; then
   echo "Có bước lỗi hoặc bị bỏ qua: xem log của bước đó (gsplat_*: một lượt train lỗi, hoặc phần đối chiếu default với"
