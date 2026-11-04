@@ -4,7 +4,8 @@ _Cập nhật: 31/10/2026_
 
 Giao diện hiện có:
 - notebook `app/notebooks/runpod.ipynb`, chạy trong Jupyter của pod Runpod; ba notebook `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` chạy riêng từng phương pháp của thực nghiệm chính (mục 5.1.1);
-- giao diện dòng lệnh `python -m app.cli` (mục 6), cùng các script trong `scripts/`.
+- giao diện dòng lệnh `python -m app.cli` (mục 6), cùng các script trong `scripts/`;
+- sản phẩm: `scripts/build_room.sh` dựng một phòng cho web bằng mô hình chính (mục 3.8).
 
 **Chưa có web app** (`app/web/README.md`; `docs/PROJECT_PLAN.md` mục 1.5: upload qua web là mở rộng có điều kiện).
 
@@ -203,6 +204,19 @@ TAG=cap2m bash scripts/run_train.sh custom phong1 mcmc -- --cap-max 2000000     
 - Bảng `bash scripts/run_evaluate.sh custom phong1` có cả biến thể `--set` (vd. `mcmc[opacity-reg=0.001]`); lượt đổi protocol chỉ hiện khi lập bảng với `--include-deviating` (`docs/design/training_modes.md` mục 6).
 - Dùng lại nhiều lần: thêm một chế độ có tên vào `configs/base.yaml` (mẫu trong chú thích của file), sửa trong repo rồi commit, không sửa trên pod.
 - Không chọn tham số theo điểm trên ảnh test (`docs/design/training_modes.md` mục 4.2).
+
+### 3.8 Sản phẩm: dựng phòng cho web bằng mô hình chính
+
+Luồng ở các mục trên phục vụ thực nghiệm: train cả `default` lẫn `mcmc` rồi so sánh. Sản phẩm chỉ dùng **mô hình chính** `mcmc` (`configs/product.yaml`, D20) và xuất thẳng file cho web. Nguồn vẫn là thư mục ảnh hoặc một video, đặt như mục 3.1:
+
+```bash
+cd /workspace/SpatialRoom3D
+bash scripts/build_room.sh /workspace/data/custom_scenes/phong1 phong1 --name "Phòng khách" --background   # thư mục ảnh
+bash scripts/build_room.sh /workspace/data/custom_scenes/phong2/phong2.mp4 phong2 --background              # video
+bash scripts/pod/job.sh status room_phong1      # theo dõi; tiến độ cho web: /workspace/outputs/product/phong1/progress.json
+```
+
+Kết quả nằm trong `/workspace/outputs/product/`: thư mục của phòng (`colmap/`, `model/`) và thư mục tĩnh `web/` cho trang web (`manifest.json`, `rooms/<phòng>/model.splat`, `cameras.json`, `thumbnail.jpg`). Định dạng các file: `docs/design/product.md`. Kiểm tra trước, không chạy gì: thêm `DRY_RUN=1` ở đầu lệnh.
 
 ## 4. Mô hình 3D: xuất PLY, render lại
 

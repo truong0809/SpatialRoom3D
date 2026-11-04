@@ -27,6 +27,7 @@ flowchart LR
 | Lọc Gaussian sau khi train, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
 | Đánh giá, so sánh các chế độ (bảng và biểu đồ) | `src/evaluation/` | `scripts/run_evaluate.sh` |
 | Ảnh so sánh các lượt trên cùng ảnh test, video xếp chồng | `src/evaluation/panels.py` | `scripts/run_panels.sh` |
+| **Sản phẩm**: video / ảnh → mô hình chính (`mcmc`) → file cho web | `src/product/` | `scripts/build_room.sh` |
 
 Ảnh chụp được dùng thẳng; video được chọn frame nét. Trước khi train, cảnh được kiểm tra số ảnh, tỉ lệ ảnh COLMAP ghép được, việc tách nhóm và độ phủ góc nhìn.
 
@@ -39,6 +40,22 @@ flowchart LR
 
 Thực nghiệm chính so sánh hai chế độ trên 6 cảnh trong nhà: Deep Blending (`drjohnson`, `playroom`) và Mip-NeRF 360 (`room`, `counter`, `kitchen`, `bonsai`), 3 seed, 30.000 vòng. Bước dò (`tune_mcmc`: 16 biến thể của `mcmc` trên `room`, một seed, kèm lọc Gaussian) và vòng ghép (các ứng viên ghép lại, 2 seed mới trên `room`) dùng để chọn cấu hình cho một chế độ thứ ba `mcmc_indoor`, sẽ được thêm vào thực nghiệm chính khi có số liệu. 12 biến thể là tinh chỉnh tham số; 4 biến thể lấy từ notebook v2 của nhóm: bilateral grid (có sẵn trong gsplat), Kill-then-Relocate và depth prior bằng Depth Anything V2 (code của repo, chạy trên bản sao có vá của trainer, không sửa gsplat), và cả gói. Đây là tích hợp và đánh giá các kỹ thuật có sẵn cộng một heuristic, không phải thuật toán mới. Thiết kế: [docs/design/training_modes.md](docs/design/training_modes.md), [docs/design/experiments.md](docs/design/experiments.md).
 
+## Sản phẩm: dựng phòng cho web
+
+Sản phẩm dùng **một mô hình chính**: `mcmc`, tốt nhất trong thực nghiệm chính (cấu hình: [`configs/product.yaml`](configs/product.yaml)). Code train của sản phẩm nằm riêng ở [`src/product/train_main.py`](src/product/train_main.py), gọi thẳng `simple_trainer.py` của gsplat, không dùng code thực nghiệm. Hai luồng chỉ dùng chung bước chuẩn bị ảnh + COLMAP. Đầu vào là một video hoặc một thư mục ảnh:
+
+```bash
+bash scripts/build_room.sh <video | thư mục ảnh> <tên_phòng> [--name "Tên hiển thị"] --background
+```
+
+Kết quả cho web nằm trong một thư mục tĩnh, `/workspace/outputs/product/web/`:
+- `manifest.json`: thư viện phòng;
+- `rooms/<phòng>/model.splat`: mô hình, 32 byte mỗi Gaussian;
+- `rooms/<phòng>/cameras.json`: camera cho các chế độ xoay quanh, đi bộ, tham quan;
+- `rooms/<phòng>/thumbnail.jpg`: ảnh đại diện.
+
+Tiến độ khi đang dựng: `/workspace/outputs/product/<phòng>/progress.json`. Định dạng từng file, hệ tọa độ và giới hạn: [docs/design/product.md](docs/design/product.md).
+
 ## Chạy trên Runpod
 
 Cần một pod Secure Cloud có GPU NVIDIA từ 24 GB VRAM (Ampere, Ada hoặc Hopper), driver hỗ trợ CUDA ≥ 12.8, gắn volume loại Network volume (không phải Global volume) cùng data center tại `/workspace`. Cách dễ nhất là notebook [`app/notebooks/runpod.ipynb`](app/notebooks/runpod.ipynb), làm theo [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md). Chạy riêng từng phương pháp của thực nghiệm chính: [`b0_inria.ipynb`](app/notebooks/b0_inria.ipynb), [`gsplat_default.ipynb`](app/notebooks/gsplat_default.ipynb), [`gsplat_mcmc.ipynb`](app/notebooks/gsplat_mcmc.ipynb) (cùng dữ liệu, protocol và thư mục kết quả; mục 5.1.1 của hướng dẫn). Mỗi bản có một tên dùng chung cho việc nền, báo cáo, log và gói kết quả: `main` (code tổng), `b0_inria`, `gsplat_default`, `gsplat_mcmc` (tên notebook); PLY xuất ra là `gsplat_<chế độ>_<cảnh>_s<seed>.ply`. Chạy bằng lệnh, từ `/workspace/SpatialRoom3D`:
@@ -46,6 +63,9 @@ Cần một pod Secure Cloud có GPU NVIDIA từ 24 GB VRAM (Ampere, Ada hoặc 
 ```bash
 bash scripts/pod/run_all.sh --background      # cài và kiểm tra 3 env conda (không train, không tải dữ liệu)
 bash scripts/pod/job.sh status                # theo dõi việc chạy nền; log: bash scripts/pod/job.sh log <tên>
+
+# Sản phẩm: một phòng cho web bằng mô hình chính (mcmc): ảnh / video → COLMAP → train → file web
+bash scripts/build_room.sh /workspace/data/custom_scenes/phong1 phong1 --name "Phòng khách" --background
 
 # Cảnh tự chụp (đưa lên /workspace/data/custom_scenes/<cảnh>/): COLMAP → train default, mcmc → tóm tắt kết quả
 bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong1 phong1 --background             # thư mục ảnh
@@ -83,10 +103,11 @@ Vài test tích hợp cần `ffmpeg` và `colmap`, tự bỏ qua khi máy không
 
 ```
 app/           giao diện dòng lệnh (python -m app.cli), notebook cho Runpod, giao diện web (chưa làm)
-src/           package chính: input, reconstruction, training, rendering, evaluation, datasets, utils
-configs/       base.yaml (chế độ huấn luyện, protocol), một file cho mỗi luồng dữ liệu,
+src/           package chính: input, reconstruction, training, rendering, evaluation, datasets, utils;
+               product (sản phẩm: train mô hình chính, xuất file cho web, tiến độ)
+configs/       base.yaml (chế độ huấn luyện, protocol), product.yaml (mô hình chính của sản phẩm), một file cho mỗi luồng dữ liệu,
                experiments/ (kế hoạch thực nghiệm), environment/ (phiên bản ghim của các env conda)
-scripts/       bốn lệnh chính; pipeline/ (phần thực thi), pod/ (chạy trên pod), setup/ (cài môi trường), lib/
+scripts/       bốn lệnh chính, build_room.sh (sản phẩm); pipeline/ (phần thực thi), pod/ (chạy trên pod), setup/ (cài môi trường), lib/
 tests/         kiểm thử: test_dataset.py, test_pipeline.py, unit/, helpers/
 docs/          tài liệu, mục lục ở docs/README.md
 experiments/   protocol và lệnh của từng benchmark (Deep Blending, Mip-NeRF 360)
@@ -99,6 +120,7 @@ Dữ liệu, checkpoint và kết quả nằm trên network volume (`/workspace/
 | | |
 |---|---|
 | [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md) | Hướng dẫn sử dụng trên Runpod |
+| [docs/design/product.md](docs/design/product.md) | Sản phẩm: mô hình chính, cách dựng phòng, hợp đồng với web (file, định dạng, hệ tọa độ, tiến độ) |
 | [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | Trạng thái, quyết định đã chốt, bằng chứng, việc tiếp theo |
 | [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) | Đề bài, phạm vi, phương pháp, mốc nghiệm thu |
 | [docs/ENVIRONMENT_AUDIT.md](docs/ENVIRONMENT_AUDIT.md) | Môi trường, phiên bản ghim, sự cố đã biết |

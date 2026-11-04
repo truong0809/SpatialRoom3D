@@ -1,0 +1,41 @@
+# Mô hình chính của sản phẩm (web): MỘT cấu hình, chọn qua thực nghiệm. Chỉ luồng sản phẩm đọc file này:
+#   bash scripts/build_room.sh <video | thư mục ảnh> <tên_phòng>      (hoặc: python -m app.cli build-room ...)
+#   -> src/product/: train_main.py (huấn luyện), export_web.py (file cho web), progress.py (tiến độ).
+# Thực nghiệm (so sánh default / mcmc, biến thể, B0) dùng configs/base.yaml và configs/experiments/, không dùng file này.
+# Hợp đồng với web (file nào, ở đâu, định dạng, hệ tọa độ, tiến độ): docs/design/product.md.
+#
+# Vì sao mcmc: thực nghiệm chính 31/10/2026 (cùng số Gaussian, 6 cảnh, 3 seed), mcmc hơn default ở 17/18 cặp
+# (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS; thời gian train gần như nhau (docs/design/product.md mục 1).
+# Đổi file này là đổi mô hình của sản phẩm: các phòng đã dựng sẽ được train lại ở lần chạy sau (train_meta.json).
+
+name: product_main
+
+model:
+  name: mcmc
+  description: "3DGS-MCMC (Kheradmand et al. 2024) trên gsplat: MCMCStrategy, preset mcmc của simple_trainer.py"
+  preset: mcmc            # preset của examples/simple_trainer.py (như chế độ mcmc trong configs/base.yaml)
+  args: {}                # giữ nguyên tham số của preset (opacity_reg 0,01...), đúng chế độ mcmc đã đo trên Mip-NeRF 360
+                          # và phòng nhóm; tham số đổi thêm thì ghi ở đây, dạng {tên_tham_số: giá_trị}
+  cap_max: 1000000        # số Gaussian tối đa = mặc định của MCMCStrategy; cố định nên biết trước dung lượng file web
+                          # (thực nghiệm: bằng số Gaussian cuối của default cùng cảnh, 0,97-3,55 triệu)
+
+trainer:
+  repo: https://github.com/nerfstudio-project/gsplat
+  commit: 6e8c837f35c9b025c0e92fb07bfda4e7c9361c49   # như train_modes.trainer.commit của configs/base.yaml
+  dir: ${WS}/code/gsplat  # bản checkout do scripts/setup/setup_gsplat.sh cài
+  env: gs-gsplat          # env conda chạy train và xuất file web
+  seed: 42                # simple_trainer.py gán cứng seed 42 (+ rank); chỉ để ghi lại, không truyền được
+
+training:
+  data_factor: 1
+  test_every: 1000000000  # gsplat giữ ảnh số 0 làm ảnh kiểm tra, mọi ảnh còn lại dùng để train (không chấm điểm)
+  max_steps: 30000
+  antialiased: false
+  init_type: sfm
+  lpips_net: vgg          # simple_trainer luôn khởi tạo LPIPS; giữ như thực nghiệm (luồng sản phẩm không chấm điểm)
+
+web:
+  format: splat           # .splat (antimatter15): 32 byte mỗi Gaussian, chỉ màu cơ bản (hệ số SH bậc 0)
+  dir: ${WS}/outputs/product/web   # thư mục tĩnh cho web: manifest.json, rooms/<phòng>/...
+
+output_root: ${WS}/outputs/product  # <phòng>/colmap (ảnh + COLMAP), <phòng>/model (mô hình), <phòng>/progress.json

@@ -13,6 +13,7 @@ Giới thiệu dự án, luồng xử lý và cách chạy nhanh: [README](../RE
 | [design/architecture.md](design/architecture.md) | Cây thư mục, bố cục `/workspace`, ba luồng dữ liệu, khai báo đường dẫn, nguồn gốc mã nguồn |
 | [design/training_modes.md](design/training_modes.md) | Hai chế độ huấn luyện `default` và `mcmc`: protocol, giao thức so sánh, thành phần |
 | [design/experiments.md](design/experiments.md) | Benchmark (Deep Blending, Mip-NeRF 360), thực nghiệm chính, dò tham số `mcmc`, lọc Gaussian sau khi train |
+| [design/product.md](design/product.md) | Sản phẩm: mô hình chính (`configs/product.yaml`), dựng phòng từ video / ảnh (`scripts/build_room.sh`), hợp đồng với web: `manifest.json`, `model.splat`, `cameras.json`, `progress.json` |
 | [design/comparisons.md](design/comparisons.md) | Bảng và biểu đồ so sánh các chế độ (`scripts/run_evaluate.sh`, `src/evaluation/charts.py`) |
 | [data/capture_protocol.md](data/capture_protocol.md) | Quy trình quay video và chụp ảnh không gian nội thất |
 | [research/reading_list.md](research/reading_list.md) | Danh sách tài liệu khảo sát |

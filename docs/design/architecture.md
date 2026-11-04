@@ -38,9 +38,12 @@ SpatialRoom3D/
 │   │                              charts.py (biểu đồ tổng của các báo cáo so sánh)
 │   ├── datasets/                  registry.py: đọc configs/*.yaml, kiểm tra dữ liệu từng luồng; fetch.py: tải benchmark
 │   ├── utils/                     gpu_lock.py: khóa GPU dùng chung với script bash
+│   ├── product/                   SẢN PHẨM (mô hình chính, configs/product.yaml): train_main.py (train, không dùng
+│   │                              src/training/), export_web.py (file cho web), progress.py (tiến độ), ply.py, config.py
 │   └── __init__.py
 ├── configs/
 │   ├── base.yaml                  phần chung: code_dir, danh sách luồng, train_modes (protocol + default / mcmc)
+│   ├── product.yaml               mô hình chính của sản phẩm (mcmc): chỉ src/product/ và scripts/build_room.sh đọc
 │   ├── custom_scene.yaml          cảnh tự chụp: nguồn, nơi lưu COLMAP và kết quả
 │   ├── mipnerf360.yaml            Mip-NeRF 360: dữ liệu, nguồn tải, kết quả, mục benchmark (protocol, số liệu công bố, ngưỡng)
 │   ├── deep_blending.yaml         Deep Blending: như trên
@@ -55,6 +58,7 @@ SpatialRoom3D/
 │   ├── run_evaluate.sh            bảng so sánh các chế độ / B0 / số liệu công bố
 │   ├── run_filter.sh              lọc Gaussian của các lượt đã train xong rồi chấm lại (tùy chọn)
 │   ├── run_panels.sh              ảnh so sánh các lượt trên cùng ảnh test, video quỹ đạo xếp chồng
+│   ├── build_room.sh              SẢN PHẨM: video / thư mục ảnh -> COLMAP -> mô hình chính -> file cho web
 │   ├── pipeline/                  phần thực thi: prepare_scene, prepare_benchmark, train_scene, train_gsplat_modes, train_inria_b0
 │   ├── pod/                       run_all, run_scene (cả luồng một cảnh), run_experiment (thực nghiệm trọn vẹn),
 │   │                              fetch_data (tải benchmark), job (chạy nền, xếp hàng GPU), results, pack_results,
@@ -90,6 +94,7 @@ Luồng chính và nơi mỗi bước nằm:
 | Lọc Gaussian, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
 | Evaluate (PSNR / SSIM / LPIPS): bảng và biểu đồ | `src/evaluation/` (biểu đồ: `charts.py`) | `scripts/run_evaluate.sh` |
 | Ảnh so sánh các lượt | `src/evaluation/panels.py` | `scripts/run_panels.sh` |
+| Sản phẩm: mô hình chính → file cho web | `src/product/` | `scripts/build_room.sh` (`docs/design/product.md`) |
 
 Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` (script tự đặt), ví dụ `python -m src.training.run`, `python -m src.reconstruction.colmap_runner`, `python -m src.datasets.registry`.
 
@@ -120,6 +125,8 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 │   ├── panels/<luồng>_<cảnh>_<thời_gian>/       ảnh so sánh các lượt, video xếp chồng (scripts/run_panels.sh)
 │   ├── reports/                      báo cáo (thực nghiệm: <tên bản>_<thời_gian>.*); reports/configs/: bản JSON của
 │   │                                 cấu hình benchmark và kế hoạch đã dùng
+│   ├── product/                      SẢN PHẨM (scripts/build_room.sh): <phòng>/{colmap,model,progress.json};
+│   │                                 web/ (thư mục tĩnh cho web: manifest.json, rooms/<phòng>/), docs/design/product.md
 │   ├── logs/                         log; logs/jobs/: log của việc chạy nền
 │   └── jobs/                         trạng thái việc chạy nền
 ├── miniforge3/                     env conda gs-inria, gs-gsplat, gs-tools

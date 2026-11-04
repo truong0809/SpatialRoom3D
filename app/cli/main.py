@@ -10,6 +10,7 @@ Gaussian, tùy chọn) -> render, xuất PLY -> đánh giá (PSNR / SSIM / LPIPS
     python -m app.cli evaluate custom phong1                                       # = bash scripts/run_evaluate.sh ...
     python -m app.cli panels mipnerf360 counter                                    # = bash scripts/run_panels.sh ...
     python -m app.cli scene /workspace/data/custom_scenes/phong1 phong1 --background   # cả luồng, chạy nền
+    python -m app.cli build-room /workspace/data/custom_scenes/phong1 phong1 --background   # SẢN PHẨM: phòng cho web
     python -m app.cli --dry-run train deep_blending gsplat                         # chỉ in lệnh bash sẽ chạy
 
 Danh sách lệnh: `python -m app.cli --help`. Biến môi trường (WS, SEEDS, QUICK, ...) được truyền nguyên cho script.
@@ -36,6 +37,9 @@ COMMANDS: dict[str, tuple[str, list[str], str]] = {
     "panels": ("scripts/run_panels.sh", [],
                "ảnh so sánh các lượt trên cùng ảnh test, video xếp chồng: <benchmark> <cảnh> [lượt ...] | custom <cảnh>"),
     "scene": ("scripts/pod/run_scene.sh", [], "cả luồng cho một cảnh tự chụp: <ảnh|video|-> <cảnh> [--background]"),
+    "build-room": ("scripts/build_room.sh", [],
+                   "SẢN PHẨM: dựng phòng cho web bằng mô hình chính (configs/product.yaml): <ảnh|video|-> <phòng> "
+                   "[--name <tên hiển thị>] [--background]"),
     "fetch": ("scripts/pod/fetch_data.sh", [], "tải dữ liệu benchmark về volume: <benchmark> [cảnh ...] [--dry-run]"),
     "experiment": ("scripts/pod/run_experiment.sh", [],
                    "một thực nghiệm trọn vẹn (configs/experiments/): <tên> [--only <b0|chế độ>] --plan | --background"),
