@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpatialRoom3D</title>
+<link rel="icon" href="/app/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "/app/vendor/three/three.module.min.js",
+    "three/addons/": "/app/vendor/three/addons/",
+    "@sparkjsdev/spark": "/app/vendor/spark/spark.module.min.js"
+  }
+}
+</script>
+<script type="module" src="/app/js/main.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/">
+    <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 3.5 7v10l8.5 4.5 8.5-4.5V7z"/><path d="M3.5 7 12 11.5 20.5 7"/><path d="M12 11.5v10"/></svg>
+    <span>SpatialRoom3D</span>
+  </a>
+  <nav class="mainnav" aria-label="Điều hướng chính">
+    <a href="#/" data-nav="library">Thư viện phòng</a>
+    <a href="#/new" data-nav="new">Dựng phòng mới</a>
+  </nav>
+  <div class="podstatus" id="pod-status" role="status" aria-live="polite">
+    <span class="dot" aria-hidden="true"></span><span class="label">Đang kết nối…</span>
+  </div>
+</header>
+<main id="view" tabindex="-1"></main>
+<dialog id="login-dialog" aria-labelledby="login-title">
+  <form method="dialog" id="login-form" class="login">
+    <h2 id="login-title">Đăng nhập</h2>
+    <p class="muted">Trang này chạy trên pod GPU và cần mật khẩu của server. Lệnh <code>bash scripts/web_server.sh status</code> trên pod in mật khẩu.</p>
+    <label for="login-token">Mật khẩu</label>
+    <input id="login-token" name="token" type="password" autocomplete="current-password" required>
+    <p class="error" id="login-error" role="alert"></p>
+    <div class="row end"><button type="submit" class="btn primary">Đăng nhập</button></div>
+  </form>
+</dialog>
+<noscript><p class="noscript">Trang cần JavaScript để chạy.</p></noscript>
+</body>
+</html>

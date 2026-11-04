@@ -4,8 +4,8 @@ _Cập nhật: 04/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhậ
 
 ## Mục tiêu hiện tại
 
-1. **Chạy luồng sản phẩm lần đầu trên pod** (D20, `docs/design/product.md`): dựng phòng nhóm bằng mô hình chính `mcmc`, mở file web trên một trình xem `.splat`.
-2. **Trang web xem 3D** (giai đoạn 5): đọc `manifest.json`, `model.splat`, `cameras.json` theo hợp đồng ở `docs/design/product.md` mục 4; ba chế độ xoay quanh, đi bộ, tham quan; sau đó là tải video / ảnh lên và dựng phòng từ web.
+1. **Chạy sản phẩm lần đầu trên pod** (D20, D22): trang web (`bash scripts/web_server.sh start`), tải video phòng nhóm lên, pod dựng bằng mô hình chính `mcmc`, xem 3D trên trình duyệt; ghi thời gian từng bước, thời gian tải, FPS.
+2. **Hoàn thiện trang web theo bản thiết kế** (giai đoạn 5): trang Kết quả thực nghiệm; chấm điểm phòng tự dựng bằng lượt quay kiểm tra (`docs/design/product.md` mục 5).
 3. **Báo cáo đồ án** (giai đoạn 6) từ kết quả thực nghiệm ngày 31/10/2026 (mục "Kết quả").
 4. Tùy chọn: vòng ghép của lượt dò tham số (D15), chỉ khi được duyệt chi phí GPU.
 
@@ -37,6 +37,7 @@ _Cập nhật: 04/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhậ
 | D19 | 31/10/2026 | Repo để public; pod lấy code qua HTTPS; ô 1 của notebook kiểm tra volume cho đổi quyền file (`chmod`) |
 | D20 | 04/11/2026 | Sản phẩm dùng **một mô hình chính**: `mcmc` (`configs/product.yaml`). Code train riêng `src/product/train_main.py`, không dùng code thực nghiệm; một lệnh `scripts/build_room.sh`; web chỉ đọc thư mục tĩnh `outputs/product/web/`; trang web không so sánh hai chế độ. Theo yêu cầu của bạn ("sản phẩm thì chỉ chọn 1 base tốt nhất", "code để train 3d chính sẽ là 1 file riêng", đầu vào "có thể là ảnh hoặc video") |
 | D21 | 04/11/2026 | Dọn repo: bỏ `docs/handoff/` (bản bàn giao lưu trong Project), rút gọn `PROJECT_STATUS.md` và `docs/ENVIRONMENT_AUDIT.md`; lịch sử còn trong Git. Theo yêu cầu của bạn ("bớt những cái thừa trên git") |
+| D22 | 04/11/2026 | Trang web của sản phẩm (`app/web/`): server thư viện chuẩn Python chạy trên pod, gọi đúng `scripts/build_room.sh`; tải lên từng phần 8 MiB vào `data/uploads/<phòng>/`; mật khẩu; trình xem Spark 2.4.0 + three.js 0.180.0 ghim phiên bản. Theo yêu cầu của bạn ("trực quan up ảnh và video lên sau đó ra sản phẩm kết quả rồi xem") |
 
 ## Đề xuất chờ xác nhận
 
@@ -91,12 +92,14 @@ Code: commit `c0a7a92`. Pod và thời gian từng việc: `docs/ENVIRONMENT_AUD
 | Render lại từ checkpoint, xuất PLY (`src/rendering/render.py`) | Đã kiểm thử với runner giả; **chưa xác nhận trên pod** | `tests/unit/test_render.py` |
 | Ảnh so sánh, video xếp chồng (`scripts/run_panels.sh`) | Đã chạy trên pod; `VIDEO=1` bị dừng vì hết RAM ở 2/3 cảnh | Mục "Còn mở" |
 | Notebook lấy code qua HTTPS, kiểm tra `chmod` (D19) | Đã viết, đã mô phỏng; **ô 1–3 bản mới chưa chạy trên pod** (lượt 31/10 clone bằng tay) | `tests/unit/test_notebooks.py` |
-| Luồng sản phẩm (D20): `configs/product.yaml`, `src/product/`, `scripts/build_room.sh` | Đã viết; đã kiểm thử bằng stub và gsplat giả; đã đối chiếu trên CPU với code thật của gsplat @6e8c837; **chưa chạy trên GPU, chưa có trang web** | `tests/unit/test_product.py`, `test_product_export.py`, `test_build_room.py`; `docs/design/product.md` mục 7 |
+| Luồng sản phẩm (D20): `configs/product.yaml`, `src/product/`, `scripts/build_room.sh` | Đã viết; đã kiểm thử bằng stub và gsplat giả; đã đối chiếu trên CPU với code thật của gsplat @6e8c837; **chưa chạy trên GPU** | `tests/unit/test_product.py`, `test_product_export.py`, `test_build_room.py`; `docs/design/product.md` mục 7 |
+| Trang web (D22): `app/web/`, `scripts/web_server.sh` | Đã viết; đã kiểm thử trên CPU: API qua HTTP thật, tải lên → `build_room.sh` thật → thư viện; Chromium headless (trọn luồng; camera khớp mô hình theo điểm mốc của phòng tổng hợp); đã rà soát bảo mật độc lập, sửa các lỗi tìm được (mỗi lỗi có test; `docs/design/product.md` mục 8); **chưa chạy trên pod** | `tests/unit/test_web_server.py`, `test_web_uploads.py`, `tests/browser/` (`SR3D_BROWSER=1`); `docs/design/product.md` mục 8 |
 | Toàn bộ test trên CPU | 518 test đạt, 9 bỏ qua vì cần PyTorch (04/11/2026, Python 3.10, bản clone sạch) | `python -m pytest` |
 
 ## Còn mở
 
-- Luồng sản phẩm chưa chạy trên GPU; thời gian của cả luồng và ảnh hưởng của `cap_max` 1 triệu chưa đo; chưa có trang web.
+- Luồng sản phẩm chưa chạy trên GPU; thời gian của cả luồng và ảnh hưởng của `cap_max` 1 triệu chưa đo.
+- Trang web chưa chạy trên pod: tải lên qua proxy của Runpod, thời gian tải và FPS trên máy thật chưa đo. Chưa có trang Kết quả thực nghiệm, chấm điểm bằng lượt quay kiểm tra, tự dừng pod.
 - Phòng tự dựng chưa có điểm đánh giá: cần một đoạn quay kiểm tra định vị chung mô hình COLMAP với video chính (`scripts/pipeline/prepare_scene.sh`, chưa có).
 - Lượt 31/10/2026: chưa xác minh `repo_dirty` trong `run_meta.json` (notebook từng được mở thẳng trong repo trên pod).
 - `run_panels.sh` với `VIDEO=1` bị `Killed` (hết RAM) ở `phong_nhom` và `mipnerf360 room`; link tải `/files/workspace/...` của Jupyter chưa xác nhận chạy được.
@@ -117,14 +120,14 @@ Tất cả nằm trên network volume tại `/workspace`, không đưa lên Git;
 - Kết quả thực nghiệm: `outputs/benchmarks/<benchmark>/{inria_b0,gsplat}/`, `outputs/custom_scenes/phong_nhom/`.
 - Báo cáo và biểu đồ: `outputs/reports/` (`main_20261031_114145.*`, `tune_mcmc_20261031_155033.*`, `compare_custom_20261031_214710.md`).
 - Gói kết quả: `ket_qua_main_20261031_114145.tar.gz` (123 MB), `ket_qua_tune_mcmc_20261031_155033.tar.gz` (244 MB).
-- Sản phẩm: `outputs/product/<phòng>/` và thư mục web `outputs/product/web/`. Chưa có phòng nào.
+- Sản phẩm: `outputs/product/<phòng>/` và thư mục web `outputs/product/web/`; video / ảnh tải lên từ trang web: `data/uploads/<phòng>/`; mật khẩu của server: `outputs/product/server/token`. Chưa có phòng nào.
 
 ## Việc tiếp theo
 
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
-| 1 | Trên pod: lấy code mới (ô 3 hoặc `git pull`), rồi `bash scripts/build_room.sh /workspace/data/custom_scenes/room/video2.mp4 phong_nhom --background` | `manifest.json` có `phong_nhom`; `model.splat` khoảng 32 MB; `cameras.json` có đủ khung; mở `model.splat` trên một trình xem `.splat`, góc `default_view` giống ảnh đầu vào tương ứng; ghi thời gian từng bước |
-| 2 | Trang web xem 3D theo `docs/design/product.md` mục 4 | Tải được `manifest.json` và mô hình phòng nhóm; ba chế độ xem chạy được; đo thời gian tải |
+| 1 | Trên pod: lấy code mới (ô 3 hoặc `git pull`), `bash scripts/web_server.sh start`, mở cổng HTTP 8000; trên trang web tải `video2.mp4` lên (hoặc `bash scripts/build_room.sh /workspace/data/custom_scenes/room/video2.mp4 phong_nhom --background`) | Phòng vào thư viện; `model.splat` khoảng 32 MB; `cameras.json` đủ khung; trên trang Xem 3D, góc mở đầu giống ảnh đầu vào tương ứng, ba chế độ chạy được; ghi thời gian từng bước (trang Tiến độ), thời gian tải và FPS (nút "Đo trên máy này") |
+| 2 | Trang Kết quả thực nghiệm của bản thiết kế, số lấy từ báo cáo 31/10 | Mọi số trên trang truy được về `main_20261031_114145*.md` / `.json` |
 | 3 | Quyết định vòng ghép: chạy hoặc bỏ (mục "Đề xuất chờ xác nhận") | Ghi lại quyết định và lý do. Nếu chạy: `tune_mcmc_combo` exit 0, kết luận theo bước 4 của `docs/design/experiments.md` mục 3.6 |
 | 4 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
 | 5 | Chọn LICENSE; repo cũ để private hoặc archive | Có file LICENSE |

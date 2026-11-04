@@ -265,6 +265,17 @@ def test_the_library_lists_the_latest_trained_room_first_and_keeps_names(room):
     assert [item["id"] for item in manifest["rooms"]] == ["phong1"]
 
 
+def test_a_display_name_starting_with_a_dash_reaches_the_library(room):
+    """build_room.sh truyền --name=<tên> thành một tham số: tên gõ trên web như "-demo" không bị hiểu là tùy chọn."""
+    args = ["--room", "phong1", "--model", str(room.model), "--scene", str(room.scene), "--web-dir", str(room.web),
+            "--config", str(room.config)]
+    assert export_web.main([*args, "--name=-demo"]) == 0
+    manifest = json.loads((room.web / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["rooms"][0]["name"] == "-demo"
+    with pytest.raises(SystemExit):  # dạng hai tham số: argparse coi "-demo" là một tùy chọn lạ
+        export_web.main([*args, "--name", "-demo"])
+
+
 def test_without_cameras_the_room_can_only_be_orbited(room):
     export_web.export_room("phong1", room.model, room.scene, room.web, room.cfg)
     entry = export_web.export_room("phong1", room.model, room.scene, room.web, room.cfg, cameras=False)

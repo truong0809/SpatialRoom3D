@@ -7,8 +7,9 @@ File được ghi lại trọn vẹn mỗi lần (file tạm rồi đổi tên),
   source_kind     "video" | "photos" | null (chưa biết, vd. dựng lại từ COLMAP đã có)
   status          "queued" (chờ GPU) | "running" | "done" | "failed" | "stopped"
   stage           id của bước đang chạy, hoặc bước bị lỗi / bị dừng; null khi chưa chạy hoặc đã xong
-  stages          các bước theo thứ tự: {id, label, status, percent, message}; status của bước:
-                  "waiting" | "running" | "done" | "skipped" | "failed" | "stopped"; percent chỉ có ở bước train
+  stages          các bước theo thứ tự: {id, label, status, percent, message, started_at, finished_at}; status
+                  của bước: "waiting" | "running" | "done" | "skipped" | "failed" | "stopped"; percent chỉ có ở
+                  bước train; started_at / finished_at: lúc bước bắt đầu / kết thúc (null khi chưa chạy hoặc bỏ qua)
   message, error  dòng mô tả hiện tại; thông điệp lỗi (null khi không lỗi)
   job, log        tên việc nền (scripts/pod/job.sh) và đường dẫn log đầy đủ trên pod
   created_at, started_at, updated_at, finished_at   thời điểm UTC, ISO 8601
@@ -71,7 +72,7 @@ def new(room: str, source_kind: str | None = None, status: str = "queued", job: 
         "status": status,
         "stage": None,
         "stages": [{"id": stage, "label": stage_label(stage, source_kind), "status": "waiting", "percent": None,
-                    "message": None} for stage in STAGE_IDS],
+                    "message": None, "started_at": None, "finished_at": None} for stage in STAGE_IDS],
         "message": "Đang chờ GPU" if status == "queued" else None,
         "error": None,
         "job": job,
@@ -114,6 +115,14 @@ def _stage(data: dict, stage: str) -> dict:
     raise ValueError(f"unknown stage {stage!r} (stages: {', '.join(STAGE_IDS)})")
 
 
+def _finish(entry: dict, status: str) -> None:
+    """Bước kết thúc với `status`: ghi lúc kết thúc nếu bước đã chạy (bước chưa bắt đầu thì không có thời gian)."""
+    was_running = entry["status"] == "running"
+    entry["status"] = status
+    if was_running and entry.get("started_at") and not entry.get("finished_at"):
+        entry["finished_at"] = now()
+
+
 def _set_source_kind(data: dict, source_kind: str | None) -> None:
     if source_kind:
         data["source_kind"] = source_kind
@@ -150,11 +159,11 @@ def set_stage(path: Path, stage: str, message: str | None = None, source_kind: s
     _set_source_kind(data, source_kind)
     for index, entry in enumerate(data["stages"]):
         if index < order and entry["status"] in ("waiting", "running"):
-            entry["status"] = "done"
+            _finish(entry, "done")
         elif index == order:
-            entry.update(status="running", percent=None, message=message)
+            entry.update(status="running", percent=None, message=message, started_at=now(), finished_at=None)
         elif index > order:
-            entry.update(status="waiting", percent=None, message=None)
+            entry.update(status="waiting", percent=None, message=None, started_at=None, finished_at=None)
     data.update(status="running", stage=stage, message=message or _stage(data, stage)["label"], error=None)
     write(path, data)
     return data
@@ -163,7 +172,7 @@ def set_stage(path: Path, stage: str, message: str | None = None, source_kind: s
 def skip(path: Path, stages: list[str], message: str | None = None) -> dict:
     data = _load(path)
     for stage in stages:
-        _stage(data, stage).update(status="skipped", percent=None, message=message)
+        _stage(data, stage).update(status="skipped", percent=None, message=message, started_at=None, finished_at=None)
     write(path, data)
     return data
 
@@ -191,7 +200,7 @@ def fail(path: Path, message: str, stopped: bool = False) -> dict | None:
     state = "stopped" if stopped else "failed"
     for entry in data["stages"]:
         if entry["status"] == "running":
-            entry["status"] = state
+            _finish(entry, state)
             data["stage"] = entry["id"]
     data.update(status=state, message=message, error=None if stopped else message, finished_at=now())
     write(path, data)
@@ -202,7 +211,7 @@ def done(path: Path, message: str | None = None) -> dict:
     data = _load(path)
     for entry in data["stages"]:
         if entry["status"] in ("waiting", "running"):
-            entry["status"] = "done"
+            _finish(entry, "done")
             if entry["id"] == "train" and entry["percent"] is not None:
                 entry["percent"] = 100.0
     data.update(status="done", stage=None, message=message or "Xong", error=None, finished_at=now())

@@ -95,6 +95,8 @@ Env này chạy `default`, `mcmc` và luồng sản phẩm.
 
 Depth Anything V2 Small (chỉ dùng cho biến thể `mono`): code commit `a561b84`, trọng số `depth_anything_v2_vits.pth` (Apache-2.0, kiểm SHA-256 khi tải). Chạy trong env `gs-gsplat`; cài bằng `scripts/setup/setup_depth_anything.sh`.
 
+Trang web của sản phẩm (`app/web/`, D22): server chỉ dùng thư viện chuẩn Python (python3 có PyYAML của máy, hoặc của env `gs-gsplat`; `scripts/web_server.sh` tự chọn). Thư viện của trình xem trong trình duyệt: three.js 0.180.0 và Spark 2.4.0 (MIT), ghim phiên bản và integrity SHA-512 của gói npm trong `configs/environment/web_viewer.lock.json`, tải vào `app/web/static/vendor/` (ngoài Git) bằng `python3 -m app.web.vendor`. Trình duyệt cần WebGL2.
+
 ### 4.4 Pod mới từ Jupyter
 
 Tạo pod theo mục 1. Tải `app/notebooks/runpod.ipynb` lên `/workspace`, chạy ô 1 → 2 → 3 → 4, rồi chạy tiếp các ô theo dữ liệu (`docs/USAGE_GUIDE.md` mục 2). Pod vẫn tính tiền khi đang có việc chạy nền. Xong thì Stop hoặc Terminate pod; mọi thứ trong `/workspace` vẫn còn.

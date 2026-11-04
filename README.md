@@ -4,7 +4,7 @@
 
 Đồ án tốt nghiệp. Hệ thống nhận ảnh hoặc video quay một không gian nội thất bằng camera thông thường (không cần LiDAR), ước lượng camera bằng COLMAP, tái tạo cảnh bằng **3D Gaussian Splatting (3DGS)** trên [gsplat](https://github.com/nerfstudio-project/gsplat), xuất mô hình `.ply` để xem trên trình xem 3DGS và đánh giá chất lượng bằng PSNR / SSIM / LPIPS.
 
-> **Trạng thái (04/11/2026):** thực nghiệm chính và lượt dò tham số đã chạy trên pod ngày 31/10/2026. Cùng số Gaussian, 6 cảnh trong nhà, 3 seed: `mcmc` hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS; `default` đạt điều kiện làm baseline so với 3DGS gốc của Inria. `mcmc` được chọn làm mô hình chính của sản phẩm. Luồng sản phẩm (`scripts/build_room.sh`) đã kiểm thử trên CPU, chưa chạy trên GPU; chưa có trang web. Số liệu, bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+> **Trạng thái (04/11/2026):** thực nghiệm chính và lượt dò tham số đã chạy trên pod ngày 31/10/2026. Cùng số Gaussian, 6 cảnh trong nhà, 3 seed: `mcmc` hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS; `default` đạt điều kiện làm baseline so với 3DGS gốc của Inria. `mcmc` được chọn làm mô hình chính của sản phẩm. Luồng sản phẩm (`scripts/build_room.sh`) và trang web của sản phẩm (tải ảnh / video lên, dựng phòng, xem 3D) đã kiểm thử trên CPU, chưa chạy trên pod. Số liệu, bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
 
 ## Luồng xử lý
 
@@ -56,6 +56,14 @@ Kết quả cho web nằm trong một thư mục tĩnh, `/workspace/outputs/prod
 
 Tiến độ khi đang dựng: `/workspace/outputs/product/<phòng>/progress.json`. Định dạng từng file, hệ tọa độ và giới hạn: [docs/design/product.md](docs/design/product.md).
 
+**Trang web** ([`app/web/`](app/web/README.md)): tải video hoặc ảnh lên → pod tự chạy `build_room.sh` → xem tiến độ từng bước → xem 3D (xoay quanh, đi bộ, tham quan theo đường quay; trình vẽ [Spark](https://github.com/sparkjsdev/spark) trên three.js). Chạy trên pod:
+
+```bash
+bash scripts/web_server.sh start     # in địa chỉ https://<POD_ID>-8000.proxy.runpod.net và mật khẩu
+```
+
+Trên trang Runpod cần mở cổng HTTP 8000 của pod (Edit Pod → Expose HTTP Ports). Xem không cần pod (laptop, lúc bảo vệ): chép thư mục `web/` về và chạy server ở chế độ chỉ xem ([`app/web/README.md`](app/web/README.md)).
+
 ## Chạy trên Runpod
 
 Cần một pod Secure Cloud có GPU NVIDIA từ 24 GB VRAM (Ampere, Ada hoặc Hopper), driver hỗ trợ CUDA ≥ 12.8, gắn volume loại Network volume (không phải Global volume) cùng data center tại `/workspace`. Cách dễ nhất là notebook [`app/notebooks/runpod.ipynb`](app/notebooks/runpod.ipynb), làm theo [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md). Chạy riêng từng phương pháp của thực nghiệm chính: [`b0_inria.ipynb`](app/notebooks/b0_inria.ipynb), [`gsplat_default.ipynb`](app/notebooks/gsplat_default.ipynb), [`gsplat_mcmc.ipynb`](app/notebooks/gsplat_mcmc.ipynb) (cùng dữ liệu, protocol và thư mục kết quả; mục 5.1.1 của hướng dẫn). Mỗi bản có một tên dùng chung cho việc nền, báo cáo, log và gói kết quả: `main` (code tổng), `b0_inria`, `gsplat_default`, `gsplat_mcmc` (tên notebook); PLY xuất ra là `gsplat_<chế độ>_<cảnh>_s<seed>.ply`. Chạy bằng lệnh, từ `/workspace/SpatialRoom3D`:
@@ -66,6 +74,7 @@ bash scripts/pod/job.sh status                # theo dõi việc chạy nền; l
 
 # Sản phẩm: một phòng cho web bằng mô hình chính (mcmc): ảnh / video → COLMAP → train → file web
 bash scripts/build_room.sh /workspace/data/custom_scenes/phong1 phong1 --name "Phòng khách" --background
+bash scripts/web_server.sh start              # trang web của sản phẩm: tải lên, dựng phòng, xem 3D (cổng 8000)
 
 # Cảnh tự chụp (đưa lên /workspace/data/custom_scenes/<cảnh>/): COLMAP → train default, mcmc → tóm tắt kết quả
 bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/phong1 phong1 --background             # thư mục ảnh
@@ -102,12 +111,12 @@ Vài test tích hợp cần `ffmpeg` và `colmap`, tự bỏ qua khi máy không
 ## Cấu trúc thư mục
 
 ```
-app/           giao diện dòng lệnh (python -m app.cli), notebook cho Runpod, giao diện web (chưa làm)
+app/           giao diện dòng lệnh (python -m app.cli), notebook cho Runpod, trang web của sản phẩm (web/)
 src/           package chính: input, reconstruction, training, rendering, evaluation, datasets, utils;
                product (sản phẩm: train mô hình chính, xuất file cho web, tiến độ)
 configs/       base.yaml (chế độ huấn luyện, protocol), product.yaml (mô hình chính của sản phẩm), một file cho mỗi luồng dữ liệu,
                experiments/ (kế hoạch thực nghiệm), environment/ (phiên bản ghim của các env conda)
-scripts/       bốn lệnh chính, build_room.sh (sản phẩm); pipeline/ (phần thực thi), pod/ (chạy trên pod), setup/ (cài môi trường), lib/
+scripts/       bốn lệnh chính, build_room.sh và web_server.sh (sản phẩm); pipeline/ (phần thực thi), pod/ (chạy trên pod), setup/ (cài môi trường), lib/
 tests/         kiểm thử: test_dataset.py, test_pipeline.py, unit/, helpers/
 docs/          tài liệu, mục lục ở docs/README.md
 experiments/   protocol và lệnh của từng benchmark (Deep Blending, Mip-NeRF 360)
@@ -128,7 +137,7 @@ Dữ liệu, checkpoint và kết quả nằm trên network volume (`/workspace/
 
 ## Thành phần bên ngoài
 
-Các thành phần dưới đây được cài vào môi trường trên pod theo phiên bản ghim, không chép vào repo:
+Các thành phần dưới đây được cài vào môi trường trên pod (thư viện của trang web: vào `app/web/static/vendor/`, bằng `python3 -m app.web.vendor`) theo phiên bản ghim, không chép vào repo:
 
 | Thành phần | Phiên bản | License |
 |---|---|---|
@@ -136,6 +145,8 @@ Các thành phần dưới đây được cài vào môi trường trên pod the
 | [3DGS gốc của Inria](https://github.com/graphdeco-inria/gaussian-splatting) (B0, chỉ để đối chiếu) | commit `54c035f` | Gaussian-Splatting License, chỉ dùng phi thương mại cho nghiên cứu và đánh giá |
 | [COLMAP](https://github.com/colmap/colmap) | 4.2.1 (conda-forge) | BSD cho riêng COLMAP; các thư viện đi kèm (vd. SiftGPU) có license riêng |
 | [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) (chỉ biến thể `mono`) | commit `a561b84`, trọng số bản Small | Apache-2.0 (code và trọng số bản Small; các bản lớn hơn là CC-BY-NC-4.0, không dùng) |
+| [three.js](https://github.com/mrdoob/three.js) (trang web) | 0.180.0, `configs/environment/web_viewer.lock.json` | MIT |
+| [Spark](https://github.com/sparkjsdev/spark) (trang web: vẽ 3D Gaussian Splatting) | 2.4.0, như trên | MIT |
 
 ## Quy ước
 

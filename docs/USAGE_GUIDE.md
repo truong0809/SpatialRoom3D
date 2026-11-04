@@ -1,13 +1,12 @@
 # Hướng dẫn sử dụng: ảnh chụp hoặc video → mô hình 3DGS
 
-_Cập nhật: 31/10/2026_
+_Cập nhật: 04/11/2026_
 
 Giao diện hiện có:
 - notebook `app/notebooks/runpod.ipynb`, chạy trong Jupyter của pod Runpod; ba notebook `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` chạy riêng từng phương pháp của thực nghiệm chính (mục 5.1.1);
 - giao diện dòng lệnh `python -m app.cli` (mục 6), cùng các script trong `scripts/`;
-- sản phẩm: `scripts/build_room.sh` dựng một phòng cho web bằng mô hình chính (mục 3.8).
-
-**Chưa có web app** (`app/web/README.md`; `docs/PROJECT_PLAN.md` mục 1.5: upload qua web là mở rộng có điều kiện).
+- sản phẩm: `scripts/build_room.sh` dựng một phòng cho web bằng mô hình chính (mục 3.8);
+- trang web của sản phẩm: tải ảnh / video lên, dựng phòng, theo dõi tiến độ, xem 3D (mục 3.9, `app/web/README.md`). Đã kiểm thử trên CPU, **chưa chạy trên pod**.
 
 ## 1. Chuẩn bị một lần: volume, pod, lấy code
 
@@ -218,6 +217,26 @@ bash scripts/pod/job.sh status room_phong1      # theo dõi; tiến độ cho we
 
 Kết quả nằm trong `/workspace/outputs/product/`: thư mục của phòng (`colmap/`, `model/`) và thư mục tĩnh `web/` cho trang web (`manifest.json`, `rooms/<phòng>/model.splat`, `cameras.json`, `thumbnail.jpg`). Định dạng các file: `docs/design/product.md`. Kiểm tra trước, không chạy gì: thêm `DRY_RUN=1` ở đầu lệnh.
 
+### 3.9 Trang web: tải ảnh / video lên, dựng phòng, xem 3D
+
+Thay cho việc chép file vào volume rồi chạy lệnh ở mục 3.8, có thể làm cả luồng trên trang web (code: `app/web/`, chi tiết: `app/web/README.md`):
+
+1. Trên pod, sau khi đã cài môi trường (ô 4 của notebook, hoặc `scripts/pod/run_all.sh`):
+   ```bash
+   cd /workspace/SpatialRoom3D && bash scripts/web_server.sh start
+   ```
+   Lệnh in địa chỉ và mật khẩu (xem lại: `bash scripts/web_server.sh status`). Lần đầu nó tải thư viện xem 3D (cần Internet).
+2. Trên trang Runpod, một lần cho mỗi pod: **Edit Pod → Expose HTTP Ports → thêm `8000`**, lưu lại.
+3. Mở `https://<POD_ID>-8000.proxy.runpod.net`, nhập mật khẩu.
+4. **Dựng phòng mới**: chọn Video hoặc Ảnh chụp (kéo thả được cả thư mục ảnh), đặt tên, bấm **Bắt đầu dựng**. Trang tải lên theo từng phần (mạng chập chờn thì tự gửi lại), rồi chuyển sang trang **Tiến độ**.
+5. Xong thì bấm **Xem 3D**; phòng cũng có trong **Thư viện phòng**.
+
+Ghi chú:
+- Video / ảnh tải lên nằm ở `/workspace/data/uploads/<phòng>/`; kết quả như mục 3.8. Mỗi lúc chỉ một việc dùng GPU: phòng mới tự xếp hàng.
+- Link proxy công khai: không đưa link và mật khẩu cho người ngoài nhóm; chỉ tải dữ liệu demo. Đổi mật khẩu: xóa `/workspace/outputs/product/server/token`, rồi `stop` / `start`.
+- Tắt pod thì trang cũng tắt. Để xem khi không có pod (vd. lúc bảo vệ): chép `/workspace/outputs/product/web/` về laptop và chạy server ở chế độ chỉ xem (`app/web/README.md`, mục "Xem trên máy khác").
+- Số liệu cho báo cáo: trang Tiến độ có thời gian từng bước; trang Xem 3D có nút **Đo trên máy này** (thời gian tải, FPS, GPU của trình duyệt).
+
 ## 4. Mô hình 3D: xuất PLY, render lại
 
 Mỗi lượt train đã có sẵn ảnh test, video quỹ đạo (`videos/traj_<bước>.mp4`) và file PLY (`ply/point_cloud_<bước>.ply`, định dạng PLY của gsplat cho 3DGS) do bước đánh giá của gsplat ghi ra.
@@ -402,6 +421,11 @@ Gói kết quả gồm báo cáo (kèm ảnh biểu đồ so sánh trong `output
 | `Killed` khi build gsplat | Ô 4: đặt `MAX_JOBS="4"`, chạy lại ô 4 |
 | `compute capability ... is not in TORCH_CUDA_ARCH_LIST` | GPU không được hỗ trợ (vd. T4, RTX 50xx): deploy GPU khác |
 | `another job is using the GPU` | Đang có việc khác chạy: xem ô 5; muốn dừng thì ô 11 |
+| Trang web: không mở được `https://<POD_ID>-8000.proxy.runpod.net` | Chưa mở cổng HTTP 8000 của pod (Edit Pod → Expose HTTP Ports), hoặc server chưa chạy: `bash scripts/web_server.sh status` |
+| Trang web hỏi mật khẩu | `bash scripts/web_server.sh status` trên pod in mật khẩu. Server vừa khởi động lại thì phải nhập lại (phiên đăng nhập chỉ nằm trong bộ nhớ của server) |
+| Trang web: "Đang có 3 lượt tải lên dở" | Ba lượt tải lên chưa xong đang giữ chỗ trên volume: chờ chúng xong, hoặc chờ 30 phút (lượt ngừng nhận được xóa để nhường chỗ) |
+| Trang web: dựng lại báo "việc trước vẫn đang dừng" | Việc dựng cũ của phòng đang thoát: chờ vài giây rồi bấm lại (`bash scripts/pod/job.sh status room_<phòng>`) |
+| Trang web: khung xem 3D trống, báo lỗi tải thư viện | Chưa có thư viện xem 3D: `python3 -m app.web.vendor` (cần Internet), rồi tải lại trang; trình duyệt cần WebGL2 (Chrome, Edge, Firefox, Safari bản mới) |
 | `MẤT` ở ô 5 | Pod tắt hoặc việc bị giết giữa chừng: chạy lại ô vừa dùng |
 | `dataset not found` (ô 7) | Dữ liệu benchmark chưa có ở chỗ `configs/<benchmark>.yaml` ghi: tải bằng ô 7 (`WHAT = "fetch"`) hoặc lệnh in trong thông báo, tự đưa lên đúng chỗ (mục 2.1), hoặc ghi đường dẫn vào `configs/local.yaml` |
 | `seed ... would not fit in a ... GB volume`, `may not fit`, `không đủ chỗ trống cho seed` (thực nghiệm chính) | Volume không đủ chỗ: tăng dung lượng network volume trên trang Runpod, đặt `VOLUME_GB` bằng dung lượng mới (ô 7) rồi chạy lại; phần đã xong tự bỏ qua |
@@ -441,6 +465,7 @@ Sự cố môi trường đã biết: `docs/ENVIRONMENT_AUDIT.md` mục 6.
 | Biến thể có code của `tune_mcmc` (`kr`, `mono`, gói `v2`) và `bilagrid`; bước `depth_anything` | Đã kiểm thử trên CPU: bản vá đúng chỗ trong `simple_trainer.py` thật; KR với `MCMCStrategy` thật; loss Pearson bằng PyTorch; kiểm NaN; tải Depth Anything V2 với kho git cục bộ; bước `depth_anything` lỗi thì chỉ bỏ lượt dùng prior. Kiểm tra tay, ngoài bộ test: bản sao có vá phân giải đúng tham số của cả 18 lượt; depth prior với code Depth Anything V2 thật nhưng trọng số ngẫu nhiên. Đã chạy trên pod ngày 31/10/2026 trong `tune_mcmc`, mọi bước OK (gồm bước `depth_anything` tải trọng số thật) | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_experiment.py`; `docs/design/experiments.md` mục 3.7; `docs/PROJECT_STATUS.md` ở commit `704499b` (bản đầy đủ trước khi rút gọn), mục "Kiểm thử trong sandbox" |
 | Bảng so sánh mở rộng (số cặp và số cảnh tốt hơn, chất lượng theo dung lượng, cấu trúc mô hình), ảnh so sánh và video xếp chồng | Đã kiểm thử trên CPU với PLY, ảnh render và video tổng hợp; **chưa chạy trên kết quả thật** | `tests/unit/test_compare_modes.py`, `tests/unit/test_splat_stats.py`, `tests/unit/test_panels.py` |
 | Biểu đồ tổng (đối chiếu Inria, chênh lệch tổng so với từng mốc, gộp các benchmark), ô "Bảng" và `WHAT = "report"` của notebook | Đã kiểm thử trên báo cáo lập từ lượt giả (số trên ảnh đúng số của bảng số cặp tốt hơn, nhãn số không tràn khung, đủ chữ tiếng Việt trong font), với matplotlib 3.10.5 như env `gs-gsplat`; **chưa vẽ từ kết quả thật** | `tests/unit/test_charts.py`, `test_benchmarks.py`, `test_notebooks.py`, `test_experiment.py` |
+| Trang web (`app/web/`): tải lên từng phần, dựng phòng, tiến độ, xem 3D | Đã kiểm thử trên CPU: API qua HTTP thật; tải video lên → `build_room.sh` thật → `train_main.py` / `export_web.py` thật (gsplat giả) → phòng trong thư viện; Chromium headless với phòng tổng hợp (trọn luồng tải 12 ảnh; camera khớp mô hình theo điểm mốc). **Chưa chạy trên pod** | `tests/unit/test_web_server.py`, `test_web_uploads.py`, `tests/browser/test_web_browser.py` (`SR3D_BROWSER=1`) |
 | Trên pod (COLMAP 4.2.1, GPU) bằng repo này | Đã chạy ngày 31/10/2026: cài 3 env, Mip-NeRF 360, thực nghiệm chính, `tune_mcmc` (gồm biến thể có code và `depth_anything`), video phòng nhóm. Chưa chạy: thư mục ảnh, render lại, ô 1–3 bản mới của notebook, luồng sản phẩm | `docs/ENVIRONMENT_AUDIT.md` mục 7 |
 
 Tóm tắt các ca với COLMAP thật (sandbox):

@@ -58,3 +58,6 @@ configs/local.yaml
 /experiments/*/*
 !/experiments/*/README.md
 
+
+# Thư viện JavaScript của trình xem 3D: tải bằng python3 -m app.web.vendor (configs/environment/web_viewer.lock.json)
+/app/web/static/vendor/

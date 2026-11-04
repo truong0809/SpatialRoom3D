@@ -61,6 +61,9 @@ read_args() {
   done
   [[ "$NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
     || die "room name must start with a letter or digit and contain only letters, digits, '.', '_' and '-'"
+  case "$(printf '%s' "$NAME" | tr '[:upper:]' '[:lower:]')" in  # thu muc con cua outputs/product/ (app/web/uploads.py)
+    web|uploads|server) die "tên phòng '$NAME' trùng thư mục của hệ thống trong outputs/product/: đặt tên khác" ;;
+  esac
 }
 
 load_config() {  # duong dan cua phong va cua thu muc web, doc tu configs/product.yaml
@@ -269,7 +272,7 @@ step_train() {
 step_export() {
   local export_cmd=(python -m src.product.export_web --room "$NAME" --model "$MODEL_DIR" --scene "$SCENE_DIR"
                     --web-dir "$WEB_DIR" --config "$CONFIG" --ws "$WS" --progress "$PROGRESS")
-  [ -z "$DISPLAY_NAME" ] || export_cmd+=(--name "$DISPLAY_NAME")
+  [ -z "$DISPLAY_NAME" ] || export_cmd+=("--name=$DISPLAY_NAME")  # dang --name=: ten bat dau bang "-" van dung
   if [ "$DRY_RUN" = 1 ]; then
     show "${export_cmd[@]}"
     return 0

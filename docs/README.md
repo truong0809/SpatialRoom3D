@@ -14,6 +14,7 @@ Giới thiệu dự án, luồng xử lý và cách chạy nhanh: [README](../RE
 | [design/training_modes.md](design/training_modes.md) | Hai chế độ huấn luyện `default` và `mcmc`: protocol, giao thức so sánh, thành phần |
 | [design/experiments.md](design/experiments.md) | Benchmark (Deep Blending, Mip-NeRF 360), thực nghiệm chính, dò tham số `mcmc`, lọc Gaussian sau khi train |
 | [design/product.md](design/product.md) | Sản phẩm: mô hình chính (`configs/product.yaml`), dựng phòng từ video / ảnh (`scripts/build_room.sh`), hợp đồng với web: `manifest.json`, `model.splat`, `cameras.json`, `progress.json` |
+| [../app/web/README.md](../app/web/README.md) | Trang web của sản phẩm: chạy trên pod (`scripts/web_server.sh`), xem trên laptop không cần pod, các màn, code, kiểm thử |
 | [design/comparisons.md](design/comparisons.md) | Bảng và biểu đồ so sánh các chế độ (`scripts/run_evaluate.sh`, `src/evaluation/charts.py`) |
 | [data/capture_protocol.md](data/capture_protocol.md) | Quy trình quay video và chụp ảnh không gian nội thất |
 | [research/reading_list.md](research/reading_list.md) | Danh sách tài liệu khảo sát |

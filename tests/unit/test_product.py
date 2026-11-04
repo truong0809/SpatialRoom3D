@@ -385,6 +385,28 @@ def test_progress_records_failures_stops_and_skipped_stages(tmp_path):
         progress.set_stage(tmp_path / "none.json", "train")
 
 
+def test_progress_records_when_each_stage_started_and_finished(tmp_path):
+    """Thời gian từng bước (trang web hiện, báo cáo dùng): bước đã chạy có started_at / finished_at; bước bỏ qua hoặc
+    chưa chạy thì không."""
+    path = tmp_path / "progress.json"
+    progress.start(path, "phong1", "video")
+    data = progress.read(path)
+    assert all(stage["started_at"] is None and stage["finished_at"] is None for stage in data["stages"])
+    progress.set_stage(path, "images")
+    data = progress.set_stage(path, "colmap")
+    images, colmap = data["stages"][0], data["stages"][1]
+    assert images["started_at"] and images["finished_at"] and images["finished_at"] >= images["started_at"]
+    assert colmap["started_at"] and colmap["finished_at"] is None
+    data = progress.fail(path, "COLMAP lỗi")
+    assert data["stages"][1]["finished_at"] and data["stages"][2]["started_at"] is None
+    progress.start(path, "phong1")
+    progress.skip(path, ["images", "colmap"])
+    progress.set_stage(path, "train")
+    data = progress.done(path)
+    assert [bool(stage["finished_at"]) for stage in data["stages"]] == [False, False, True, False]
+    assert data["stages"][3]["status"] == "done" and data["stages"][3]["started_at"] is None  # chưa bao giờ chạy
+
+
 def test_follow_copies_the_output_and_switches_stages_on_the_markers(tmp_path):
     path = tmp_path / "progress.json"
     progress.start(path, "phong1")

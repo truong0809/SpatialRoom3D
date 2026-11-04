@@ -14,94 +14,14 @@ import pytest
 import yaml
 
 from app.cli.main import COMMANDS, command_for
-from product_fakes import make_gsplat_checkout
-from shell_env import REPO, HoldLock, ShellEnv, calls, make_fake_repo, write_stub
+from product_fakes import REAL_PREPARE, make_build_env, make_gsplat_checkout
+from shell_env import REPO, HoldLock, calls, write_stub
 
 pytestmark = pytest.mark.skipif(not os.path.isdir("/proc/self"), reason="needs Linux /proc")
 
-FAKE_PREPARE = r'''
-echo "prepare_scene $* OVERWRITE=${OVERWRITE:-} OUT_ROOT=${OUT_ROOT:-} HELD=${SR3D_GPU_LOCK_HELD:-}" >> "$CALLS"
-scene="$OUT_ROOT/$2/colmap"
-if [ -d "$1" ]; then kind=images; echo "===== 1. Photos -> $scene/input (no frame extraction) ====="
-else kind=video; echo "===== 1. Frames -> $scene/input ====="; fi
-mkdir -p "$scene/sparse/0" "$scene/images"
-printf '{"source": "%s", "source_type": "%s", "selected": 12}\n' "$1" "$kind" > "$scene/frames_report.json"
-echo
-echo "===== 2. COLMAP ====="
-for f in cameras images points3D; do echo "$f" > "$scene/sparse/0/$f.bin"; done
-printf '{"verdict": "%s", "hints": ["Quay chậm hơn"]}\n' "${FAKE_VERDICT:-PASS}" > "$scene/sfm_report.json"
-exit "${FAKE_PREP_EXIT:-0}"
-'''
-
-# Chuẩn bị ảnh giả cho lượt chạy với train_main / export_web thật: mô hình COLMAP đọc được số ảnh, ảnh, camera cho
-# Parser giả (product_fakes.FAKE_PARSER), các báo cáo
-REAL_PREPARE = r'''
-echo "prepare_scene $*" >> "$CALLS"
-scene="$OUT_ROOT/$2/colmap"
-echo "===== 1. Frames -> $scene/input ====="
-mkdir -p "$scene/sparse/0" "$scene/images"
-python3 - "$scene" "$1" <<'PY'
-import json, struct, sys
-from pathlib import Path
-scene, source = Path(sys.argv[1]), sys.argv[2]
-names = [f"{i:05d}.jpg" for i in range(1, 4)]
-(scene / "sparse" / "0" / "images.bin").write_bytes(struct.pack("<Q", len(names)))
-(scene / "sparse" / "0" / "cameras.bin").write_bytes(b"c")
-(scene / "sparse" / "0" / "points3D.bin").write_bytes(b"p")
-for name in names:
-    (scene / "images" / name).write_bytes(b"\xff\xd8 fake \xff\xd9")
-c2w = [[[1, 0, 0, x], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]] for x in (-1, 0, 1)]
-(scene / "fake_parser.json").write_text(json.dumps({"names": names, "c2w": c2w, "size": [100, 80],
-                                                    "K": [[100, 0, 50], [0, 100, 40], [0, 0, 1]]}))
-(scene / "frames_report.json").write_text(json.dumps({"source": source, "source_type": "video", "selected": 3}))
-(scene / "sfm_report.json").write_text(json.dumps({"verdict": "PASS", "input_images": 3,
-                                                   "model": {"registered_images": 3}}))
-PY
-echo "===== 2. COLMAP ====="
-'''
-
-FAKE_PYTHON = r'''#!/usr/bin/env bash
-case "${1:-}" in
-  -c) echo "python -c" >> "$CALLS"; exit 0 ;;  # kiểm tra fused-ssim / gsplat trên GPU
-  -m)
-    [ "${REAL_STEPS:-0}" = 1 ] || case "${2:-}" in
-      src.product.train_main)
-        printf 'train_main %s\n' "$(printf '%q ' "${@:3}")" >> "$CALLS"
-        out="" prev=""
-        for arg in "$@"; do [ "$prev" = --out ] && out="$arg"; prev="$arg"; done
-        mkdir -p "$out" && echo '{"status": "OK"}' > "$out/train_meta.json"
-        exit "${FAKE_TRAIN_EXIT:-0}" ;;
-      src.product.export_web)
-        printf 'export_web %s\n' "$(printf '%q ' "${@:3}")" >> "$CALLS"
-        exit "${FAKE_EXPORT_EXIT:-0}" ;;
-    esac ;;
-esac
-exec python3 "$@"
-'''
-
-
 @pytest.fixture
 def sh(tmp_path):
-    repo = make_fake_repo(tmp_path, ["build_room.sh"], with_src=True, with_configs=True)
-    write_stub(repo, "scripts/pipeline/prepare_scene.sh", FAKE_PREPARE)
-    env = ShellEnv(tmp_path, repo=repo)
-    env.env["CALLS"] = str(tmp_path / "calls.txt")
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "python").write_text(FAKE_PYTHON, encoding="utf-8")
-    (bin_dir / "python").chmod(0o755)
-    env.env["PATH"] = f"{bin_dir}:{env.env['PATH']}"
-    conda = env.ws / "miniforge3" / "etc" / "profile.d"
-    conda.mkdir(parents=True)
-    (conda / "conda.sh").write_text("conda() { echo \"conda $*\" >> \"$CALLS\"; }\n", encoding="utf-8")
-    photos = tmp_path / "data" / "phong1"
-    photos.mkdir(parents=True)
-    for index in range(12):
-        (photos / f"IMG_{index:04d}.jpg").write_bytes(b"jpg")
-    video = tmp_path / "data" / "video8.mp4"
-    video.write_bytes(b"mp4")
-    env.photos, env.video = photos, video
-    env.room = env.ws / "outputs" / "product"
+    env = make_build_env(tmp_path)
     yield env
     env.cleanup()
 
@@ -130,7 +50,7 @@ def test_photos_go_through_every_step_with_the_main_model(sh):
                                   "--ws", str(sh.ws), "--progress", str(progress_file)]
     assert shlex.split(export) == ["export_web", "--room", "phong1", "--model", str(model), "--scene", str(scene),
                                    "--web-dir", str(sh.room / "web"), "--config", str(config), "--ws", str(sh.ws),
-                                   "--progress", str(progress_file), "--name", "Phòng khách"]
+                                   "--progress", str(progress_file), "--name=Phòng khách"]
     assert "conda activate gs-gsplat" in calls(sh.root)
     data = progress_of(sh)
     assert data["status"] == "done" and data["source_kind"] == "photos" and data["error"] is None
@@ -191,6 +111,8 @@ def test_bad_inputs_are_refused_before_anything_is_created(sh):
                           ((str(few), "phong1"), "Chỉ có 3 ảnh dùng được"),
                           ((str(sh.root / "missing.mp4"), "phong1"), "source not found"),
                           ((str(sh.photos), "../phong"), "room name must start with a letter or digit"),
+                          ((str(sh.photos), "web"), "trùng thư mục của hệ thống"),  # thư mục web/ của sản phẩm
+                          ((str(sh.photos), "Uploads"), "trùng thư mục của hệ thống"),
                           (("-", "phong1"), "chưa có mô hình COLMAP"),
                           ((str(sh.photos), "phong1", "--name"), "--name needs a value"),
                           ((str(sh.photos), "phong1", "--fast"), "unknown option '--fast'")]:
@@ -212,7 +134,7 @@ def test_dry_run_prints_the_steps_and_creates_nothing(sh):
     assert lines[0].startswith("+ env OVERWRITE=0 ") and "prepare_scene.sh" in lines[0] and lines[0].endswith(" follow")
     assert lines[1] == "+ conda activate gs-gsplat"
     assert "src.product.train_main" in lines[2] and "src.product.export_web" in lines[3]
-    assert shlex.split(lines[3][2:])[-2:] == ["--name", "Phòng khách"]
+    assert shlex.split(lines[3][2:])[-1] == "--name=Phòng khách"
     assert not calls(sh.root) and not sh.room.exists()
     out = build(sh, str(sh.photos), "phong1", "--background", env={"DRY_RUN": "1"})
     assert out.returncode == 0 and "job.sh start room_phong1 -- bash" in out.stdout and not sh.room.exists()
@@ -229,7 +151,7 @@ def test_background_runs_as_a_job_and_waits_for_the_gpu(sh):
     assert state["state"] == "DONE", sh.log("room_phong1")
     data = progress_of(sh)
     assert data["status"] == "done" and data["job"] == "room_phong1" and data["started_at"]
-    assert shlex.split(step_calls(sh)[-1])[-2:] == ["--name", "Phòng khách"]
+    assert shlex.split(step_calls(sh)[-1])[-1] == "--name=Phòng khách"
 
 
 def test_the_cli_command_runs_the_script():

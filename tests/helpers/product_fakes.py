@@ -1,11 +1,16 @@
-"""Bản giả của gsplat cho test luồng sản phẩm (src/product/): simple_trainer.py, Parser, một checkout có kho git.
+"""Bản giả cho test luồng sản phẩm (src/product/, scripts/build_room.sh, trang web app/web/).
 
-FAKE_TRAINER ghi đúng các file simple_trainer.py @6e8c837 ghi khi train xong (ply/point_cloud_<N>.ply, ckpts/, stats/)
-và in thanh tiến độ như tqdm. FAKE_PARSER thay examples/datasets/colmap.py: đọc camera từ <cảnh>/fake_parser.json.
+- gsplat: FAKE_TRAINER ghi đúng các file simple_trainer.py @6e8c837 ghi khi train xong (ply/point_cloud_<N>.ply,
+  ckpts/, stats/) và in thanh tiến độ như tqdm; FAKE_PARSER thay examples/datasets/colmap.py (đọc camera từ
+  <cảnh>/fake_parser.json); make_gsplat_checkout: một checkout có kho git.
+- build_room.sh: make_build_env dựng repo giả (script thật, prepare_scene.sh giả), python giả (train_main /
+  export_web giả, trừ khi REAL_STEPS=1), conda giả, một thư mục ảnh và một video.
 """
 
 import subprocess
 from pathlib import Path
+
+from shell_env import ShellEnv, make_fake_repo, write_stub
 
 FAKE_TRAINER = r'''
 import json, os, struct, sys, time
@@ -100,3 +105,91 @@ def make_gsplat_checkout(root: Path) -> tuple[Path, Path, str]:
     subprocess.run([*git, "commit", "-q", "-m", "fake gsplat"], check=True)
     head = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     return checkout, site / "gsplat", head
+
+
+# ============================================================================== scripts/build_room.sh
+FAKE_PREPARE = r'''
+echo "prepare_scene $* OVERWRITE=${OVERWRITE:-} OUT_ROOT=${OUT_ROOT:-} HELD=${SR3D_GPU_LOCK_HELD:-}" >> "$CALLS"
+scene="$OUT_ROOT/$2/colmap"
+if [ -d "$1" ]; then kind=images; echo "===== 1. Photos -> $scene/input (no frame extraction) ====="
+else kind=video; echo "===== 1. Frames -> $scene/input ====="; fi
+mkdir -p "$scene/sparse/0" "$scene/images"
+printf '{"source": "%s", "source_type": "%s", "selected": 12}\n' "$1" "$kind" > "$scene/frames_report.json"
+echo
+echo "===== 2. COLMAP ====="
+for f in cameras images points3D; do echo "$f" > "$scene/sparse/0/$f.bin"; done
+printf '{"verdict": "%s", "hints": ["Quay chậm hơn"]}\n' "${FAKE_VERDICT:-PASS}" > "$scene/sfm_report.json"
+exit "${FAKE_PREP_EXIT:-0}"
+'''
+
+# Chuẩn bị ảnh giả cho lượt chạy với train_main / export_web thật: mô hình COLMAP đọc được số ảnh, ảnh, camera cho
+# Parser giả (product_fakes.FAKE_PARSER), các báo cáo
+REAL_PREPARE = r'''
+echo "prepare_scene $*" >> "$CALLS"
+scene="$OUT_ROOT/$2/colmap"
+echo "===== 1. Frames -> $scene/input ====="
+mkdir -p "$scene/sparse/0" "$scene/images"
+python3 - "$scene" "$1" <<'PY'
+import json, struct, sys
+from pathlib import Path
+scene, source = Path(sys.argv[1]), sys.argv[2]
+names = [f"{i:05d}.jpg" for i in range(1, 4)]
+(scene / "sparse" / "0" / "images.bin").write_bytes(struct.pack("<Q", len(names)))
+(scene / "sparse" / "0" / "cameras.bin").write_bytes(b"c")
+(scene / "sparse" / "0" / "points3D.bin").write_bytes(b"p")
+for name in names:
+    (scene / "images" / name).write_bytes(b"\xff\xd8 fake \xff\xd9")
+c2w = [[[1, 0, 0, x], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]] for x in (-1, 0, 1)]
+(scene / "fake_parser.json").write_text(json.dumps({"names": names, "c2w": c2w, "size": [100, 80],
+                                                    "K": [[100, 0, 50], [0, 100, 40], [0, 0, 1]]}))
+(scene / "frames_report.json").write_text(json.dumps({"source": source, "source_type": "video", "selected": 3}))
+(scene / "sfm_report.json").write_text(json.dumps({"verdict": "PASS", "input_images": 3,
+                                                   "model": {"registered_images": 3}}))
+PY
+echo "===== 2. COLMAP ====="
+'''
+
+FAKE_PYTHON = r'''#!/usr/bin/env bash
+case "${1:-}" in
+  -c) echo "python -c" >> "$CALLS"; exit 0 ;;  # kiểm tra fused-ssim / gsplat trên GPU
+  -m)
+    [ "${REAL_STEPS:-0}" = 1 ] || case "${2:-}" in
+      src.product.train_main)
+        printf 'train_main %s\n' "$(printf '%q ' "${@:3}")" >> "$CALLS"
+        out="" prev=""
+        for arg in "$@"; do [ "$prev" = --out ] && out="$arg"; prev="$arg"; done
+        mkdir -p "$out" && echo '{"status": "OK"}' > "$out/train_meta.json"
+        exit "${FAKE_TRAIN_EXIT:-0}" ;;
+      src.product.export_web)
+        printf 'export_web %s\n' "$(printf '%q ' "${@:3}")" >> "$CALLS"
+        exit "${FAKE_EXPORT_EXIT:-0}" ;;
+    esac ;;
+esac
+exec python3 "$@"
+'''
+
+
+def make_build_env(tmp_path: Path) -> ShellEnv:
+    """Môi trường chạy scripts/build_room.sh thật trong tmp_path: prepare_scene.sh, conda, GPU và (mặc định)
+    train_main / export_web là giả; kiểm tra nguồn, cấu hình, tiến độ, khóa GPU và job.sh là thật."""
+    repo = make_fake_repo(tmp_path, ["build_room.sh"], with_src=True, with_configs=True)
+    write_stub(repo, "scripts/pipeline/prepare_scene.sh", FAKE_PREPARE)
+    env = ShellEnv(tmp_path, repo=repo)
+    env.env["CALLS"] = str(tmp_path / "calls.txt")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "python").write_text(FAKE_PYTHON, encoding="utf-8")
+    (bin_dir / "python").chmod(0o755)
+    env.env["PATH"] = f"{bin_dir}:{env.env['PATH']}"
+    conda = env.ws / "miniforge3" / "etc" / "profile.d"
+    conda.mkdir(parents=True)
+    (conda / "conda.sh").write_text("conda() { echo \"conda $*\" >> \"$CALLS\"; }\n", encoding="utf-8")
+    photos = tmp_path / "data" / "phong1"
+    photos.mkdir(parents=True)
+    for index in range(12):
+        (photos / f"IMG_{index:04d}.jpg").write_bytes(b"jpg")
+    video = tmp_path / "data" / "video8.mp4"
+    video.write_bytes(b"mp4")
+    env.photos, env.video = photos, video
+    env.room = env.ws / "outputs" / "product"
+    return env

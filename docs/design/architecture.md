@@ -17,7 +17,8 @@ Tài liệu này ghi:
 SpatialRoom3D/
 ├── app/                         ứng dụng
 │   ├── cli/                       python -m app.cli <lệnh>: một lệnh cho mọi bước, gọi đúng script trong scripts/
-│   ├── web/                       giao diện web: chưa làm (giai đoạn 5), README giữ chỗ
+│   ├── web/                       trang web của sản phẩm (D22): server.py (server trên pod), uploads.py, rooms.py,
+│   │                              vendor.py (tải three.js, Spark ghim phiên bản), static/ (trang); app/web/README.md
 │   ├── notebooks/                 notebook chạy trên pod, sinh bằng build_notebooks.py (không sửa tay file .ipynb):
 │   │                              runpod.ipynb: code tổng (kiểm tra máy, kiểm tra truy cập repo, lấy code, cài môi trường, ...);
 │   │                              b0_inria.ipynb, gsplat_default.ipynb, gsplat_mcmc.ipynb: mỗi notebook chạy riêng
@@ -106,6 +107,7 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 ├── data/                           CHỈ dữ liệu gốc: bạn tự đưa lên, hoặc (benchmark) bước tải ghi khi bạn gọi; các bước khác
 │   │                               không ghi vào (ngoại lệ duy nhất: mục 3)
 │   ├── custom_scenes/<cảnh>/         ảnh JPG/JPEG/PNG tự chụp (nằm thẳng trong thư mục), hoặc file video
+│   ├── uploads/<phòng>/              video / ảnh tải lên từ trang web (app/web/uploads.py), chỉ tạo khi đã nhận đủ
 │   ├── benchmarks/
 │   │   ├── deep_blending/{drjohnson,playroom}/
 │   │   └── mipnerf360/<cảnh>/        (.sr3d_fetch.json: nguồn, SHA-256 của các lần tải)
@@ -126,7 +128,8 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 │   ├── reports/                      báo cáo (thực nghiệm: <tên bản>_<thời_gian>.*); reports/configs/: bản JSON của
 │   │                                 cấu hình benchmark và kế hoạch đã dùng
 │   ├── product/                      SẢN PHẨM (scripts/build_room.sh): <phòng>/{colmap,model,progress.json};
-│   │                                 web/ (thư mục tĩnh cho web: manifest.json, rooms/<phòng>/), docs/design/product.md
+│   │                                 web/ (thư mục tĩnh cho web: manifest.json, rooms/<phòng>/), docs/design/product.md;
+│   │                                 uploads/<id>/ (phiên tải lên đang nhận), server/ (mật khẩu, pid, cổng của trang web)
 │   ├── logs/                         log; logs/jobs/: log của việc chạy nền
 │   └── jobs/                         trạng thái việc chạy nền
 ├── miniforge3/                     env conda gs-inria, gs-gsplat, gs-tools
@@ -207,7 +210,7 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
 Repo này bắt đầu ngày 19/10/2026 bằng một commit duy nhất, từ bản cấu trúc hoàn chỉnh của repo trước `truong0809/3D-Indoor-Scene-Reconstruction-from-Images` (commit `8037a66` cùng các thay đổi chưa commit ngày 17–19/10/2026). Lịch sử trước đó nằm ở repo cũ; repo cũ và volume cũ không bị sửa.
 
 - Phần đã chạy trên pod ngày 17/10/2026 (cài 3 env, B0 Inria, gsplat `default` / `mcmc` trên Deep Blending, chạy nền và khóa GPU) được dời chỗ và đổi tên gói, không viết lại thuật toán. Hai chế độ, protocol và phiên bản CUDA / PyTorch / gsplat không đổi. Lệnh huấn luyện sinh ra cho Deep Blending giống lệnh đã chạy ngày 17/10/2026, chỉ khác đường dẫn và tên module (`tests/unit/test_benchmarks.py`).
-- Phần viết sau ngày 17/10/2026 đã chạy trên pod ngày 31/10/2026: cài 3 env, tải Mip-NeRF 360, thực nghiệm chính, dò tham số và lọc Gaussian, video phòng nhóm (`docs/ENVIRONMENT_AUDIT.md` mục 7). Chưa xác nhận trên pod: đầu vào thư mục ảnh, render lại / xuất PLY, CLI (`app/cli/main.py`), ô 1–3 bản mới của notebook (D19), luồng sản phẩm (`docs/design/product.md`); các phần này và các nhánh báo lỗi (ví dụ FAIL khi mô hình COLMAP không có điểm 3D) mới được kiểm thử trên CPU.
+- Phần viết sau ngày 17/10/2026 đã chạy trên pod ngày 31/10/2026: cài 3 env, tải Mip-NeRF 360, thực nghiệm chính, dò tham số và lọc Gaussian, video phòng nhóm (`docs/ENVIRONMENT_AUDIT.md` mục 7). Chưa xác nhận trên pod: đầu vào thư mục ảnh, render lại / xuất PLY, CLI (`app/cli/main.py`), ô 1–3 bản mới của notebook (D19), luồng sản phẩm (`docs/design/product.md`), trang web (`app/web/`); các phần này và các nhánh báo lỗi (ví dụ FAIL khi mô hình COLMAP không có điểm 3D) mới được kiểm thử trên CPU.
 - Đã bỏ: phần dời dữ liệu của volume cũ, mọi phần tương thích bố cục cũ, lấy code từ file ZIP. Repo này dùng volume mới, trống.
 
 Đối chiếu tên khi đọc báo cáo / log cũ:

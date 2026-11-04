@@ -2,7 +2,7 @@
 
 Luồng sản phẩm nhận **một video hoặc một thư mục ảnh** của căn phòng, dựng mô hình 3D bằng **mô hình chính** (một cấu hình duy nhất, chọn qua thực nghiệm), rồi xuất các file mà trang web đọc để xem phòng. Tài liệu này là hợp đồng giữa phần xử lý trên pod và phần web: file nào, nằm ở đâu, định dạng ra sao, hệ tọa độ nào, tiến độ đọc ở đâu.
 
-Trạng thái: **đã viết, đã kiểm thử bằng stub và đối chiếu với code thật của gsplat trên CPU (mục 7); chưa chạy trên GPU, chưa dựng phòng thật nào bằng luồng này, chưa có trang web đọc các file này.**
+Trạng thái: **đã viết, đã kiểm thử bằng stub và đối chiếu với code thật của gsplat trên CPU (mục 7); chưa chạy trên GPU, chưa dựng phòng thật nào bằng luồng này.** Trang web đọc các file này (tải ảnh / video lên, tiến độ, xem 3D: mục 8) đã viết và kiểm thử trên CPU, chưa chạy trên pod.
 
 ## 1. Mô hình chính
 
@@ -49,7 +49,8 @@ DRY_RUN=1 bash scripts/build_room.sh <nguồn> <phòng>   # chỉ kiểm tra đ�
 | Ảnh đầu vào (tách khung hoặc chuẩn hóa ảnh), COLMAP, báo cáo chất lượng; COLMAP FAIL thì dừng | có | `scripts/pipeline/prepare_scene.sh`, dùng chung với luồng thực nghiệm |
 | Train mô hình chính | có | `src/product/train_main.py` |
 | Xuất file web, thêm vào thư viện | có | `src/product/export_web.py` |
-| Cài môi trường trên pod, đưa video / ảnh lên volume, phục vụ thư mục web | **thủ công** | `scripts/pod/run_all.sh`; mục 4.6 |
+| Đưa video / ảnh lên volume và gọi lệnh dựng phòng | có, qua trang web (mục 8); hoặc chép tay rồi chạy lệnh trên | `app/web/` |
+| Cài môi trường trên pod, chạy server trang web, mở cổng HTTP của pod trên trang Runpod | **thủ công** | `scripts/pod/run_all.sh`, `scripts/web_server.sh`; mục 8 |
 
 - `--background`: chạy nền qua `scripts/pod/job.sh` (tên việc `room_<phòng>`); đang có việc khác dùng GPU thì xếp hàng.
 - Chạy lại an toàn. Phòng đã có COLMAP thì dùng lại (`--redo-colmap`: làm lại). Mô hình đã train từ đúng COLMAP đó với đúng cấu hình thì không train lại (`--retrain`: train lại), và không cần GPU: chỉ xuất lại file web. Kết quả cũ không bị xóa mà được đổi tên `model.prev_<thời gian>`; xóa tay khi cần chỗ trên volume (mỗi bản khoảng 0,5 GB với 1 triệu Gaussian).
@@ -168,12 +169,14 @@ Gaussian xếp theo thể tích × độ đục giảm dần, nên trình xem t�
 {
   "format_version": 1, "room": "phong1", "source_kind": "photos", "status": "running", "stage": "train",
   "stages": [
-    {"id": "images", "label": "Chuẩn hóa ảnh", "status": "done", "percent": null, "message": null},
-    {"id": "colmap", "label": "COLMAP: ước lượng camera", "status": "done", "percent": null, "message": null},
+    {"id": "images", "label": "Chuẩn hóa ảnh", "status": "done", "percent": null, "message": null,
+     "started_at": "…", "finished_at": "…"},
+    {"id": "colmap", "label": "COLMAP: ước lượng camera", "status": "done", "percent": null, "message": null,
+     "started_at": "…", "finished_at": "…"},
     {"id": "train", "label": "Train mô hình chính (mcmc)", "status": "running", "percent": 41.3,
-     "message": "Vòng 12.390/30.000 · 0,62 triệu Gaussian"},
+     "message": "Vòng 12.390/30.000 · 0,62 triệu Gaussian", "started_at": "…", "finished_at": null},
     {"id": "export", "label": "Xuất mô hình web và thêm vào thư viện", "status": "waiting", "percent": null,
-     "message": null}
+     "message": null, "started_at": null, "finished_at": null}
   ],
   "message": "Vòng 12.390/30.000 · 0,62 triệu Gaussian", "error": null, "job": "room_phong1",
   "log": "/workspace/outputs/logs/build_room_phong1_20261104_013000.log",
@@ -185,13 +188,14 @@ Gaussian xếp theo thể tích × độ đục giảm dần, nên trình xem t�
 - Trạng thái của từng bước: `waiting` | `running` | `done` | `skipped` (dùng lại COLMAP đã có) | `failed` | `stopped`.
 - Nhãn bước 1: `Tách khung ảnh từ video` hoặc `Chuẩn hóa ảnh`, theo loại nguồn.
 - `percent` chỉ có ở bước train, ghi tối đa mỗi 5 giây. Nên đọc lại file mỗi 2–5 giây.
+- `started_at` / `finished_at` của từng bước: thời gian thật của mỗi bước (tách khung, COLMAP, train, xuất), dùng cho câu hỏi "chạy mất bao lâu". Bước bỏ qua (dùng lại COLMAP) hoặc chưa chạy thì là `null`.
 - Việc nền bị dừng khi còn xếp hàng thì không ai ghi file này. Trạng thái thật của việc nằm ở `$WS/outputs/jobs/room_<phòng>.state` (dòng `state=` cuối cùng; `scripts/pod/job.sh status room_<phòng>`).
 
 ### 4.6 Phục vụ file
 
-`web/` là thư mục tĩnh: bất kỳ web server tĩnh nào cũng phục vụ được, hoặc có thể chép nguyên sang nơi đặt trang web. Ví dụ, để thử trên pod: `python3 -m http.server 8000 --directory /workspace/outputs/product/web`, rồi mở cổng HTTP 8000 của pod.
+`web/` là thư mục tĩnh: bất kỳ web server tĩnh nào cũng phục vụ được, hoặc có thể chép nguyên sang nơi đặt trang web. Server của trang web (mục 8) phục vụ thư mục này ở `/web/...`, cùng các API tải lên và tiến độ.
 
-Lưu ý với Runpod: [tài liệu của Runpod](https://docs.runpod.io/pods/configuration/expose-ports) ghi proxy HTTP (Cloudflare) giới hạn mỗi kết nối 100 giây, quá thì lỗi 524. Tài liệu không nói rõ giới hạn tính đến lúc máy chủ bắt đầu trả lời hay đến khi tải xong. Để chắc, nên tải xong file 32 MB trong 100 giây, tức đường truyền từ khoảng 0,5 MB/s. Việc dựng phòng luôn chạy nền, trang web chỉ đọc `progress.json`. Địa chỉ proxy công khai, không có đăng nhập, nên chỉ dùng cho dữ liệu demo. Phần tải video / ảnh lên từ trang web, gọi `build_room.sh` từ web và tự dừng pod **chưa làm**.
+Lưu ý với Runpod: [tài liệu của Runpod](https://docs.runpod.io/pods/configuration/expose-ports) ghi proxy HTTP (Cloudflare) giới hạn mỗi kết nối 100 giây, quá thì lỗi 524. Tài liệu không nói rõ giới hạn tính đến lúc máy chủ bắt đầu trả lời hay đến khi tải xong. Để chắc, nên tải xong file 32 MB trong 100 giây, tức đường truyền từ khoảng 0,5 MB/s. Vì vậy trang web tải video / ảnh lên theo từng phần 8 MiB, và việc dựng phòng luôn chạy nền: trang chỉ đọc `progress.json`. Địa chỉ proxy công khai, nên server cần mật khẩu (mục 8) và chỉ dùng cho dữ liệu demo. Tự dừng pod khi xong việc **chưa làm** trên trang web (`AUTO_STOP=1` của `job.sh` chưa thử trên pod).
 
 ## 5. Giới hạn, việc chưa làm
 
@@ -199,7 +203,7 @@ Lưu ý với Runpod: [tài liệu của Runpod](https://docs.runpod.io/pods/con
 - `.splat` bỏ SH bậc 1–3 (mục 4.3). Đơn vị tương đối (mục 4.4).
 - `cap_max` cố định 1 triệu: ảnh hưởng tới chất lượng trên phòng lớn chưa đo (mục 2).
 - Chưa chạy trên GPU; chưa đo thời gian và dung lượng của cả luồng trên một phòng thật.
-- Chưa có trang web, API tải lên, xác thực.
+- Trang web (mục 8): chưa chạy trên pod; tải lên qua proxy của Runpod và FPS trên máy thật chưa đo. Chưa có trang Kết quả thực nghiệm của bản thiết kế, chưa tự dừng pod.
 
 ## 6. Đọc code
 
@@ -243,4 +247,28 @@ Ngoài repo, ngày 04/11/2026, trên CPU với PyTorch 2.7.1 và mã nguồn gsp
 - `.splat`: 20.000 Gaussian ngẫu nhiên, PLY do `export_splats` của gsplat ghi. 19.110 bản ghi trùng từng byte RGBA và quaternion với `export_splats(format="splat")` của gsplat. Độ lớn lệch trong mức làm tròn float32. Chỉ khác thứ tự, và 890 Gaussian có A = 0 bị bỏ.
 - `cameras.json`: cảnh COLMAP tổng hợp, thế giới COLMAP xoay / co giãn / dời ngẫu nhiên, `Parser` thật của gsplat. Chiếu các điểm khởi tạo Gaussian (đã chuẩn hóa) qua camera trong `cameras.json` ra đúng pixel quan sát gốc, sai số ≤ 0,001 px. `up` lệch hướng lên thật 0,06°. Lần đầu, cảnh tổng hợp có hướng lên đúng bằng +y đã làm lộ nhánh phản xạ trong phép chuẩn hóa của gsplat. Trường `right_handed` và cảnh báo của mục 4.4 được thêm từ đó.
 
-Chưa chạy: train trên GPU, một phòng thật, trình xem web.
+Chưa chạy: train trên GPU, một phòng thật, trang web trên pod.
+
+## 8. Trang web
+
+Code: `app/web/` (cách chạy, bảng file: `app/web/README.md`). Server HTTP chỉ dùng thư viện chuẩn Python, chạy trên pod cạnh luồng sản phẩm; trang tĩnh dùng three.js 0.180.0 và [Spark](https://github.com/sparkjsdev/spark) 2.4.0 (MIT, WebGL2) để vẽ `model.splat`, ghim phiên bản và mã kiểm tra ở `configs/environment/web_viewer.lock.json`.
+
+```bash
+bash scripts/web_server.sh start     # trên pod; rồi Edit Pod -> Expose HTTP Ports: 8000; mở https://<POD_ID>-8000.proxy.runpod.net
+```
+
+| Bước của người dùng | Trang | Phía server |
+|---|---|---|
+| Chọn video hoặc nhiều ảnh, đặt tên | Dựng phòng mới | kiểm tra như `build_room.sh` (loại file, ≥ 10 ảnh, tên phòng chưa dùng) trước khi nhận dữ liệu |
+| Tải lên | Dựng phòng mới | nhận từng phần ≤ 8 MiB đúng thứ tự (`offset`), phần lỗi gửi lại; đủ thì chuyển sang `$WS/data/uploads/<phòng>/` |
+| Bắt đầu dựng | → Tiến độ | `scripts/build_room.sh <nguồn> <phòng> --name <tên> --background` (việc nền `room_<phòng>`, xếp hàng chờ GPU); lỗi đầu vào của script trả về đúng câu báo lỗi |
+| Theo dõi | Tiến độ | đọc `progress.json` (bước, %, thời gian từng bước), cuối log, trạng thái việc nền (pod tắt giữa chừng: "bị gián đoạn"); hủy = `job.sh stop`; dựng lại = `build_room.sh` với nguồn đã tải lên (dùng lại ảnh và COLMAP đã xong) |
+| Xem | Xem 3D | `manifest.json`, `model.splat`, `cameras.json` (mục 4); tải `.splat`, PLY đầy đủ |
+
+Trình xem không xoay mô hình: camera three.js đặt theo `cameras.json` (khung OpenCV: phải = forward × up, lên = up, nhìn theo forward). Ba chế độ: xoay quanh (mở đúng góc `default_view`), đi bộ (hướng lên là `up` của phòng, giới hạn trong hộp bao các camera nới 0,25 × `scene_radius` giao với `bounds`), tham quan (đường Catmull-Rom qua vị trí các khung, hướng nhìn làm mượt). Mức chất lượng Vừa / Nhẹ vẽ 50 % / 20 % Gaussian đầu file, tức các Gaussian lớn và đục nhất (thứ tự của mục 4.3).
+
+Bảo mật: link proxy công khai nên mọi thứ trừ khung trang cần mật khẩu. Đăng nhập cấp một phiên ngẫu nhiên giữ trong bộ nhớ của server (cookie HttpOnly, SameSite=Strict, tối đa 200 phiên; đăng xuất hoặc khởi động lại server là hết hiệu lực); request ghi phải có header `X-SR3D: 1`; file chỉ đọc trong thư mục của nó, không đọc file ẩn; tên file tải lên được làm sạch, tên phòng theo quy tắc của `build_room.sh` (không dùng được `web`, `uploads`, `server`); tối đa 3 lượt tải lên dở cùng lúc. Không mật khẩu chỉ cho chế độ chỉ xem trên `127.0.0.1`. Request lạ (mật khẩu ngoài ASCII, `Content-Length` sai, đường dẫn có ký tự NUL) được trả 4xx, không làm lỗi server.
+
+Câu trả lời của `build_room.sh --background` không phải lúc nào cũng là "đã chạy": `job.sh` trả mã 0 khi việc cũ cùng tên còn sống ("không chạy thêm bản thứ hai"), và lệnh có thể chậm. Server coi câu đó là lỗi, chỉ chờ 80 giây (dưới giới hạn 100 giây của proxy), hết giờ thì xem việc nền `room_<phòng>` đã có chưa: có thì coi như đã xếp hàng, chưa thì báo lỗi và xóa nguồn vừa tải lên. Dựng lại bị từ chối khi tiến trình của việc cũ còn sống; `progress.json` còn ghi "đang chạy" của một lần dựng đã mất (pod tắt) thì được ghi "đã dừng" trước, để `progress.py queue` ghi được lần xếp hàng mới.
+
+Kiểm thử (CPU, `app/web/README.md` mục Kiểm thử): API qua HTTP thật; trọn luồng tải video lên → `build_room.sh` thật → `train_main.py` / `export_web.py` thật (gsplat giả) → phòng trong thư viện; script `web_server.sh`; trong Chromium headless (WebGL2 bằng SwiftShader): tải 12 ảnh lên → tiến độ → xem 3D, và điểm mốc của phòng tổng hợp hiện đúng pixel mà `cameras.json` tính ra (trung vị sai lệch ≤ 3 px). Lỗi tìm được nhờ test: lệnh `web_server.sh start` không trả về khi đầu ra là pipe (vd. ô `!` của Jupyter), đã sửa. Một lượt rà soát bảo mật độc lập phần server (04/11/2026) không thấy lỗi mức cao; các lỗi mức trung bình / thấp đã sửa, mỗi lỗi có test: request lạ gây lỗi 500 (mật khẩu ngoài ASCII, `Content-Length` như "²", đường dẫn có NUL hoặc tên quá dài), dựng lại báo "đã bắt đầu" khi `job.sh` không chạy gì, cookie là giá trị cố định suy ra từ mật khẩu (đăng xuất không thu hồi được), tên hiển thị bắt đầu bằng "-" làm `export_web.py` lỗi, `web_server.sh run` mang token của việc nền đang gọi nó, `status` in sai cổng khi `PORT` khác lúc `start`. Tìm thêm khi viết test cho các lỗi đó: lỗi 411 / 413 của body JSON bị báo thành "JSON không hợp lệ".
