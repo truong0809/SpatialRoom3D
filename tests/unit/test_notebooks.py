@@ -57,7 +57,7 @@ def test_the_notebooks_in_the_repo_are_the_generated_ones(tmp_path):
 
 
 def test_the_setup_cells_are_the_same_in_every_notebook():
-    reference = cells("runpod.ipynb")[1:11]  # ô 1–5 (tiêu đề và mã): máy, khóa deploy, code, môi trường, theo dõi
+    reference = cells("runpod.ipynb")[1:11]  # ô 1–5 (tiêu đề và mã): máy, truy cập repo, code, môi trường, theo dõi
     for name in METHOD_FILES.values():
         assert [dict(cell, id=None) for cell in cells(name)[1:11]] == [dict(cell, id=None) for cell in reference], name
     stop = code_after("runpod.ipynb", "11. Dừng")

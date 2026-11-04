@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng: ảnh chụp hoặc video → mô hình 3DGS
 
-_Cập nhật: 28/10/2026_
+_Cập nhật: 31/10/2026_
 
 Giao diện hiện có:
 - notebook `app/notebooks/runpod.ipynb`, chạy trong Jupyter của pod Runpod; ba notebook `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` chạy riêng từng phương pháp của thực nghiệm chính (mục 5.1.1);
@@ -8,11 +8,21 @@ Giao diện hiện có:
 
 **Chưa có web app** (`app/web/README.md`; `docs/PROJECT_PLAN.md` mục 1.5: upload qua web là mở rộng có điều kiện).
 
-## 1. Chuẩn bị một lần: volume, pod, khóa GitHub
+## 1. Chuẩn bị một lần: volume, pod, lấy code
 
 ### 1.1 Network volume
 
-Runpod → **Storage → New Network Volume**: ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; chạy cả dò tham số và vòng ghép ở mục 5.2 rồi thêm chế độ mới vào thực nghiệm chính thì nên 170 GB; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
+Runpod → **Storage → New Network Volume**, chọn loại **Network volume** (không chọn Global volume, mục dưới): ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; chạy cả dò tham số và vòng ghép ở mục 5.2 rồi thêm chế độ mới vào thực nghiệm chính thì nên 170 GB; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
+
+Volume phải cho đổi quyền file (`chmod`): git, conda và pip đều cần. Runpod có ba loại:
+
+| Loại | Dùng được | Ghi chú |
+|---|---|---|
+| Network volume (một data center) | Có | Loại đã chạy ngày 17/10/2026 ở EU-RO-1 (`docs/ENVIRONMENT_AUDIT.md` mục 7) |
+| Global volume (beta, mọi data center) | Không nên | Runpod ghi "not built for frequent writes". Ngày 31/10/2026, một volume mới tạo ở data center khác báo `chmod ... Operation not permitted` và `git clone` hỏng; nhiều khả năng đó là loại này, chưa xác nhận (`docs/ENVIRONMENT_AUDIT.md` mục 6) |
+| Volume disk (gắn với pod) | Có, khi data center không có network volume | Ổ của chính pod: Terminate pod là mất hết, nên chạy ô 10 và tải gói kết quả về trước; bật lại phải chờ đúng máy đó còn GPU trống. Ô 1 sẽ cảnh báo vì không phải network volume |
+
+Ô 1 kiểm tra `chmod` trên `/workspace` và báo ✗ khi volume không cho đổi quyền.
 
 ### 1.2 Pod
 
@@ -26,14 +36,15 @@ Runpod → **Storage → New Network Volume**: ≥ 100 GB (thực nghiệm chín
 
 Ô 1 của notebook kiểm tra các điều kiện này và báo dòng nào chưa đạt.
 
-### 1.3 Khóa deploy cho repo private
+### 1.3 Lấy code
 
-Repo `truong0809/SpatialRoom3D` là private. Pod đọc repo bằng một **deploy key chỉ đọc**, tạo ở ô 2 của notebook:
-1. Chạy ô 2: tạo khóa `/workspace/.ssh/github_deploy` (nếu chưa có) và in **khóa công khai**.
-2. Trên GitHub: repo `SpatialRoom3D` → **Settings → Deploy keys → Add deploy key**, dán dòng khóa công khai, **không** tick "Allow write access".
-3. Chạy lại ô 2: dòng cuối phải là `✓ GitHub nhận khóa`.
+Repo `truong0809/SpatialRoom3D` là public (từ 31/10/2026). Pod lấy code qua HTTPS, không cần khóa hay đăng nhập:
+1. Ô 2: kiểm tra pod đọc được nhánh `main`; dòng cuối phải là `✓ Đọc được https://github.com/truong0809/SpatialRoom3D.git`.
+2. Ô 3: clone vào `/workspace/SpatialRoom3D`, hoặc `git pull` nếu đã có.
 
-Khóa nằm trên volume: mỗi volume chỉ cần làm một lần. Không bao giờ gửi thư mục `/workspace/.ssh` cho ai; gói kết quả (mục 7) không chứa nó.
+Không dùng notebook cũng được: `git clone -b main https://github.com/truong0809/SpatialRoom3D.git /workspace/SpatialRoom3D`.
+
+Bản clone cũ dùng địa chỉ SSH (thời repo còn private, đọc bằng khóa deploy) được ô 3 tự đổi sang HTTPS. Thư mục `/workspace/.ssh` trên volume cũ và khóa deploy trên GitHub (Settings → Deploy keys) không còn dùng; giữ hay xóa là tùy bạn.
 
 ## 2. Notebook `runpod.ipynb`: chạy ô nào, khi nào
 
@@ -55,9 +66,9 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 
 | Ô | Việc | GPU |
 |---|---|---|
-| 1 | Kiểm tra máy: GPU, driver, `nvcc`, gcc, VRAM, `/workspace` là network volume, PyYAML, git | Không |
-| 2 | Khóa deploy (mục 1.3) | Không |
-| 3 | Lấy code: chưa có thì clone nhánh `main` vào `/workspace/SpatialRoom3D`; đã có thì `git pull --ff-only`. Code trên pod có thay đổi chưa commit thì **không cập nhật** và in danh sách (không xóa, không cất gì). Không chạy khi đang có việc nền | Không |
+| 1 | Kiểm tra máy: GPU, driver, `nvcc`, gcc, VRAM, `/workspace` là network volume và cho đổi quyền file (`chmod`), PyYAML, git | Không |
+| 2 | Kiểm tra pod đọc được repo qua HTTPS (mục 1.3) | Không |
+| 3 | Lấy code: chưa có thì clone nhánh `main` qua HTTPS vào `/workspace/SpatialRoom3D`; đã có thì `git pull --ff-only`. Code trên pod có thay đổi chưa commit thì **không cập nhật** và in danh sách (không xóa, không cất gì). Không chạy khi đang có việc nền | Không |
 | 4 | Cài môi trường ở nền: `scripts/pod/run_all.sh` (env `gs-inria`, `gs-tools`, `gs-gsplat`, kèm smoke test). **Không train.** Lần đầu khoảng 80 phút (đo ngày 17/10/2026 trên RTX 4090) | Có (smoke test) |
 | 5 | Theo dõi việc nền, cập nhật mỗi 15 giây; tự dừng khi hết việc | Không |
 | 6 | Kiểm tra dữ liệu (chỉ đọc): thư mục gốc của từng bộ dữ liệu, từng cảnh có `images/` và `sparse/0/` không | Không |
@@ -369,7 +380,8 @@ Gói kết quả gồm báo cáo (kèm ảnh biểu đồ so sánh trong `output
 
 | Thấy trong log / ô | Cách xử lý |
 |---|---|
-| `✗ GitHub chưa nhận khóa`, `Permission denied (publickey)` (ô 2, 3) | Khóa công khai chưa được thêm vào Deploy keys của **đúng** repo `SpatialRoom3D`: thêm rồi chạy lại ô 2 |
+| `✗ /workspace không cho đổi quyền file (chmod)` (ô 1), `chmod ... Operation not permitted`, `could not set 'core.filemode'` (git) | Volume không cho đổi quyền file (vd. Global volume): dùng Network volume hoặc Volume disk (mục 1.1) |
+| `✗ Không đọc được` (ô 2), `Không clone được` (ô 3) | Pod không ra được mạng, hoặc repo không còn public (GitHub: Settings → General, cuối trang): sửa rồi chạy lại ô 2 |
 | `Code trên pod có thay đổi chưa commit` (ô 3) | Có file trong `/workspace/SpatialRoom3D` bị sửa (vd. mở notebook trong repo): xem `git -C /workspace/SpatialRoom3D status`, tự quyết định giữ hay bỏ |
 | `no Python with PyYAML` | `python3 -m pip install pyyaml`, hoặc chờ ô 4 cài xong env `gs-gsplat` |
 | `driver supports CUDA 12.6 < 12.8` | Ô 4: đặt `TORCH_CUDA_OVERRIDE="cu126"`, chạy lại ô 4 |
@@ -398,7 +410,7 @@ Gói kết quả gồm báo cáo (kèm ảnh biểu đồ so sánh trong `output
 | `anchor occurs 0 time(s)` (bản sao có vá của trainer) | `examples/simple_trainer.py` không phải bản của gsplat @6e8c837 mà biến thể có code được viết cho: cài lại gsplat bằng `scripts/setup/setup_gsplat.sh` |
 | `the thresholds remove every Gaussian`, `evaluation of the filtered model failed` (lọc Gaussian) | Ngưỡng quá chặt: giảm `MIN_OPACITY` hoặc tăng `MAX_SCALE`. Lỗi chấm lại: xem `<lượt>/filtered/eval.log`; lượt gốc không bị ảnh hưởng |
 | `COLMAP model ... changed after this run was trained` (render lại) | Cảnh đã làm lại COLMAP sau lượt này: chạy ô 8 với `SOURCE = "-"` và `SCENE` của cảnh (lượt làm từ mô hình cũ tự được train lại), rồi render lượt mới; xuất PLY của lượt cũ vẫn được (`XUAT_PLY`) |
-| Lỗi khác | Chạy ô 10 và gửi gói `ket_qua_*.tar.gz` (không gửi `/workspace/.ssh`) |
+| Lỗi khác | Chạy ô 10 và gửi gói `ket_qua_*.tar.gz` |
 
 Sự cố môi trường đã biết: `docs/ENVIRONMENT_AUDIT.md` mục 6.
 

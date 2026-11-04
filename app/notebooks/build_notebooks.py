@@ -4,7 +4,7 @@
 - b0_inria.ipynb, gsplat_default.ipynb, gsplat_mcmc.ipynb: mỗi notebook chạy riêng một phương pháp của thực nghiệm chính
   (scripts/pod/run_experiment.sh main --only <phương pháp>), cùng dữ liệu, protocol và thư mục kết quả với code tổng.
 
-Các ô chung (kiểm tra máy, khóa deploy, lấy code, cài môi trường, theo dõi, gói kết quả, dừng) lấy từ cùng một nguồn nên
+Các ô chung (kiểm tra máy, kiểm tra truy cập repo, lấy code, cài môi trường, theo dõi, gói kết quả, dừng) lấy từ cùng một nguồn nên
 giống hệt nhau giữa các notebook (tests/unit/test_notebooks.py kiểm).
 
     python3 app/notebooks/build_notebooks.py           # ghi lại các notebook
@@ -20,10 +20,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 CODE = "/workspace/SpatialRoom3D"
-REPO_SSH = "git@github.com:truong0809/SpatialRoom3D.git"
+REPO_URL = "https://github.com/truong0809/SpatialRoom3D.git"  # repo public: đọc qua HTTPS, không cần khóa
+OLD_SSH_URL = "git@github.com:truong0809/SpatialRoom3D.git"  # remote của bản clone thời repo private (khóa deploy)
 MAIN_NAME = "main"  # tên bản của code tổng (cả kế hoạch main): việc nền, báo cáo, gói kết quả main_<thời gian>
-SSH_CMD = ('SSH_CMD="ssh -i $KEY -o IdentitiesOnly=yes -o UserKnownHostsFile=/workspace/.ssh/known_hosts '
-           '-o StrictHostKeyChecking=accept-new"')
 
 
 class Notebook:
@@ -35,7 +34,8 @@ class Notebook:
         self.cells.append({"cell_type": "markdown", "metadata": {}, "source": text.strip("\n").splitlines(keepends=True)})
 
     def code(self, text: str) -> None:
-        text = text.replace("@CODE@", CODE).replace("@REPO_SSH@", REPO_SSH).replace("@SHOW_REPORT@", SHOW_REPORT)
+        text = (text.replace("@CODE@", CODE).replace("@REPO_URL@", REPO_URL).replace("@OLD_SSH_URL@", OLD_SSH_URL)
+                .replace("@SHOW_REPORT@", SHOW_REPORT))
         self.cells.append({"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [],
                            "source": text.strip("\n").splitlines(keepends=True)})
 
@@ -88,64 +88,55 @@ case "$fst" in
   fuse*) echo "✓ /workspace là network volume" ;;
   *) echo "! /workspace là ổ '${fst:-?}', không phải network volume: Terminate pod sẽ mất dữ liệu" ;;
 esac
+probe=/workspace/.sr3d_chmod_probe_$$
+if touch "$probe" 2>/dev/null && chmod 755 "$probe" 2>/dev/null && [ -x "$probe" ]; then
+  echo "✓ /workspace cho đổi quyền file (chmod)"
+else
+  echo "✗ /workspace không cho đổi quyền file (chmod): git, conda, pip không chạy được ở đây; dùng volume khác (docs/ENVIRONMENT_AUDIT.md mục 6)"; ok=0
+fi
+rm -f "$probe"
 if python3 -c 'import yaml' 2>/dev/null; then echo "✓ python3 có PyYAML (đọc configs/*.yaml)"
 else echo "! python3 chưa có PyYAML: chạy 'python3 -m pip install pyyaml', hoặc chờ ô 4 cài xong env gs-gsplat (có sẵn PyYAML)"; fi
-command -v git > /dev/null && command -v ssh-keygen > /dev/null && echo "✓ git, ssh có sẵn" || { echo "✗ thiếu git hoặc ssh"; ok=0; }
+command -v git > /dev/null && echo "✓ git có sẵn" || { echo "✗ thiếu git"; ok=0; }
 [ -d /workspace/miniforge3 ] && echo "! volume đã có /workspace/miniforge3 (không phải volume trống?)" || echo "✓ volume trống: ô 4 sẽ cài môi trường"
 if [ "$ok" = 1 ]; then echo "=> ĐẠT: chạy tiếp ô 2"; else echo "=> CHƯA ĐẠT: sửa các dòng ✗ trước"; fi
 """)
 
 
-def deploy_key(nb: Notebook) -> None:
+def repo_access(nb: Notebook) -> None:
     nb.md("""
-## 2. Khóa deploy cho repo private (một lần cho mỗi volume)
+## 2. Kiểm tra pod đọc được repo
 
-Repo `SpatialRoom3D` là private. Pod đọc repo bằng một **deploy key chỉ đọc**: khóa chỉ mở được đúng repo này, không push được.
-
-1. Chạy ô này: tạo khóa trong `/workspace/.ssh` (nếu chưa có) và in **khóa công khai**.
-2. Trên GitHub: repo `SpatialRoom3D` → **Settings → Deploy keys → Add deploy key**, dán dòng khóa công khai, **không** tick "Allow write access".
-3. Chạy lại ô này: dòng cuối phải là `✓ GitHub nhận khóa`.
-
-Khóa riêng nằm trên volume (còn khi Terminate pod), không bao giờ được in hay gửi đi.
+Repo `SpatialRoom3D` là public: pod lấy code qua HTTPS, không cần khóa hay đăng nhập. Ô này chỉ kiểm tra pod đọc được nhánh `main` trên GitHub, không ghi gì.
 """)
     nb.code(r"""
 %%bash
-KEY=/workspace/.ssh/github_deploy
-mkdir -p /workspace/.ssh && chmod 700 /workspace/.ssh
-if [ -f "$KEY" ]; then
-  echo "Khóa đã có: $KEY (không tạo lại)"
+REPO_URL="@REPO_URL@"
+if head=$(GIT_TERMINAL_PROMPT=0 timeout 60 git ls-remote "$REPO_URL" refs/heads/main 2>&1) && [ -n "$head" ]; then
+  echo "✓ Đọc được $REPO_URL (main: ${head:0:7}): chạy tiếp ô 3"
 else
-  ssh-keygen -t ed25519 -N "" -C "runpod-spatialroom3d" -f "$KEY" -q && echo "Đã tạo khóa mới: $KEY"
+  echo "✗ Không đọc được $REPO_URL:"
+  echo "$head" | grep -m 3 -i -E "fatal|error" || echo "$head" | tail -n 3
+  echo "Kiểm tra mạng của pod, và repo trên GitHub vẫn để public (Settings → General, cuối trang)"
 fi
-chmod 600 "$KEY"
-echo
-echo "Khóa công khai, dán vào GitHub (SpatialRoom3D → Settings → Deploy keys → Add deploy key, KHÔNG tick 'Allow write access'):"
-cat "$KEY.pub"
-echo
-@SSH_CMD@
-if $SSH_CMD -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-  echo "✓ GitHub nhận khóa: chạy tiếp ô 3"
-else
-  echo "✗ GitHub chưa nhận khóa: thêm khóa công khai ở trên vào Deploy keys của repo SpatialRoom3D, rồi chạy lại ô này"
-fi
-""".replace("@SSH_CMD@", SSH_CMD))
+""")
 
 
 def fetch_code(nb: Notebook) -> None:
     nb.md("""
 ## 3. Lấy code vào `/workspace/SpatialRoom3D`
 
-- Chưa có: clone nhánh `BRANCH` từ GitHub bằng khóa của ô 2.
-- Đã có: `git pull` (chỉ tiến lên, không ghi đè). Code trên pod có thay đổi chưa commit thì **không cập nhật** và in danh sách thay đổi; ô này không xóa hay cất gì.
+- Chưa có: clone nhánh `BRANCH` từ GitHub qua HTTPS.
+- Đã có: `git pull` (chỉ tiến lên, không ghi đè). Code trên pod có thay đổi chưa commit thì **không cập nhật** và in danh sách thay đổi; ô này không xóa hay cất gì. Bản clone cũ dùng địa chỉ SSH (thời repo còn private, cần khóa deploy) được đổi sang HTTPS.
 - Không chạy khi đang có việc nền.
 """)
     nb.code(r"""
 %%bash
-REPO_SSH="@REPO_SSH@"
+REPO_URL="@REPO_URL@"
+OLD_SSH_URL="@OLD_SSH_URL@"
 BRANCH="main"
 CODE=@CODE@
-KEY=/workspace/.ssh/github_deploy
-@SSH_CMD@
+export GIT_TERMINAL_PROMPT=0
 if [ -f "$CODE/scripts/pod/job.sh" ] && bash "$CODE/scripts/pod/job.sh" busy; then
   echo "Đang có việc chạy nền: không đổi code lúc này (xem ô 5)"; exit 0
 fi
@@ -157,18 +148,20 @@ if [ -d "$CODE/.git" ]; then
     echo "Xem: git -C $CODE status"
     exit 1
   fi
-  GIT_SSH_COMMAND="$SSH_CMD" git -C "$CODE" pull --ff-only origin "$BRANCH" || { echo "Không cập nhật được (xem lỗi ở trên)"; exit 1; }
+  if [ "$(git -C "$CODE" config --get remote.origin.url)" = "$OLD_SSH_URL" ]; then
+    git -C "$CODE" remote set-url origin "$REPO_URL" && echo "Đã đổi remote origin sang $REPO_URL (không cần khóa deploy)"
+  fi
+  git -C "$CODE" pull --ff-only origin "$BRANCH" || { echo "Không cập nhật được (xem lỗi ở trên)"; exit 1; }
 elif [ -e "$CODE" ]; then
   echo "$CODE đã có nhưng không phải repo Git: đổi tên hoặc xem lại, rồi chạy lại ô này"; exit 1
 else
-  GIT_SSH_COMMAND="$SSH_CMD" git clone -q -b "$BRANCH" "$REPO_SSH" "$CODE" \
-    || { echo "Không clone được: chạy lại ô 2 (khóa deploy) và kiểm tra tên repo"; exit 1; }
-  git -C "$CODE" config core.sshCommand "$SSH_CMD"
-  echo "Đã clone $REPO_SSH (nhánh $BRANCH) vào $CODE"
+  git clone -q -b "$BRANCH" "$REPO_URL" "$CODE" \
+    || { echo "Không clone được: chạy ô 2 để kiểm tra pod đọc được repo"; exit 1; }
+  echo "Đã clone $REPO_URL (nhánh $BRANCH) vào $CODE"
 fi
 mkdir -p /workspace/data/custom_scenes /workspace/outputs
 echo "Commit: $(git -C "$CODE" log --oneline -1)"
-""".replace("@SSH_CMD@", SSH_CMD))
+""")
 
 
 def setup(nb: Notebook) -> None:
@@ -287,7 +280,8 @@ nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader
 
 # ------------------------------------------------------------------------------------------------- khi gặp lỗi
 COMMON_ROWS = [
-    "| `✗ GitHub chưa nhận khóa`, `Permission denied (publickey)` (ô 2, 3) | Khóa công khai chưa được thêm vào Deploy keys của **đúng** repo `SpatialRoom3D`: thêm rồi chạy lại ô 2 |",
+    "| `✗ /workspace không cho đổi quyền file (chmod)` (ô 1), `chmod ... Operation not permitted`, `could not set 'core.filemode'` (git) | Volume không cho đổi quyền file (vd. Global volume): dùng Network volume hoặc Volume disk (`docs/USAGE_GUIDE.md` mục 1.1) |",
+    "| `✗ Không đọc được` (ô 2), `Không clone được` (ô 3) | Pod không ra được mạng, hoặc repo không còn public (GitHub: Settings → General, cuối trang): sửa rồi chạy lại ô 2 |",
     "| `Code trên pod có thay đổi chưa commit` (ô 3) | Có file trong `/workspace/SpatialRoom3D` bị sửa (vd. mở notebook trong repo): xem `git -C /workspace/SpatialRoom3D status`, tự quyết định giữ hay bỏ |",
     "| `no Python with PyYAML` | `python3 -m pip install pyyaml`, hoặc chờ ô 4 cài xong env gs-gsplat |",
     '| `driver supports CUDA 12.6 < 12.8` | Ô 4: đặt `TORCH_CUDA_OVERRIDE="cu126"`, chạy lại ô 4 |',
@@ -354,8 +348,7 @@ Notebook này nằm trong repo (`app/notebooks/runpod.ipynb`), dùng cho **pod m
 │   ├── checkpoints/                 PLY đã xuất để tải về / xem 3D (gsplat_<chế độ>_<cảnh>_s<seed>.ply)
 │   ├── panels/                      ảnh so sánh các lượt, video xếp chồng (ô 7, ô 9)
 │   ├── logs/, reports/, jobs/       log, báo cáo (<tên bản>_<thời gian>.md), trạng thái việc chạy nền
-├── miniforge3/, code/    env conda, mã nguồn 3DGS Inria và gsplat (ô 4 cài)
-└── .ssh/                 khóa deploy chỉ đọc (ô 2); không bao giờ gửi thư mục này cho ai
+└── miniforge3/, code/    env conda, mã nguồn 3DGS Inria và gsplat (ô 4 cài)
 ```
 
 | Lúc nào | Chạy các ô |
@@ -379,7 +372,7 @@ Notebook này nằm trong repo (`app/notebooks/runpod.ipynb`), dùng cho **pod m
 - Cùng các lệnh này bằng dòng lệnh: `cd /workspace/SpatialRoom3D && python3 -m app.cli --help` (hướng dẫn: `docs/USAGE_GUIDE.md`).
 """)
     machine(nb)
-    deploy_key(nb)
+    repo_access(nb)
     fetch_code(nb)
     setup(nb)
     monitor(nb)
@@ -722,7 +715,7 @@ Notebook này nằm trong repo (`app/notebooks/{info['file']}`). Nó chạy riê
 - Xong việc: tải gói `ket_qua_{label}_<thời gian>.tar.gz` (ô {numbers['pack']} in đường dẫn), rồi **Terminate pod**. Dữ liệu trên volume vẫn còn.
 """)
     machine(nb)
-    deploy_key(nb)
+    repo_access(nb)
     fetch_code(nb)
     setup(nb)
     monitor(nb)

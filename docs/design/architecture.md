@@ -19,7 +19,7 @@ SpatialRoom3D/
 │   ├── cli/                       python -m app.cli <lệnh>: một lệnh cho mọi bước, gọi đúng script trong scripts/
 │   ├── web/                       giao diện web: chưa làm (giai đoạn 5), README giữ chỗ
 │   ├── notebooks/                 notebook chạy trên pod, sinh bằng build_notebooks.py (không sửa tay file .ipynb):
-│   │                              runpod.ipynb: code tổng (kiểm tra máy, khóa deploy, lấy code, cài môi trường, ...);
+│   │                              runpod.ipynb: code tổng (kiểm tra máy, kiểm tra truy cập repo, lấy code, cài môi trường, ...);
 │   │                              b0_inria.ipynb, gsplat_default.ipynb, gsplat_mcmc.ipynb: mỗi notebook chạy riêng
 │   │                              một phương pháp của thực nghiệm chính (run_experiment.sh main --only <b0|default|mcmc>)
 │   └── __init__.py
@@ -97,7 +97,7 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 
 ```
 /workspace/
-├── SpatialRoom3D/                  code (repo Git, clone bằng deploy key: docs/ENVIRONMENT_AUDIT.md mục 2)
+├── SpatialRoom3D/                  code (repo Git, clone qua HTTPS: docs/ENVIRONMENT_AUDIT.md mục 2)
 ├── data/                           CHỈ dữ liệu gốc: bạn tự đưa lên, hoặc (benchmark) bước tải ghi khi bạn gọi; các bước khác
 │   │                               không ghi vào (ngoại lệ duy nhất: mục 3)
 │   ├── custom_scenes/<cảnh>/         ảnh JPG/JPEG/PNG tự chụp (nằm thẳng trong thư mục), hoặc file video
@@ -125,8 +125,7 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 ├── miniforge3/                     env conda gs-inria, gs-gsplat, gs-tools
 ├── code/                           gaussian-splatting (Inria 54c035f), gsplat (6e8c837),
 │                                   depth_anything_v2 (a561b84 + trọng số bản Small, chỉ biến thể mono)
-├── ket_qua_*.tar.gz                gói kết quả nhẹ để tải về (thực nghiệm, notebook: ket_qua_<tên bản>_<thời_gian>.tar.gz)
-└── .ssh/                           deploy key chỉ đọc (không bao giờ gửi đi)
+└── ket_qua_*.tar.gz                gói kết quả nhẹ để tải về (thực nghiệm, notebook: ket_qua_<tên bản>_<thời_gian>.tar.gz)
 ```
 
 Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipnerf360`): `outputs/reports/modes_db_*.md`, `outputs/reports/baseline_db_summary_*.json`, `outputs/reports/compare_db_*.md`. Thực nghiệm (`scripts/pod/run_experiment.sh`): `outputs/reports/<tên bản>_<thời_gian>.*`, tên bản là tên kế hoạch (`main`, `tune_mcmc`) hoặc, khi chạy riêng một phương pháp của `main`, tên notebook (`b0_inria`, `gsplat_default`, `gsplat_mcmc`; `docs/design/experiments.md` mục 2.5); tải dữ liệu: `outputs/reports/fetch_<benchmark>_<thời_gian>.json`.
@@ -154,7 +153,7 @@ Tên báo cáo và log theo `benchmark.tag` của từng benchmark (`db`, `mipne
 
 | Nơi | Có gì | Còn khi tắt / đổi pod? |
 |---|---|---|
-| Git (GitHub, repo private `truong0809/SpatialRoom3D`) | Code, cấu hình, tài liệu, test, 4 notebook của `app/notebooks/` cùng bộ sinh `build_notebooks.py`, notebook demo tham khảo. **Không có** dataset, video, ảnh, checkpoint, PLY, log, `configs/local.yaml`, khóa (`.gitignore`) | Có |
+| Git (GitHub, repo public `truong0809/SpatialRoom3D`) | Code, cấu hình, tài liệu, test, 4 notebook của `app/notebooks/` cùng bộ sinh `build_notebooks.py`, notebook demo tham khảo. **Không có** dataset, video, ảnh, checkpoint, PLY, log, `configs/local.yaml`, khóa (`.gitignore`) | Có |
 | Ổ của pod (container disk, `/`) | Khóa GPU `/run/lock/spatialroom3d-gpu.lock` | Không: mất khi Stop / Terminate |
 | Network volume (`/workspace` trên Runpod) | Mọi thứ ở mục 2 | Có, nếu pod mới gắn cùng volume (cùng data center) |
 
@@ -183,7 +182,7 @@ Chi tiết từng mục trên một pod: `bash scripts/pod/check_datasets.sh` (c
 1. Tạo network volume và pod (`docs/USAGE_GUIDE.md` mục 1).
 2. Tải `app/notebooks/runpod.ipynb` lên `/workspace`. Chạy theo thứ tự:
    - ô 1: kiểm tra máy;
-   - ô 2: khóa deploy chỉ đọc, thêm vào GitHub (một lần cho mỗi volume);
+   - ô 2: kiểm tra pod đọc được repo qua HTTPS (repo public, không cần khóa);
    - ô 3: clone code vào `/workspace/SpatialRoom3D` (lần sau: `git pull --ff-only`);
    - ô 4: `bash scripts/pod/run_all.sh --background` (chỉ cài môi trường);
    - đưa dữ liệu của bạn lên, rồi ô 6: kiểm tra dữ liệu (chỉ đọc); dữ liệu benchmark tải được ở ô 7;

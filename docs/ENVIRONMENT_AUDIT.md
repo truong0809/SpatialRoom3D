@@ -1,16 +1,16 @@
 # Môi trường thực nghiệm
 
-_Cập nhật: 19/10/2026 · Trạng thái: **đề xuất**. Hai lượt chạy ngày 17/10/2026 của repo trước (mục 7) cho thấy PyTorch 2.7.1 + cu128 chạy được với driver CUDA 12.8 và 13.0; smoke test của cả hai env đều đã PASSED. Các file `configs/environment/*.conf` chưa được chuyển khỏi `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`). Repo này chưa cài môi trường trên pod nào._
+_Cập nhật: 31/10/2026 (lấy code qua HTTPS, kiểm tra `chmod` của volume) · Trạng thái: **đề xuất**. Hai lượt chạy ngày 17/10/2026 của repo trước (mục 7) cho thấy PyTorch 2.7.1 + cu128 chạy được với driver CUDA 12.8 và 13.0; smoke test của cả hai env đều đã PASSED. Các file `configs/environment/*.conf` chưa được chuyển khỏi `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`). Repo này chưa cài môi trường trên pod nào._
 
 ## 1. Bố cục trên pod Runpod
 
-`/workspace` là network volume: còn nguyên khi Stop hoặc xóa pod. Container disk (mọi thứ ngoài `/workspace`, kể cả `/root`) bị xóa khi Stop pod, nên mọi thứ cần giữ phải nằm trong `/workspace`.
+`/workspace` là network volume: còn nguyên khi Stop hoặc xóa pod. Container disk (mọi thứ ngoài `/workspace`, kể cả `/root`) bị xóa khi Stop pod, nên mọi thứ cần giữ phải nằm trong `/workspace`. Volume phải cho đổi quyền file (`chmod`); loại Global volume của Runpod thì không (mục 6, `docs/USAGE_GUIDE.md` mục 1.1).
 
 Bố cục (chi tiết và ba luồng dữ liệu: `docs/design/architecture.md` mục 2 và 3):
 
 ```
 /workspace/
-├── SpatialRoom3D/            # code của đồ án (repo Git, clone từ GitHub bằng deploy key)
+├── SpatialRoom3D/            # code của đồ án (repo Git, clone từ GitHub qua HTTPS)
 ├── code/gaussian-splatting/  # repo 3DGS của Inria, ghim theo commit
 ├── code/gsplat/              # repo gsplat, ghim theo commit (hai chế độ huấn luyện Default / MCMC)
 ├── code/depth_anything_v2/   # Depth Anything V2 (code ghim theo commit + trọng số bản Small), chỉ cho biến thể mono
@@ -26,31 +26,20 @@ Bố cục (chi tiết và ba luồng dữ liệu: `docs/design/architecture.md`
 │   ├── reports/              # báo cáo môi trường, pip freeze, conda env, tóm tắt run_all_*.tsv, bảng so sánh
 │   ├── logs/                 # log cài đặt và huấn luyện; logs/jobs/<việc>.log: log của việc chạy nền
 │   └── jobs/                 # trạng thái các việc chạy nền (scripts/pod/job.sh), còn lại sau khi tắt pod
-├── ket_qua_*.tar.gz          # gói kết quả nhẹ để tải về (scripts/pod/pack_results.sh)
-└── .ssh/                     # deploy key (chmod 600): không bao giờ đưa lên Git hay gửi đi
+└── ket_qua_*.tar.gz          # gói kết quả nhẹ để tải về (scripts/pod/pack_results.sh)
 ```
 
-## 2. Truy cập repo private từ pod
+## 2. Lấy code từ GitHub
 
-Repo `truong0809/SpatialRoom3D` là private. Pod dùng **deploy key chỉ đọc**: khóa chỉ có quyền đọc đúng một repo này, không push được. Ô 2 và ô 3 của `app/notebooks/runpod.ipynb` (giống hệt ở ba notebook chạy riêng từng phương pháp) làm các bước dưới đây.
+Repo `truong0809/SpatialRoom3D` là public từ 31/10/2026 (D19 ở `docs/PROJECT_STATUS.md`). Pod đọc repo qua HTTPS, không cần khóa hay đăng nhập. Ô 2 (kiểm tra đọc được repo) và ô 3 (clone hoặc cập nhật) của `app/notebooks/runpod.ipynb`, giống hệt ở ba notebook chạy riêng từng phương pháp, tương đương:
 
 ```bash
-mkdir -p /workspace/.ssh && chmod 700 /workspace/.ssh
-[ -f /workspace/.ssh/github_deploy ] || ssh-keygen -t ed25519 -N "" -C "runpod-spatialroom3d" -f /workspace/.ssh/github_deploy
-cat /workspace/.ssh/github_deploy.pub   # chỉ in khóa công khai
+GIT_TERMINAL_PROMPT=0 git ls-remote https://github.com/truong0809/SpatialRoom3D.git refs/heads/main   # ô 2
+git clone -b main https://github.com/truong0809/SpatialRoom3D.git /workspace/SpatialRoom3D           # ô 3, lần đầu
+git -C /workspace/SpatialRoom3D pull --ff-only origin main                                            # ô 3, các lần sau
 ```
 
-1. Copy dòng khóa công khai vừa in ra.
-2. Trên GitHub: repo `SpatialRoom3D` → **Settings → Deploy keys → Add deploy key**, dán khóa, **không** tick "Allow write access".
-3. Clone repo trên pod:
-
-```bash
-SSH_CMD="ssh -i /workspace/.ssh/github_deploy -o IdentitiesOnly=yes -o UserKnownHostsFile=/workspace/.ssh/known_hosts -o StrictHostKeyChecking=accept-new"
-GIT_SSH_COMMAND="$SSH_CMD" git clone -b main git@github.com:truong0809/SpatialRoom3D.git /workspace/SpatialRoom3D
-git -C /workspace/SpatialRoom3D config core.sshCommand "$SSH_CMD"
-```
-
-Sau đó cập nhật code bằng `git -C /workspace/SpatialRoom3D pull --ff-only`. Khóa và `known_hosts` nằm trên volume nên pod mới gắn cùng volume không phải làm lại.
+Trước ngày 31/10/2026 repo là private, pod đọc bằng deploy key chỉ đọc lưu trong `/workspace/.ssh`. Cách này chưa lần nào chạy được trên pod (mục 6), nên đã bỏ. Bản clone cũ dùng địa chỉ SSH được ô 3 tự đổi sang HTTPS.
 
 ## 3. Môi trường cho 3DGS gốc (baseline B0)
 
@@ -198,15 +187,15 @@ bash scripts/setup/setup_depth_anything.sh   # git clone đúng commit + tải t
 
 **Tạo pod** (cấu hình đã chạy được ngày 17/10/2026, mục 7)
 
-- Secure Cloud, gắn network volume ≥ 100 GB cùng data center (mount tại `/workspace`). Thực nghiệm chính giữ mọi file kết quả: khoảng 56 GB cộng môi trường (`docs/design/experiments.md` mục 2.4).
+- Secure Cloud, gắn volume loại **Network volume** (không phải Global volume, mục 6) ≥ 100 GB cùng data center (mount tại `/workspace`). Thực nghiệm chính giữ mọi file kết quả: khoảng 56 GB cộng môi trường (`docs/design/experiments.md` mục 2.4).
 - GPU có compute capability 8.0 / 8.6 / 8.9 / 9.0: RTX 4090, RTX A6000, A40, L40S, A100, H100.
 - Image `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` (bản **devel**, có `nvcc` 12.4 và gcc 11). Driver phải hỗ trợ CUDA ≥ 12.8 (12.6 với `TORCH_CUDA_OVERRIDE=cu126`).
 
 **Các bước:** tải `app/notebooks/runpod.ipynb` lên `/workspace` trong Jupyter, chạy ô 1 → 2 → 3 → 4, rồi ô 7 (thực nghiệm chính, tải dữ liệu, benchmark) hoặc đưa ảnh của bạn lên và chạy ô 6, ô 8 (chi tiết: `docs/USAGE_GUIDE.md` mục 2). Tương đương bằng lệnh:
 
 ```bash
-# ô 2: khóa deploy (mục 2), thêm khóa công khai vào GitHub; ô 3: clone
-GIT_SSH_COMMAND="$SSH_CMD" git clone -b main git@github.com:truong0809/SpatialRoom3D.git /workspace/SpatialRoom3D
+# ô 2, ô 3: kiểm tra đọc được repo, rồi clone qua HTTPS (mục 2)
+git clone -b main https://github.com/truong0809/SpatialRoom3D.git /workspace/SpatialRoom3D
 cd /workspace/SpatialRoom3D
 bash scripts/pod/run_all.sh --background                # ô 4: chỉ cài môi trường (không train)
 bash scripts/pod/job.sh status                          # ô 5: theo dõi; log: bash scripts/pod/job.sh log run_all
@@ -219,7 +208,7 @@ Sau đó chạy với dữ liệu bạn chọn: cảnh tự chụp ở ô 8 (`do
 
 Thời gian đo được ngày 17/10/2026 trên RTX 4090 (repo trước, cùng script cài đặt và cùng tham số): cài `gs-inria` 29 phút, cài `gs-gsplat` 32 phút (lượt đầu) và 7 phút (lượt thứ hai), cài `gs-tools` 18 phút, B0 49,5 phút, gsplat chạy thử 3.000 vòng 17 phút, gsplat đầy đủ (2 cảnh × `default` + `mcmc`, seed 42) 74 phút (mục 7). Pod vẫn tính tiền khi việc chạy nền; xong thì Terminate (hoặc `AUTO_STOP=1`, chưa thử). Mọi thứ trong `/workspace` vẫn còn.
 
-**Gửi lại:** gói `ket_qua_*.tar.gz` (báo cáo, log, trạng thái việc, JSON/CSV kết quả; không có checkpoint hay PLY, không có `/workspace/.ssh`).
+**Gửi lại:** gói `ket_qua_*.tar.gz` (báo cáo, log, trạng thái việc, JSON/CSV kết quả; không có checkpoint hay PLY).
 
 ### 4.5 Chạy nền và khóa GPU (`scripts/pod/job.sh`)
 
@@ -264,6 +253,8 @@ Số liệu Inria công bố cho code hiện hành (`results.md`, rasterizer m�
 - **`df` trên network volume** (MooseFS, lượt chạy 17/10/2026) báo dung lượng của cả cụm lưu trữ (2,3 PB), không phải quota của volume. Script cài đặt nhận ra trường hợp này (kích thước > 50.000 GB) và chỉ cảnh báo; dung lượng volume xem trên trang Runpod.
 - **COLMAP bản không có CUDA mà gọi với `use_gpu=1`** sẽ trích SIFT bằng OpenGL và phải tạo ngữ cảnh OpenGL qua Qt (mã nguồn COLMAP 4.2.1, `FeatureExtractionOptions::RequiresOpenGL`), không chạy được trên pod không có màn hình. Chưa gặp trên pod; `colmap_runner.py` chỉ bật GPU khi bản COLMAP có CUDA (`--gpu auto`), và mọi lệnh COLMAP chạy với `QT_QPA_PLATFORM=offscreen` để phòng hờ.
 - **`pip install torch==2.7.1`** coi bản đã cài là đủ dù khác biến thể CUDA (vd. `+cu126` thay vì `+cu128`). Script cài ghi rõ biến thể (`torch==2.7.1+cu128`).
+- **Volume không cho đổi quyền file** (31/10/2026, volume mới tạo ở một data center khác EU-RO-1 để thuê A40): `chmod` trên `/workspace` báo `Operation not permitted`; `git clone` vào `/workspace` hỏng với `error: chmod on /workspace/SpatialRoom3D/.git/config.lock failed: Operation not permitted` và `fatal: could not set 'core.filemode' to 'false'`. Conda và pip cũng cần `chmod`, nên volume kiểu này không dùng được cho pipeline. Trang tạo volume lúc đó đang chọn loại Global volume (beta); chưa xác nhận đó đúng là loại của volume lỗi, và chưa có kết quả `findmnt -T /workspace`. Network volume ở EU-RO-1 thì `chmod` bình thường (cài conda ngày 17/10/2026, mục 7). Ô 1 của notebook kiểm tra `chmod` và báo ✗; dùng Network volume hoặc Volume disk (`docs/USAGE_GUIDE.md` mục 1.1).
+- **Khóa deploy lưu trên volume** (30–31/10/2026, khi repo còn private): trên volume ở EU-RO-1, ô 2 vẫn báo `✗ GitHub chưa nhận khóa` sau khi khóa công khai đã được thêm đúng repo (dấu vân tay khớp, GitHub ghi "Never used"); nguyên nhân chưa xác định vì chưa có log `ssh -v`. Trên volume ở mục trên, `chmod 600` cho khóa riêng không được, mà OpenSSH bỏ qua khóa riêng mà người khác đọc được. Repo đã chuyển sang public (D19), ô 2 và ô 3 dùng HTTPS.
 - **PyYAML:** `configs/*.yaml` được đọc bằng `python3` của máy nếu có PyYAML (template Runpod thường có sẵn qua JupyterLab; ô 1 của notebook kiểm tra), nếu không thì bằng python của env `gs-gsplat`. Env `gs-inria` không có PyYAML: script B0 đọc bản JSON của mục `benchmark` mà `scripts/lib/config.sh` ghi ra `outputs/reports/configs/`.
 
 ## 7. Kết quả thực tế (repo trước)
