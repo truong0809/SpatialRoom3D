@@ -42,7 +42,7 @@ commands:
   main_experiment: bash scripts/pod/run_experiment.sh main --background   # configs/experiments/main.yaml
   evaluate: bash scripts/run_evaluate.sh deep_blending
 
-status: "chưa chạy bằng repo này; số đo tham khảo của B0 và default / mcmc (30.000 vòng, seed 42, RTX 4090): docs/ENVIRONMENT_AUDIT.md mục 7"
+status: "đã chạy bằng repo này ngày 31/10/2026: B0, default / mcmc × seed 42, 43, 44 (docs/PROJECT_STATUS.md, mục Kết quả); số đo tham khảo ngày 17/10/2026 của repo trước: docs/ENVIRONMENT_AUDIT.md mục 7"
 
 # Quy ước benchmark: B0 = 3DGS gốc của Inria; mọi chế độ gsplat cùng tập test.
 benchmark:

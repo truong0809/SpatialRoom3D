@@ -42,4 +42,4 @@ python -m src.training.run --mode mcmc --scene $DB/drjohnson \
 
 Bỏ `--set opacity_reg=0.001` thì cấu hình khác lượt đã có, nên bị báo lỗi chứ không ghi đè.
 
-**Kết quả:** chưa chạy bằng repo này. Số đo tham khảo (RTX 4090, seed 42; cùng lệnh huấn luyện, chỉ khác đường dẫn, `tests/unit/test_benchmarks.py`): `docs/ENVIRONMENT_AUDIT.md` mục 7.
+**Kết quả:** đã chạy bằng repo này ngày 31/10/2026 (B0; `default` / `mcmc` × 3 seed): `docs/PROJECT_STATUS.md` mục "Kết quả". Số đo tham khảo ngày 17/10/2026 của repo trước (RTX 4090, seed 42; cùng lệnh huấn luyện, chỉ khác đường dẫn, `tests/unit/test_benchmarks.py`): `docs/ENVIRONMENT_AUDIT.md` mục 7.

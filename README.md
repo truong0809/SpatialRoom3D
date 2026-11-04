@@ -4,7 +4,7 @@
 
 Đồ án tốt nghiệp. Hệ thống nhận ảnh hoặc video quay một không gian nội thất bằng camera thông thường (không cần LiDAR), ước lượng camera bằng COLMAP, tái tạo cảnh bằng **3D Gaussian Splatting (3DGS)** trên [gsplat](https://github.com/nerfstudio-project/gsplat), xuất mô hình `.ply` để xem trên trình xem 3DGS và đánh giá chất lượng bằng PSNR / SSIM / LPIPS.
 
-> **Trạng thái:** repo này đã kiểm thử trên CPU, chưa chạy trên pod; thực nghiệm chính và bước dò tham số chưa chạy. Số đo GPU tham khảo với cùng mã huấn luyện (B0 đạt ngưỡng trên Deep Blending; `default` / `mcmc`, một seed): [docs/ENVIRONMENT_AUDIT.md](docs/ENVIRONMENT_AUDIT.md) mục 7. Bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+> **Trạng thái (04/11/2026):** thực nghiệm chính và lượt dò tham số đã chạy trên pod ngày 31/10/2026. Cùng số Gaussian, 6 cảnh trong nhà, 3 seed: `mcmc` hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS; `default` đạt điều kiện làm baseline so với 3DGS gốc của Inria. `mcmc` được chọn làm mô hình chính của sản phẩm. Luồng sản phẩm (`scripts/build_room.sh`) đã kiểm thử trên CPU, chưa chạy trên GPU; chưa có trang web. Số liệu, bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
 
 ## Luồng xử lý
 

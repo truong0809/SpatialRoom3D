@@ -24,4 +24,4 @@ commands:
   filter: "bash scripts/run_filter.sh custom <tên_cảnh> [<lượt> ...]"
   evaluate: "bash scripts/run_evaluate.sh custom <tên_cảnh>"
 
-status: "mỗi cảnh một thư mục; chưa có cảnh nào chạy xong xác minh được trên pod"
+status: "mỗi cảnh một thư mục; video phòng nhóm (phong_nhom) đã chạy xong trên pod ngày 31/10/2026 (default, mcmc, seed 42); đầu vào thư mục ảnh chưa chạy trên pod"

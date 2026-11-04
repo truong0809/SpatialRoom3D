@@ -49,7 +49,7 @@ commands:
   filter: bash scripts/run_filter.sh mipnerf360 room mcmc_s42             # lọc Gaussian một lượt rồi chấm lại
   evaluate: bash scripts/run_evaluate.sh mipnerf360
 
-status: "đã cấu hình, chưa chạy; chưa xác minh dữ liệu trên pod"
+status: "đã chạy ngày 31/10/2026: 4 cảnh trong nhà (room, counter, kitchen, bonsai), default / mcmc × 3 seed; 5 cảnh ngoài trời chưa tải, chưa chạy"
 
 # Quy ước benchmark chính chủ của mỗi bên: Inria đọc images_<N>/, gsplat dùng data_factor N.
 benchmark:

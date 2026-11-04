@@ -1,37 +1,34 @@
 # Môi trường thực nghiệm
 
-_Cập nhật: 31/10/2026 (lấy code qua HTTPS, kiểm tra `chmod` của volume) · Trạng thái: **đề xuất**. Hai lượt chạy ngày 17/10/2026 của repo trước (mục 7) cho thấy PyTorch 2.7.1 + cu128 chạy được với driver CUDA 12.8 và 13.0; smoke test của cả hai env đều đã PASSED. Các file `configs/environment/*.conf` chưa được chuyển khỏi `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`). Repo này chưa cài môi trường trên pod nào._
+_Cập nhật: 04/11/2026 (bản rút gọn, D21; lịch sử trong Git). Repo này đã cài và chạy trên pod ngày 31/10/2026 (mục 7). Các file `configs/environment/*.conf` vẫn để `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`)._
 
-## 1. Bố cục trên pod Runpod
+## 1. Pod và bố cục `/workspace`
 
-`/workspace` là network volume: còn nguyên khi Stop hoặc xóa pod. Container disk (mọi thứ ngoài `/workspace`, kể cả `/root`) bị xóa khi Stop pod, nên mọi thứ cần giữ phải nằm trong `/workspace`. Volume phải cho đổi quyền file (`chmod`); loại Global volume của Runpod thì không (mục 6, `docs/USAGE_GUIDE.md` mục 1.1).
+| Mục | Đã chạy ngày 31/10/2026 | Yêu cầu |
+|---|---|---|
+| Cloud | Secure Cloud | Network volume chỉ gắn được với pod Secure Cloud |
+| GPU | 1 × RTX 4090, bản 48 GB, compute capability 8.9 | ≥ 24 GB VRAM; compute capability 8.0 / 8.6 / 8.9 / 9.0 (A100, A6000, A40, RTX 4090, L40S, H100); không dùng Blackwell |
+| Driver | hỗ trợ CUDA 13.2 | hỗ trợ CUDA ≥ 12.8 (12.6 với `TORCH_CUDA_OVERRIDE=cu126`); COLMAP bản CUDA cần ≥ 12.9, thấp hơn thì tự dùng bản CPU |
+| Image | CUDA 12.8.1, Ubuntu 22.04: nvcc 12.8.93, gcc 11 (tên template chính xác chưa ghi lại) | bản **devel** (có `nvcc`), gcc ≤ 12; `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` cũng đã chạy được (17/10/2026) |
+| Volume | Network volume 170 GB, EU-CZ-1, `fuse` (MooseFS), `chmod` chạy được | Loại **Network volume**, không dùng Global volume; cho đổi quyền file (ô 1 của notebook kiểm tra) |
 
-Bố cục (chi tiết và ba luồng dữ liệu: `docs/design/architecture.md` mục 2 và 3):
+`/workspace` là network volume: còn nguyên khi Stop hoặc xóa pod. Mọi thứ ngoài `/workspace` (kể cả `/root`) mất khi Stop pod.
 
 ```
 /workspace/
-├── SpatialRoom3D/            # code của đồ án (repo Git, clone từ GitHub qua HTTPS)
-├── code/gaussian-splatting/  # repo 3DGS của Inria, ghim theo commit
-├── code/gsplat/              # repo gsplat, ghim theo commit (hai chế độ huấn luyện Default / MCMC)
-├── code/depth_anything_v2/   # Depth Anything V2 (code ghim theo commit + trọng số bản Small), chỉ cho biến thể mono
-├── miniforge3/               # conda (Miniforge) + env gs-inria (3DGS) + env gs-tools (COLMAP, ffmpeg) + env gs-gsplat
-├── data/                     # chỉ dữ liệu gốc; ngoài bước tải benchmark, pipeline không ghi vào (ngoại lệ: docs/design/architecture.md mục 3)
-│   ├── custom_scenes/<cảnh>/ # ảnh / video tự chụp
-│   ├── benchmarks/           # deep_blending/, mipnerf360/ (scripts/pod/fetch_data.sh tải về, hoặc bạn tự đưa lên)
-│   └── downloads/            # file zip tạm của bước tải, xóa sau khi giải nén
-├── outputs/                  # mọi thứ sinh ra
-│   ├── custom_scenes/<cảnh>/ # colmap/ (ảnh đã chuẩn hóa, COLMAP, báo cáo) + <chế_độ>_s<seed>/ (các lượt train)
-│   ├── benchmarks/<benchmark>/   # inria_b0/, gsplat/, gsplat_quick/
-│   ├── checkpoints/          # PLY đã xuất để tải về / xem 3D (scripts/run_render.sh)
-│   ├── reports/              # báo cáo môi trường, pip freeze, conda env, tóm tắt run_all_*.tsv, bảng so sánh
-│   ├── logs/                 # log cài đặt và huấn luyện; logs/jobs/<việc>.log: log của việc chạy nền
-│   └── jobs/                 # trạng thái các việc chạy nền (scripts/pod/job.sh), còn lại sau khi tắt pod
+├── SpatialRoom3D/            # code (repo Git, clone qua HTTPS)
+├── code/                     # gaussian-splatting (Inria), gsplat, depth_anything_v2: ghim theo commit
+├── miniforge3/               # conda: env gs-inria, gs-tools, gs-gsplat
+├── data/                     # chỉ dữ liệu gốc: custom_scenes/<cảnh>/, benchmarks/{deep_blending,mipnerf360}/
+├── outputs/                  # mọi thứ sinh ra: custom_scenes/, benchmarks/, product/ (sản phẩm), reports/, logs/, jobs/
 └── ket_qua_*.tar.gz          # gói kết quả nhẹ để tải về (scripts/pod/pack_results.sh)
 ```
 
+Chi tiết: `docs/design/architecture.md` mục 2. Clone lại repo không làm mất gì: dữ liệu, env và kết quả đều nằm ngoài `SpatialRoom3D/`. Chỉ `configs/local.yaml` nằm trong repo; file này bạn tự tạo nếu cần, không có trong Git.
+
 ## 2. Lấy code từ GitHub
 
-Repo `truong0809/SpatialRoom3D` là public từ 31/10/2026 (D19 ở `docs/PROJECT_STATUS.md`). Pod đọc repo qua HTTPS, không cần khóa hay đăng nhập. Ô 2 (kiểm tra đọc được repo) và ô 3 (clone hoặc cập nhật) của `app/notebooks/runpod.ipynb`, giống hệt ở ba notebook chạy riêng từng phương pháp, tương đương:
+Repo `truong0809/SpatialRoom3D` là public (D19). Ô 2 và ô 3 của các notebook tương đương:
 
 ```bash
 GIT_TERMINAL_PROMPT=0 git ls-remote https://github.com/truong0809/SpatialRoom3D.git refs/heads/main   # ô 2
@@ -39,276 +36,124 @@ git clone -b main https://github.com/truong0809/SpatialRoom3D.git /workspace/Spa
 git -C /workspace/SpatialRoom3D pull --ff-only origin main                                            # ô 3, các lần sau
 ```
 
-Trước ngày 31/10/2026 repo là private, pod đọc bằng deploy key chỉ đọc lưu trong `/workspace/.ssh`. Cách này chưa lần nào chạy được trên pod (mục 6), nên đã bỏ. Bản clone cũ dùng địa chỉ SSH được ô 3 tự đổi sang HTTPS.
-
 ## 3. Môi trường cho 3DGS gốc (baseline B0)
 
-### 3.1 Mã nguồn được ghim
+Env `gs-inria`:
+- Miniforge `26.7.2-0`, Python 3.10.22;
+- PyTorch 2.7.1 + cu128 (`configs/environment/gs-inria.conf`); các gói khác trong `gs-inria.lock.txt`;
+- extension build bằng `nvcc` của image, cho các kiến trúc 8.0, 8.6, 8.9, 9.0.
 
-| Thành phần | Phiên bản | Ghi chú |
-|---|---|---|
-| graphdeco-inria/gaussian-splatting | commit `54c035f` (30/10/2024) | Commit mới nhất trên `main` khi kiểm tra ngày 09/10/2026 |
-| diff-gaussian-rasterization | `9c5c202` (nhánh `dr_aa`) | Submodule, kèm thư viện glm |
-| simple-knn | `86710c2` | Submodule, tải từ gitlab.inria.fr; dự phòng mirror GitHub `camenduru/simple-knn` (có đúng commit này) |
-| fused-ssim | `1272e21` | Submodule |
-| SIBR_viewers | không cài | Viewer desktop, không cần cho huấn luyện |
+| Thành phần | Phiên bản |
+|---|---|
+| graphdeco-inria/gaussian-splatting | commit `54c035f` |
+| diff-gaussian-rasterization | `9c5c202` (nhánh `dr_aa`) |
+| simple-knn | `86710c2`; gitlab.inria.fr từ chối thì lấy từ mirror GitHub `camenduru/simple-knn` |
+| fused-ssim | `1272e21` |
 
-### 3.2 Vì sao không dùng nguyên `environment.yml` của Inria
-
-File gốc ghim Python 3.7.13, PyTorch 1.12.1, `cudatoolkit` 11.6. Không dùng nguyên trạng vì:
-
-- Python 3.7 đã hết hỗ trợ từ lâu.
-- Gói `cudatoolkit` của conda chỉ có runtime, không có `nvcc` để build CUDA extension. README của Inria cũng cho biết họ build extension bằng CUDA SDK 11.8 cài riêng.
-- CUDA 11.x không nhận GCC mới hơn 11 làm trình biên dịch host.
-
-README của Inria ghi nhận thử nghiệm giới hạn cho thấy code chạy được với PyTorch 2.0 và CUDA 12.
-
-### 3.3 Phương án đề xuất
-
-- Miniforge và conda env `gs-inria` cài trong `/workspace`, độc lập với Python của template.
-- Miniforge `26.7.2-0` (ghim phiên bản bộ cài, không dùng "latest"), Python 3.10.22; PyTorch và biến thể CUDA ghim trong `configs/environment/gs-inria.conf` (hiện tạm đặt 2.7.1 + CUDA 12.8). Các gói Python còn lại ghim trong `configs/environment/gs-inria.lock.txt` theo đúng lượt cài đã cho B0 đạt (mục 7).
-- Build extension bằng `nvcc` của template, cùng major version với CUDA của PyTorch.
-- Build sẵn cho các kiến trúc 8.0, 8.6, 8.9, 9.0, để dùng lại env khi đổi giữa A100, A6000/A40, RTX 4090/L40S, H100.
-
-**Quy tắc chọn biến thể CUDA của PyTorch:** không mới hơn phiên bản CUDA mà driver hỗ trợ (dòng "CUDA Version" của `nvidia-smi`). GPU Blackwell cần CUDA ≥ 12.8.
-
-Biến thể tạm chọn `cu128` cần driver hỗ trợ CUDA ≥ 12.8 (dòng driver R570 trở lên). Nếu pod chỉ có driver 12.4 hoặc 12.6, script cài đặt dừng ở bước kiểm tra; khi đó chọn host khác, hoặc đặt `TORCH_CUDA_OVERRIDE=cu126` (PyTorch 2.7.1 có bản này; ô 4 của notebook).
-
-**Khác biệt so với môi trường gốc** (phải nêu trong báo cáo khi so sánh số liệu):
-
-- Phiên bản Python, PyTorch và CUDA.
-- `opencv-python-headless` thay cho `opencv-python`, vì server thường không có libGL.
+Không dùng nguyên `environment.yml` của Inria (Python 3.7, PyTorch 1.12, CUDA 11.6, không có `nvcc`). Khác môi trường gốc: phiên bản Python / PyTorch / CUDA, và `opencv-python-headless` thay `opencv-python`. Báo cáo phải nêu điều này khi so số liệu. Chọn biến thể CUDA của PyTorch không mới hơn CUDA mà driver hỗ trợ (dòng "CUDA Version" của `nvidia-smi`).
 
 ## 4. Cài đặt và kiểm tra
 
-Cách gọn nhất là `bash scripts/pod/run_all.sh --background` (ô 4 của notebook, mục 4.2): chỉ cài / kiểm tra môi trường, không train. Từng script riêng:
-
 ```bash
-cd /workspace/SpatialRoom3D
-bash scripts/setup/env_probe.sh                 # GPU, driver, CUDA, mạng; báo cáo: /workspace/outputs/reports
-ALLOW_PROVISIONAL=1 bash scripts/setup/setup_3dgs_inria.sh   # log: /workspace/outputs/logs, báo cáo: /workspace/outputs/reports
+bash scripts/pod/run_all.sh --background     # env_probe -> setup_inria -> data_tools -> setup_gsplat -> pack; không train
+bash scripts/pod/job.sh status               # theo dõi; log: bash scripts/pod/job.sh log run_all
 ```
 
-Script dừng ngay nếu:
+Có thể chạy từng bước: `scripts/setup/env_probe.sh`, `setup_3dgs_inria.sh`, `setup_data_tools.sh`, `setup_gsplat.sh`. Mỗi script cài xong thì chạy smoke test.
 
-- đang có việc khác dùng GPU (khóa GPU, mục 4.5);
-- phiên bản trong file conf còn ở trạng thái `provisional` mà không đặt `ALLOW_PROVISIONAL=1`;
+Script dừng khi gặp một trong các trường hợp:
+- GPU đang bận;
+- phiên bản còn `provisional` mà không đặt `ALLOW_PROVISIONAL=1`;
 - driver không hỗ trợ CUDA đã chọn;
-- compute capability của GPU không nằm trong `TORCH_CUDA_ARCH_LIST` (extension sẽ không có mã máy cho GPU đó);
-- không thấy `nvcc` cùng major version;
-- thiếu dung lượng (chỉ kiểm tra được trên ổ thường, xem mục 6 về network volume), hoặc không truy cập được GitHub, PyPI, kho PyTorch hay conda;
-- một submodule cần thiết bị thiếu hoặc không đúng commit được ghim.
+- compute capability của GPU không có trong danh sách build;
+- không có `nvcc` cùng major version;
+- thiếu dung lượng;
+- không truy cập được GitHub, PyPI hoặc conda;
+- submodule sai commit.
 
-Chạy lại an toàn: Miniforge hỏng hoặc cài dở được cài đè (`-u`); env chỉ được coi là có khi có `conda-meta/history`; PyTorch được cài theo đúng biến thể (`torch==2.7.1+cu128`) và kiểm tra lại phiên bản lẫn CUDA sau khi cài. Extension được build lại khi đổi commit Inria, danh sách kiến trúc hoặc PyTorch (dấu build `.sr3d_inria_build` trong env). Bước cuối chạy `scripts/setup/smoke_test_3dgs.py` để kiểm tra cả ba extension trên GPU.
+Chạy lại an toàn: phần đã cài được kiểm tra rồi bỏ qua. Extension được build lại khi đổi commit, danh sách kiến trúc, PyTorch hoặc loại GPU.
 
-Kích hoạt env trong phiên terminal mới:
+### 4.1 Env `gs-tools`
 
-```bash
-. /workspace/miniforge3/etc/profile.d/conda.sh && conda activate gs-inria
-```
+COLMAP 4.2.1 (conda-forge) và ffmpeg, ghim trong `configs/environment/gs-tools.conf`. Bản CUDA của COLMAP chỉ có `cuda_129` và `cuda_134`, nên cần driver hỗ trợ CUDA ≥ 12.9. Driver thấp hơn thì `setup_data_tools.sh` tự cài bản CPU (ép bản CPU: `COLMAP_BUILD_OVERRIDE=cpu`). `src/reconstruction/colmap_runner.py` làm đúng các bước của `convert.py` của Inria, nhưng tự nhận tên tùy chọn GPU theo phiên bản COLMAP (D4).
 
-### 4.1 Công cụ xử lý dữ liệu (env `gs-tools`)
+### 4.2 Lệnh chạy chính
 
-COLMAP và ffmpeg được cài vào conda env riêng `gs-tools`, tách khỏi `gs-inria` để tránh xung đột thư viện. Phiên bản ghim trong `configs/environment/gs-tools.conf`: COLMAP 4.2.1 từ conda-forge (bản mới nhất khi kiểm tra ngày 09/10/2026, có bản build CUDA và bản CPU).
+`README.md` mục "Chạy trên Runpod" và `docs/USAGE_GUIDE.md`. Luồng sản phẩm: `docs/design/product.md` mục 3.
 
-```bash
-bash scripts/setup/setup_data_tools.sh                            # tự chọn bản CUDA hoặc CPU theo driver
-COLMAP_BUILD_OVERRIDE=cpu bash scripts/setup/setup_data_tools.sh  # ép dùng bản CPU
-```
+### 4.3 Env `gs-gsplat`
 
-Bản CUDA của colmap 4.2.1 trên conda-forge chỉ có build `cuda_129` và `cuda_134` (kiểm tra 17/10/2026), nên cần driver hỗ trợ CUDA ≥ 12.9 (`COLMAP_CUDA_MIN` trong `configs/environment/gs-tools.conf`). Driver thấp hơn thì script tự cài bản CPU. `src/reconstruction/colmap_runner.py` đọc phần đầu `colmap -h`: nếu bản COLMAP không có CUDA thì tự trích và so khớp đặc trưng trên CPU (`--gpu auto`); lựa chọn được ghi vào `sfm_report.json` (`colmap_settings.colmap_cuda`, `colmap_settings.use_gpu`).
-
-Vì sao không dùng `convert.py` của Inria: script này truyền `--SiftExtraction.use_gpu` và `--SiftMatching.use_gpu`. Mã nguồn COLMAP hiện hành đã đổi thành `--FeatureExtraction.use_gpu` và `--FeatureMatching.use_gpu` (thay đổi nằm trong đợt tái cấu trúc trích đặc trưng của bản 3.13), nên `convert.py` không chạy được với COLMAP 4.x. `src/reconstruction/colmap_runner.py` làm đúng các bước của `convert.py` nhưng tự nhận tên tùy chọn theo phiên bản COLMAP.
-
-### 4.2 Các lệnh chạy chính trên pod
-
-Các lệnh gom cả luồng, nên dùng (chạy nền, xếp hàng GPU, chạy lại an toàn):
-
-```bash
-bash scripts/pod/run_all.sh --background                            # pod mới: chỉ cài / kiểm tra môi trường (không train)
-bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/<cảnh>/<video.mp4> <cảnh> --background   # video: frame + COLMAP -> default -> mcmc
-bash scripts/pod/run_scene.sh /workspace/data/custom_scenes/<cảnh> <cảnh> --background               # ≥ 10 ảnh: ảnh + COLMAP -> default -> mcmc
-bash scripts/pod/job.sh status                                      # trạng thái các việc chạy nền
-bash scripts/pod/results.sh [tên_cảnh]                              # xem nhanh kết quả (chỉ đọc)
-bash scripts/pod/pack_results.sh                                    # gói kết quả nhẹ để tải về
-bash scripts/pod/check_datasets.sh                                  # dữ liệu Deep Blending / Mip-NeRF 360 / cảnh (chỉ đọc)
-```
-
-Thứ tự bước của `run_all.sh`: `env_probe` → `setup_inria` → `data_tools` → `setup_gsplat` → `pack`. Nó không train, không chạy benchmark: chạy với dữ liệu nào (cảnh tự chụp, Deep Blending, Mip-NeRF 360) do người dùng quyết định sau đó, bằng `scripts/pod/run_scene.sh` hoặc `scripts/run_train.sh` (`docs/USAGE_GUIDE.md` mục 3 và 5). `env_probe` có `[FAIL]` thì dừng cả lượt, không cài gì; một bước cài đặt lỗi không chặn các bước còn lại. Tóm tắt từng bước ghi vào `outputs/reports/run_all_<thời gian>.tsv`. Các biến tùy chọn (`TORCH_CUDA_OVERRIDE`, `MAX_JOBS`, `COLMAP_BUILD_OVERRIDE`, `SKIP`, `AUTO_STOP`) ghi ở đầu script.
-
-`run_scene.sh` dùng lại mô hình COLMAP đã có của cảnh (không đọc lại video hay ảnh); `--redo-colmap` làm lại bước ảnh đầu vào và COLMAP. Đầu vào là ảnh thì không chọn frame; các kiểm tra và gợi ý trước khi train: `docs/USAGE_GUIDE.md` mục 3.4. COLMAP ghi `FAIL` thì không train. Lượt train OK cũ được train lại khi nó làm từ dữ liệu cũ (`src.training.run --replace-stale`): mô hình COLMAP của cảnh đã đổi (dấu SHA-256 của `sparse/0`), hoặc với `mcmc`, chỉ ngân sách Gaussian khác vì lượt `default` đã train lại. Việc so sánh dựa trên `run_meta.json`, nên vẫn đúng khi lượt trước bị dừng giữa chừng. Lượt cũ khác ở cấu hình do người chạy chọn (seed, protocol, tham số chế độ, `--test-list`, `--cap-max`) thì báo lỗi; `run_scene.sh --retrain` train lại mọi chế độ. Thư mục cũ được đổi tên `<thư_mục>.prev_<thời gian>`, không xóa. `scripts/pipeline/train_gsplat_modes.sh` dùng cùng cơ chế cho `mcmc`.
-
-Các bước của luồng chính vẫn chạy riêng được (bốn script ở gốc `scripts/`, phần thực thi trong `scripts/pipeline/`):
-
-```bash
-bash scripts/prepare_data.sh custom <video.mp4 | thư_mục_ảnh> <tên_cảnh>   # frame hoặc ảnh -> COLMAP -> báo cáo
-bash scripts/run_train.sh custom <tên_cảnh> [default] [mcmc]               # baseline rồi mcmc trên cảnh tự chụp
-bash scripts/run_render.sh custom <tên_cảnh> [<lượt>]                      # render lại, xuất PLY
-bash scripts/run_evaluate.sh custom <tên_cảnh>                             # bảng so sánh
-bash scripts/pod/fetch_data.sh deep_blending                               # tải Deep Blending (không dùng GPU)
-bash scripts/prepare_data.sh deep_blending                                 # kiểm tra dữ liệu Deep Blending
-bash scripts/run_train.sh deep_blending b0                                 # tái lập B0 trên Deep Blending
-bash scripts/run_train.sh deep_blending gsplat                             # default, mcmc trên Deep Blending
-VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background         # thực nghiệm chính, một việc nền
-```
-
-Benchmark, protocol và nơi lưu kết quả: `docs/design/experiments.md`.
-
-### 4.3 Env `gs-gsplat` (các chế độ huấn luyện trên gsplat)
-
-Thiết kế và giao thức so sánh: `docs/design/training_modes.md`. Env tách riêng khỏi `gs-inria`. Lý do: hai bên cần hai commit fused-ssim khác nhau (cùng tên gói `fused_ssim`), và `examples/` của gsplat yêu cầu `numpy<2`.
+Env này chạy `default`, `mcmc` và luồng sản phẩm.
 
 | Thành phần | Phiên bản | Ghi chú |
 |---|---|---|
-| gsplat | commit `6e8c837` (22/08/2025) = v1.5.3 + 4 commit | Thư viện (build sẵn extension, kiểm tra bằng `from gsplat import csrc`) và `examples/` lấy từ cùng commit, không sửa file |
-| glm | submodule của gsplat | Theo commit gsplat ghim |
-| fused-ssim | `328dc98` | Đúng commit trong `examples/requirements.txt` của gsplat |
-| pycolmap (fork rmbrualla) | `cc7ea4b` | Parser của gsplat dùng lớp `SceneManager` của fork này, không phải gói `pycolmap` chính thức |
-| Phụ thuộc Python khác | `configs/environment/gs-gsplat.lock.txt` | 90 gói (88 từ PyPI, 2 từ git), ghim theo ngày 23/08/2025 bằng `uv pip compile --exclude-newer`; đầu vào `configs/environment/gs-gsplat.in`. Có PyYAML (đọc `configs/*.yaml`) |
-| PyTorch | giống `gs-inria` (tạm 2.7.1 + cu128) | `setup_gsplat.sh` cảnh báo nếu hai file conf khác nhau |
+| gsplat | commit `6e8c837` (v1.5.3 + 4 commit) | thư viện và `examples/` cùng commit, không sửa file |
+| fused-ssim | `328dc98` | theo `examples/requirements.txt` của gsplat |
+| pycolmap | fork rmbrualla `cc7ea4b` | Parser của gsplat cần `SceneManager` của fork này |
+| Gói Python khác | `configs/environment/gs-gsplat.lock.txt` | 90 gói, ghim theo ngày 23/08/2025; có PyYAML, matplotlib 3.10.5, Pillow |
+| PyTorch | như `gs-inria` | `setup_gsplat.sh` cảnh báo nếu hai file conf khác nhau |
 
-```bash
-ALLOW_PROVISIONAL=1 bash scripts/setup/setup_gsplat.sh   # 9 bước như setup_3dgs_inria.sh; smoke test: scripts/setup/smoke_test_gsplat.py
-```
+Depth Anything V2 Small (chỉ dùng cho biến thể `mono`): code commit `a561b84`, trọng số `depth_anything_v2_vits.pth` (Apache-2.0, kiểm SHA-256 khi tải). Chạy trong env `gs-gsplat`; cài bằng `scripts/setup/setup_depth_anything.sh`.
 
-**Depth Anything V2 Small** cho biến thể `mono` của `tune_mcmc` (depth prior, `docs/design/experiments.md` mục 3.7). Không phải một env riêng: code chạy trong env `gs-gsplat` (cần `torch`, `torchvision`, `opencv`, `numpy`, đều đã có; `xformers` không bắt buộc), nên không cài thêm gói Python nào. `scripts/setup/setup_depth_anything.sh` tải vào `$WS/code/depth_anything_v2` (khoảng 0,2 GB: code 114 MB kể cả lịch sử git, trọng số 99 MB); `scripts/pod/run_experiment.sh` gọi ở bước `depth_anything`, trước `env_check`, khi kế hoạch có lượt `sr3d.mono` (lỗi thì chỉ bỏ các lượt đó). Phiên bản ghim trong `configs/environment/gs-gsplat.conf` (`DA2_*`) và lặp lại trong `src/training/mono_depth.py` (test kiểm hai nơi giống nhau).
+### 4.4 Pod mới từ Jupyter
 
-| Thành phần | Phiên bản | Ghi chú |
-|---|---|---|
-| Code Depth Anything V2 | commit `a561b84` của `DepthAnything/Depth-Anything-V2` | Apache-2.0. Không sửa file; `src/training/mono_depth.py` từ chối checkout khác commit hoặc có sửa đổi. Đã clone và chạy với trọng số ngẫu nhiên trong sandbox (CPU) |
-| Trọng số | `depth_anything_v2_vits.pth` (bản Small, 24,8 triệu tham số, 99,2 MB), Hugging Face `depth-anything/Depth-Anything-V2-Small` revision `03876f8` | Apache-2.0 (các bản Base / Large / Giant là CC-BY-NC-4.0, không dùng). SHA-256 `715fade1…1378` lấy từ trang của file trên Hugging Face; script kiểm sau khi tải, sai thì xóa file và dừng. **Chưa tải thử** (sandbox không ra được Hugging Face) |
-
-```bash
-bash scripts/setup/setup_depth_anything.sh   # git clone đúng commit + tải trọng số, kiểm SHA-256; chạy lại an toàn;
-                                             # thư mục có sẵn mà không phải bản checkout thì dừng, không ghi đè
-```
-
-### 4.4 Chạy trên Runpod từ Jupyter (pod mới, volume trống)
-
-**Tạo pod** (cấu hình đã chạy được ngày 17/10/2026, mục 7)
-
-- Secure Cloud, gắn volume loại **Network volume** (không phải Global volume, mục 6) ≥ 100 GB cùng data center (mount tại `/workspace`). Thực nghiệm chính giữ mọi file kết quả: khoảng 56 GB cộng môi trường (`docs/design/experiments.md` mục 2.4).
-- GPU có compute capability 8.0 / 8.6 / 8.9 / 9.0: RTX 4090, RTX A6000, A40, L40S, A100, H100.
-- Image `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` (bản **devel**, có `nvcc` 12.4 và gcc 11). Driver phải hỗ trợ CUDA ≥ 12.8 (12.6 với `TORCH_CUDA_OVERRIDE=cu126`).
-
-**Các bước:** tải `app/notebooks/runpod.ipynb` lên `/workspace` trong Jupyter, chạy ô 1 → 2 → 3 → 4, rồi ô 7 (thực nghiệm chính, tải dữ liệu, benchmark) hoặc đưa ảnh của bạn lên và chạy ô 6, ô 8 (chi tiết: `docs/USAGE_GUIDE.md` mục 2). Tương đương bằng lệnh:
-
-```bash
-# ô 2, ô 3: kiểm tra đọc được repo, rồi clone qua HTTPS (mục 2)
-git clone -b main https://github.com/truong0809/SpatialRoom3D.git /workspace/SpatialRoom3D
-cd /workspace/SpatialRoom3D
-bash scripts/pod/run_all.sh --background                # ô 4: chỉ cài môi trường (không train)
-bash scripts/pod/job.sh status                          # ô 5: theo dõi; log: bash scripts/pod/job.sh log run_all
-bash scripts/pod/check_datasets.sh                      # ô 6: kiểm tra dữ liệu (không cần GPU)
-VOLUME_GB=100 bash scripts/pod/run_experiment.sh main --background         # ô 7: thực nghiệm chính (xếp hàng sau run_all)
-bash scripts/pod/results.sh                             # kết quả; gói tải về: /workspace/ket_qua_*.tar.gz
-```
-
-Sau đó chạy với dữ liệu bạn chọn: cảnh tự chụp ở ô 8 (`docs/USAGE_GUIDE.md` mục 3), benchmark và thực nghiệm chính ở ô 7 (mục 5 của hướng dẫn).
-
-Thời gian đo được ngày 17/10/2026 trên RTX 4090 (repo trước, cùng script cài đặt và cùng tham số): cài `gs-inria` 29 phút, cài `gs-gsplat` 32 phút (lượt đầu) và 7 phút (lượt thứ hai), cài `gs-tools` 18 phút, B0 49,5 phút, gsplat chạy thử 3.000 vòng 17 phút, gsplat đầy đủ (2 cảnh × `default` + `mcmc`, seed 42) 74 phút (mục 7). Pod vẫn tính tiền khi việc chạy nền; xong thì Terminate (hoặc `AUTO_STOP=1`, chưa thử). Mọi thứ trong `/workspace` vẫn còn.
-
-**Gửi lại:** gói `ket_qua_*.tar.gz` (báo cáo, log, trạng thái việc, JSON/CSV kết quả; không có checkpoint hay PLY).
+Tạo pod theo mục 1. Tải `app/notebooks/runpod.ipynb` lên `/workspace`, chạy ô 1 → 2 → 3 → 4, rồi chạy tiếp các ô theo dữ liệu (`docs/USAGE_GUIDE.md` mục 2). Pod vẫn tính tiền khi đang có việc chạy nền. Xong thì Stop hoặc Terminate pod; mọi thứ trong `/workspace` vẫn còn.
 
 ### 4.5 Chạy nền và khóa GPU (`scripts/pod/job.sh`)
 
-- `bash scripts/pod/job.sh start <tên> -- <lệnh>` chạy lệnh trong phiên riêng (`setsid nohup`): đóng trình duyệt hay tắt kernel Jupyter không làm dừng việc.
-- Mỗi lúc chỉ một việc dùng GPU: khóa `flock` trên `/run/lock/spatialroom3d-gpu.lock` (ổ của pod, mất theo khi tắt pod nên không bao giờ "treo"). Việc mới xếp hàng tới khi khóa nhả. Script chạy trực tiếp (không qua `job.sh`) mà gặp khóa đang bị giữ thì dừng ngay, không chạy chen.
-- Mỗi việc có một token riêng trong biến môi trường `SR3D_JOB_TOKEN`, mọi tiến trình con đều mang theo. `status` và `stop` tìm tiến trình theo token, không theo số pid (pid lặp lại sau khi pod khởi động lại). `stop` gửi SIGTERM rồi SIGKILL sau `STOP_TIMEOUT` giây (mặc định 20) cho mọi tiến trình mang token, kể cả tiến trình đã `setsid` hoặc mồ côi.
-- Trạng thái nằm ở `/workspace/outputs/jobs/<tên>.state`, log ở `/workspace/outputs/logs/jobs/<tên>.log`. Sau khi pod tắt, việc dở dang hiện là `MẤT`; chạy lại lệnh là đủ (các bước đã xong tự bỏ qua).
-- Lệnh: `status [tên]`, `log <tên> [số dòng]`, `stop <tên> | --all`, `busy` (exit 0 khi đang có việc).
-- Tiến trình con kế thừa fd khóa nên khóa chỉ nhả khi cả cây tiến trình kết thúc. `subprocess` của Python đóng mọi fd kế thừa, nên `src.training.run` và `colmap_runner.py` truyền riêng fd khóa (`SR3D_GPU_LOCK_FD`, `src/utils/gpu_lock.py`) cho tiến trình huấn luyện và COLMAP. Tiến trình phụ chạy lâu không dùng GPU (log `nvidia-smi -l`) đóng fd này.
-- `AUTO_STOP=1` khi start một việc (kể cả lệnh start lặp lại cho việc đang chạy): ghi yêu cầu `<file khóa>.auto_stop` kèm phiên của pod. Việc **cuối cùng** kết thúc bình thường (kể cả việc xếp hàng sau đó) gọi `runpodctl pod stop $RUNPOD_POD_ID`. Yêu cầu bị hủy khi: start với `AUTO_STOP=0`; `stop` xong mà không còn việc nào; pod khởi động lại (phiên khác). Chưa thử trên pod.
+- `job.sh start <tên> -- <lệnh>` chạy lệnh trong phiên riêng (`setsid nohup`): đóng trình duyệt hay tắt kernel Jupyter không làm dừng việc.
+- Mỗi lúc chỉ một việc dùng GPU, nhờ khóa `flock` trên `/run/lock/spatialroom3d-gpu.lock`. Khóa mất theo khi tắt pod nên không bao giờ bị treo. Việc nền mới thì xếp hàng; lệnh chạy trực tiếp gặp khóa đang bị giữ thì dừng.
+- Mỗi việc có một token riêng (`SR3D_JOB_TOKEN`). `status` và `stop` tìm tiến trình theo token; `stop` gửi SIGTERM, sau 20 giây thì SIGKILL.
+- Trạng thái nằm ở `outputs/jobs/<tên>.state`, log ở `outputs/logs/jobs/<tên>.log`. Pod tắt giữa chừng thì chạy lại lệnh là đủ.
+- `AUTO_STOP=1`: dừng pod khi việc cuối cùng xong. Chưa thử trên pod.
 
-## 5. Mốc đối chiếu cho Bước 4
+## 5. Mốc đối chiếu cho B0
 
-Bước 4 tái lập kết quả trên **Deep Blending**: 2 cảnh trong nhà (playroom, drjohnson), Inria cung cấp sẵn dữ liệu COLMAP trong `tandt_db.zip` (thư mục `db/`). Bạn tự đưa hai cảnh lên volume (`docs/USAGE_GUIDE.md` mục 2.1).
-
-Số liệu Inria công bố cho code hiện hành (`results.md`, rasterizer mặc định, cấu hình gốc), trung bình 2 cảnh:
-
-| PSNR | SSIM | LPIPS |
-|---|---|---|
-| 29.690 | 0.906 | 0.238 |
-
-- **Ngưỡng chấp nhận đề xuất:** lệch PSNR ≤ 0,5 dB, SSIM ≤ 0,01, LPIPS ≤ 0,01.
-- **Cách chạy:** dùng đúng `train.py --eval`, `render.py` và `metrics.py` của Inria.
-- **Thời gian tham khảo:** Inria báo cáo khoảng 45 phút huấn luyện với rasterizer gốc khi bật đủ tính năng; biểu đồ không ghi rõ GPU.
+Số Inria công bố cho Deep Blending (trung bình 2 cảnh, code hiện hành): PSNR 29,690 / SSIM 0,906 / LPIPS 0,238. Ngưỡng chấp nhận: lệch PSNR ≤ 0,5 dB, SSIM ≤ 0,01, LPIPS ≤ 0,01. Chạy bằng đúng `train.py --eval`, `render.py` và `metrics.py` của Inria.
 
 ## 6. Sự cố đã biết
 
-- `cuda_rasterizer/rasterizer_impl.h` dùng `uint32_t` nhưng không `#include <cstdint>`. Với GCC ≥ 13 có thể lỗi biên dịch. Cách xử lý: dùng GCC ≤ 12, hoặc thêm dòng include và ghi nhận đây là thay đổi so với mã gốc.
-- `simple-knn` tải từ gitlab.inria.fr. Trang web của host này có lớp chống bot và từ chối một số truy cập tự động. Nếu git không clone được, script tự lấy cùng commit `86710c2` từ mirror GitHub; vì commit được xác định bằng mã SHA nên mã nguồn giống hệt bản gốc. Đường dự phòng này đã chạy thử thành công trong sandbox.
-- `metrics.py` tải trọng số VGG và LPIPS từ Internet ở lần chạy đầu.
-- Khi bật bù phơi sáng (`--train_test_exp`), Inria đưa nửa trái ảnh test vào huấn luyện và chỉ đánh giá nửa phải. Số liệu khi đó không so được với cấu hình chuẩn.
-- Với `--eval`, code Inria luôn lấy mỗi ảnh thứ 8 (theo thứ tự tên) làm ảnh test: giá trị `llffhold=8` được gán cứng ở chỗ gọi hàm. Nhánh đọc danh sách ảnh test từ `sparse/0/test.txt` có trong code nhưng không bật được qua tham số dòng lệnh. Muốn dùng đoạn quay kiểm tra riêng (theo `docs/data/capture_protocol.md`), cần thêm một thay đổi nhỏ hoặc công cụ chia dữ liệu riêng — sẽ quyết định ở mốc M4 và ghi nhận là khác biệt so với mã gốc.
-- COLMAP từ bản 3.12 ghi thêm `rigs.bin` và `frames.bin`. Định dạng `cameras.bin`, `images.bin`, `points3D.bin` giữ nguyên (đã đối chiếu mã nguồn COLMAP), nên bộ đọc của Inria vẫn dùng được.
-- **gsplat v1.5.3** (bản phát hành mới nhất khi kiểm tra) có lỗi trong `DefaultStrategy`: điều kiện `step % reset_every == 0 & step > 0` luôn sai vì thứ tự ưu tiên toán tử, nên opacity không bao giờ được reset. Lỗi được sửa ở commit `6e8c837` (PR #776). v1.3.0 thì reset cả ở bước 0 (sửa ở PR #735). Vì vậy env ghim `6e8c837`.
-- `examples/` của gsplat dùng fork `rmbrualla/pycolmap`. Cài gói `pycolmap` chính thức sẽ làm parser lỗi; đây là nguyên nhân notebook demo phải trộn file từ nhiều phiên bản (`docs/research/demo_review.md`).
-- `examples/datasets` của gsplat là namespace package (không có `__init__.py`). Nếu env cài thêm một gói tên `datasets` (vd. của Hugging Face), gói đó sẽ che mất parser của gsplat. `src/training/gsplat_launcher.py` kiểm tra nguồn module và dừng nếu gặp trường hợp này. Gói `datasets` của repo này nằm trong package `src` (`src.datasets`), không trùng tên ở mức cao nhất.
-- `simple_trainer.py` tự huấn luyện phân tán khi thấy nhiều GPU, và gán cứng seed 42. `src.training.run` giới hạn còn một GPU; launcher cho đổi seed.
-- fused-ssim `328dc98` tự dò kiến trúc của GPU lúc build và thêm cờ `-arch`. Khi đó PyTorch bỏ qua `TORCH_CUDA_ARCH_LIST`. Extension chỉ có mã máy cho GPU lúc cài, kèm PTX: GPU có compute capability cao hơn vẫn chạy được (biên dịch PTX lúc chạy), GPU thấp hơn thì không. `setup_gsplat.sh` ghi compute capability vào dấu build (`.sr3d_gsplat_build`) và tự build lại khi đổi loại GPU; `scripts/pipeline/train_scene.sh` và `scripts/pipeline/train_gsplat_modes.sh` chạy thử fused-ssim trên GPU trước khi huấn luyện. Bản fused-ssim trong repo Inria (`1272e21`) không có hành vi này.
-- `opencv-python-headless` được ghim 4.11.0.86 vì bản 4.12 yêu cầu `numpy>=2`, xung đột với `numpy<2` của gsplat. `viser` được ghim 0.2.23 vì `nerfview` 0.1.2 và viewer của gsplat viết cho viser 0.2.x.
-- **Chạy script từ Jupyter** (gặp ở lượt chạy 17/10/2026): ipykernel đặt `MPLBACKEND=module://matplotlib_inline.backend_inline` cho mọi tiến trình con. Env `gs-gsplat` không có `matplotlib_inline`, nên `import matplotlib` (torchmetrics và `simple_trainer.py` đều nạp) báo `ValueError: Key backend ... is not a valid value for backend`; smoke test gsplat FAIL dù phần build đã xong. Đã tái hiện với matplotlib 3.10.5 (bản trong file khóa). `setup_gsplat.sh`, `train_gsplat_modes.sh`, `train_scene.sh`, `run_render.sh` và `job.sh` đặt `MPLBACKEND=Agg`.
-- **COLMAP bản CUDA không cài được với driver CUDA 12.8** (lượt chạy 17/10/2026): conda báo `nothing provides __cuda >=12.9 needed by colmap-4.2.1-cuda_129...`. Xử lý ở mục 4.1: tự dùng bản CPU.
-- **`df` trên network volume** (MooseFS, lượt chạy 17/10/2026) báo dung lượng của cả cụm lưu trữ (2,3 PB), không phải quota của volume. Script cài đặt nhận ra trường hợp này (kích thước > 50.000 GB) và chỉ cảnh báo; dung lượng volume xem trên trang Runpod.
-- **COLMAP bản không có CUDA mà gọi với `use_gpu=1`** sẽ trích SIFT bằng OpenGL và phải tạo ngữ cảnh OpenGL qua Qt (mã nguồn COLMAP 4.2.1, `FeatureExtractionOptions::RequiresOpenGL`), không chạy được trên pod không có màn hình. Chưa gặp trên pod; `colmap_runner.py` chỉ bật GPU khi bản COLMAP có CUDA (`--gpu auto`), và mọi lệnh COLMAP chạy với `QT_QPA_PLATFORM=offscreen` để phòng hờ.
-- **`pip install torch==2.7.1`** coi bản đã cài là đủ dù khác biến thể CUDA (vd. `+cu126` thay vì `+cu128`). Script cài ghi rõ biến thể (`torch==2.7.1+cu128`).
-- **Volume không cho đổi quyền file** (31/10/2026, volume mới tạo ở một data center khác EU-RO-1 để thuê A40): `chmod` trên `/workspace` báo `Operation not permitted`; `git clone` vào `/workspace` hỏng với `error: chmod on /workspace/SpatialRoom3D/.git/config.lock failed: Operation not permitted` và `fatal: could not set 'core.filemode' to 'false'`. Conda và pip cũng cần `chmod`, nên volume kiểu này không dùng được cho pipeline. Trang tạo volume lúc đó đang chọn loại Global volume (beta); chưa xác nhận đó đúng là loại của volume lỗi, và chưa có kết quả `findmnt -T /workspace`. Network volume ở EU-RO-1 thì `chmod` bình thường (cài conda ngày 17/10/2026, mục 7). Ô 1 của notebook kiểm tra `chmod` và báo ✗; dùng Network volume hoặc Volume disk (`docs/USAGE_GUIDE.md` mục 1.1).
-- **Khóa deploy lưu trên volume** (30–31/10/2026, khi repo còn private): trên volume ở EU-RO-1, ô 2 vẫn báo `✗ GitHub chưa nhận khóa` sau khi khóa công khai đã được thêm đúng repo (dấu vân tay khớp, GitHub ghi "Never used"); nguyên nhân chưa xác định vì chưa có log `ssh -v`. Trên volume ở mục trên, `chmod 600` cho khóa riêng không được, mà OpenSSH bỏ qua khóa riêng mà người khác đọc được. Repo đã chuyển sang public (D19), ô 2 và ô 3 dùng HTTPS.
-- **PyYAML:** `configs/*.yaml` được đọc bằng `python3` của máy nếu có PyYAML (template Runpod thường có sẵn qua JupyterLab; ô 1 của notebook kiểm tra), nếu không thì bằng python của env `gs-gsplat`. Env `gs-inria` không có PyYAML: script B0 đọc bản JSON của mục `benchmark` mà `scripts/lib/config.sh` ghi ra `outputs/reports/configs/`.
+- **gsplat v1.5.3:** `DefaultStrategy` không bao giờ reset opacity (lỗi thứ tự toán tử, đã sửa ở `6e8c837`). v1.3.0 thì reset cả ở bước 0. Vì vậy ghim `6e8c837`.
+- **pycolmap:** cài gói `pycolmap` chính thức làm Parser của gsplat lỗi; phải dùng fork rmbrualla.
+- **Gói `datasets`:** `examples/datasets` của gsplat là namespace package. Một gói `datasets` khác cài trong env (vd. của Hugging Face) sẽ che mất nó. `gsplat_launcher.py` và `src/product/train_main.py` kiểm tra trường hợp này và dừng.
+- **`simple_trainer.py`:**
+  - thấy nhiều GPU thì tự train phân tán: code của repo giới hạn một GPU;
+  - gán cứng seed 42: launcher của thực nghiệm cho đổi seed.
+- **fused-ssim `328dc98`:** chỉ build cho loại GPU lúc cài. Đổi loại GPU thì `setup_gsplat.sh` build lại. Các script train chạy thử fused-ssim trên GPU trước khi train.
+- **Jupyter:** đặt `MPLBACKEND=module://matplotlib_inline...`, làm matplotlib báo lỗi trong env `gs-gsplat`. Mọi script đặt `MPLBACKEND=Agg`.
+- **COLMAP:**
+  - bản CUDA cần driver hỗ trợ CUDA ≥ 12.9 (mục 4.1);
+  - bản không có CUDA mà bật GPU thì cần OpenGL: `colmap_runner.py` chỉ bật GPU khi có CUDA, và chạy với `QT_QPA_PLATFORM=offscreen`.
+- **`df` trên network volume:** báo dung lượng của cả cụm lưu trữ (hàng PB), không phải quota. Xem dung lượng trên trang Runpod.
+- **Volume không cho `chmod`** (31/10/2026, volume mới tạo ở một data center khác EU-RO-1): `chmod` báo `Operation not permitted`, nên `git clone`, conda và pip đều hỏng. Trang tạo volume lúc đó đang chọn Global volume (beta); chưa xác nhận đó đúng là loại của volume lỗi. Network volume thì `chmod` bình thường (EU-RO-1 ngày 17/10, EU-CZ-1 ngày 31/10/2026). Ô 1 của notebook kiểm tra `chmod`.
+- **PyTorch:** `pip install torch==2.7.1` coi bản khác biến thể CUDA là đủ, nên script ghi rõ `torch==2.7.1+cu128`.
+- **Phiên bản ghim:** `opencv-python-headless` 4.11.0.86 (bản 4.12 cần `numpy>=2`, xung đột với gsplat); `viser` 0.2.23.
+- **3DGS gốc:**
+  - GCC ≥ 13 có thể lỗi biên dịch (`rasterizer_impl.h` thiếu `#include <cstdint>`);
+  - `--eval` luôn lấy mỗi ảnh thứ 8 làm ảnh test (`llffhold` gán cứng);
+  - `--train_test_exp` đưa nửa ảnh test vào train: không dùng khi so số liệu.
+- **PyYAML:** `configs/*.yaml` được đọc bằng `python3` của máy nếu có PyYAML, không thì bằng python của env `gs-gsplat`. Env `gs-inria` không có PyYAML.
+- **`run_panels.sh` với `VIDEO=1`:** có thể bị `Killed` vì hết RAM (31/10/2026, ở `phong_nhom` và `mipnerf360 room`).
 
-## 7. Kết quả thực tế (repo trước)
+## 7. Lượt chạy trên pod
 
-Các lượt dưới đây chạy bằng repo trước (`truong0809/3D-Indoor-Scene-Reconstruction-from-Images`), trên volume cũ, với bố cục và tên file cũ. Repo này dùng cùng script cài đặt, cùng phiên bản ghim và cùng lệnh huấn luyện (chỉ khác đường dẫn), nhưng **chưa chạy lại** trên pod.
+**31/10/2026, repo này (commit `c0a7a92`).** Pod ở mục 1; code clone qua HTTPS bằng tay.
 
-### Lượt chạy 17/10/2026 (repo trước, commit `8037a66`)
+| Việc | Thời gian | Kết quả |
+|---|---|---|
+| `run_all` (cài 3 env, smoke test) | 37 phút | xong |
+| `fetch_mipnerf360` (4 cảnh trong nhà) | 7 phút 54 giây | `360_v2.zip` 12,54 GB; SHA-256 ghi trong `fetch_*.json` |
+| `gsplat_mipnerf360` (`default`, `mcmc` × 4 cảnh × 3 seed) | 6 giờ 13 phút | xong |
+| `scene_phong_nhom` (video phòng nhóm: khung ảnh, COLMAP, `default`, `mcmc`) | 48 phút | xong |
+| `main` (B0, Deep Blending, bảng tổng; dùng lại 24 lượt Mip-NeRF 360) | 4 giờ 9 phút | mọi bước OK |
+| `tune_mcmc` (16 biến thể trên `room`, lọc Gaussian) | 5 giờ 50 phút | mọi bước OK |
 
-Nguồn: gói `ket_qua_1017_0518.tar.gz` (log, báo cáo `env_*.txt`, `setup_3dgs_inria_*.txt`, `baseline_db_summary_*.json`).
+Số liệu: `docs/PROJECT_STATUS.md` mục "Kết quả".
 
-| Mục | Giá trị |
+**17/10/2026, repo trước.** Cùng script cài đặt và cùng lệnh train; RTX 4090 24 GB, EU-RO-1. Đây là số đo tham khảo, `configs/*.yaml` và `experiments/*/README.md` trích các số này.
+
+| Việc | Kết quả |
 |---|---|
-| Pod | Secure Cloud, data center EU-RO-1, 1 × RTX 4090 24 GB (cc 8.9), On-Demand; `/workspace` là network volume (fuse), container disk 20 GB |
-| Image | `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` (Ubuntu 22.04.5, nvcc 12.4, gcc 11.4.0) |
-| Driver | 570.195.03, hỗ trợ CUDA 12.8 |
-| Env `gs-inria` | Python 3.10.22, torch 2.7.1+cu128; extension build cho 8.0/8.6/8.9/9.0; smoke test **PASSED**; cài mất 29 phút |
-| Env `gs-gsplat` | gsplat 1.5.3 (`6e8c837`) và fused-ssim build xong; smoke test FAIL do `MPLBACKEND` (mục 6), đã sửa ở lượt sau; 32 phút |
-| Env `gs-tools` | Không cài được bản CUDA (mục 6), đã chuyển sang tự chọn bản CPU |
-
-**B0, Inria `54c035f` trên Deep Blending, step 30.000: ĐẠT**
-
-| Cảnh | PSNR | SSIM | LPIPS | Train | Số Gaussian | VRAM đỉnh |
-|---|---|---|---|---|---|---|
-| drjohnson | 29,369 | 0,9051 | 0,2361 | 23,4 phút | 3.105.559 | 15,1 GB |
-| playroom | 30,077 | 0,9081 | 0,2408 | 17,2 phút | 1.843.819 | 9,3 GB |
-| Trung bình | 29,723 | 0,9066 | 0,2384 | | | |
-| Inria công bố | 29,690 | 0,906 | 0,238 | | | |
-| Chênh lệch | +0,033 | +0,0006 | +0,0004 | | | |
-
-Cả ba chỉ số nằm trong ngưỡng mục 5 (0,5 dB / 0,01 / 0,01). Toàn bộ bước B0 (tải dữ liệu, train, render, metrics) mất 49,5 phút.
-
-### Lượt chạy thứ hai 17/10/2026 (repo trước, `8037a66` + bản vá v3, qua `run_all.sh`)
-
-Nguồn: gói kết quả lúc 17:42 (`reports/run_all_20261017_154255.tsv`, `env_20261017_154255.txt`, `setup_3dgs_inria_20261017_154301.txt`, `setup_data_tools_20261017_154556.txt`, `setup_gsplat_20261017_160408.txt`, `modes_db_20261017_162815.{md,json}`).
-
-| Mục | Giá trị |
-|---|---|
-| Pod | 1 × RTX 4090 24 GB (cc 8.9), cùng image; driver 580.126.20, hỗ trợ CUDA 13.0 (pod khác lượt đầu) |
-| `run_all.sh` | Cả 7 bước OK, tổng khoảng 2 giờ |
-| Env `gs-inria` | Đã có, chỉ kiểm tra lại (3 phút) |
-| Env `gs-tools` | COLMAP 4.2.1 bản CUDA (`cuda_129`, vì driver ≥ 12.9), ffmpeg 9.0.2; 18 phút |
-| Env `gs-gsplat` | Smoke test **PASSED**; 7 phút |
-| gsplat chạy thử 3.000 vòng | 2 cảnh × 2 chế độ, 17 phút |
-| gsplat đầy đủ, seed 42 | 74 phút |
-
-**gsplat `6e8c837` trên Deep Blending, step 30.000, seed 42**
-
-| Cảnh | Chế độ | PSNR | SSIM | LPIPS | Số Gaussian | Train | VRAM đỉnh |
-|---|---|---|---|---|---|---|---|
-| drjohnson | `default` | 29,159 | 0,9005 | 0,2442 | 3.682.098 | 17,5 phút | 7,6 GiB |
-| drjohnson | `mcmc` (`opacity_reg` 0,001) | 29,229 | 0,9036 | 0,2339 | 3.682.098 | 19,4 phút | 7,2 GiB |
-| playroom | `default` | 29,836 | 0,9063 | 0,2481 | 2.363.710 | 13,0 phút | 4,9 GiB |
-| playroom | `mcmc` (`opacity_reg` 0,001) | 29,839 | 0,9074 | 0,2332 | 2.363.710 | 13,6 phút | 4,6 GiB |
-
-- `default` so với số liệu Inria công bố: **PASS** (trung bình ΔPSNR −0,192 dB, ΔSSIM −0,003, ΔLPIPS +0,008).
-- `default` so với B0 tự chạy: **PASS** ở từng cảnh (ΔPSNR −0,209 dB ở drjohnson, −0,241 dB ở playroom).
-- `mcmc` dùng `cap_max` bằng số Gaussian cuối của `default` (ngân sách EQUAL). Mới có một seed nên bảng so sánh ghi `seeds=FEW`: chưa kết luận `mcmc` tốt hơn.
+| B0 trên Deep Blending, 30.000 vòng | Đạt ngưỡng. drjohnson 29,369 / 0,9051 / 0,2361 (23,4 phút); playroom 30,077 / 0,9081 / 0,2408 (17,2 phút); trung bình 29,723 / 0,9066 / 0,2384 (+0,033 dB so với số công bố); cả bước B0 49,5 phút |
+| gsplat trên Deep Blending, seed 42 | `default` / `mcmc`: drjohnson 17,5 / 19,4 phút, playroom 13,0 / 13,6 phút; cả lượt 74 phút; `default` PASS so với số công bố (−0,192 dB) và so với B0 |
+| Cài đặt | `gs-inria` 29 phút; `gs-gsplat` 32 phút (lần đầu); `gs-tools` 18 phút |

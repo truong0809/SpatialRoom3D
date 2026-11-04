@@ -42,7 +42,7 @@ Mỗi lần chạy, phần `benchmark` của `configs/<benchmark>.yaml` được
 
 ## 2. Thực nghiệm chính: `default` / `mcmc`
 
-Kế hoạch: `configs/experiments/main.yaml` (kiểm tra bởi `src/training/experiment.py`). Chạy: `scripts/pod/run_experiment.sh`. **Trạng thái: đã viết, đã kiểm thử bằng stub và mô phỏng notebook; đã rà soát độc lập một lượt, lỗi tìm được đã sửa kèm test; chưa chạy trên pod.**
+Kế hoạch: `configs/experiments/main.yaml` (kiểm tra bởi `src/training/experiment.py`). Chạy: `scripts/pod/run_experiment.sh`. **Trạng thái: đã kiểm thử bằng stub và mô phỏng notebook; đã rà soát độc lập một lượt, lỗi tìm được đã sửa kèm test; đã chạy trên pod ngày 31/10/2026, mọi bước OK (kết quả: `docs/PROJECT_STATUS.md` mục "Kết quả").**
 
 ### 2.1 Câu hỏi
 
@@ -149,7 +149,7 @@ Nếu chỉ một benchmark cải thiện, hoặc chỉ một chỉ số, thì g
 
 ## 3. Dò tham số `mcmc`: `tune_mcmc`
 
-Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script với thực nghiệm chính. **Trạng thái: đã viết, đã kiểm thử bằng stub trong sandbox; chưa chạy trên pod, chưa có số liệu.** Bốn biến thể lấy từ notebook v2 (mục 3.7): đã viết, đã kiểm thử trên CPU (kể cả `simple_trainer.py` thật của gsplat @6e8c837 ở chế độ chỉ phân giải tham số); **chưa chạy một vòng train nào trên GPU**.
+Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script với thực nghiệm chính. **Trạng thái: đã kiểm thử bằng stub trong sandbox; đã chạy trên pod ngày 31/10/2026 (`room`, seed 42), mọi bước OK, kể cả bốn biến thể lấy từ notebook v2 (mục 3.7); kết quả: `docs/PROJECT_STATUS.md` mục "Kết quả".**
 
 ### 3.1 Câu hỏi và cách dùng kết quả
 
@@ -179,9 +179,9 @@ Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script v
 | Bảng so sánh | với `default`, và thêm một bảng so với `mcmc` (`also_against: [mcmc]`) |
 | Lọc sau khi train (`post_filter`) | mọi lượt: `min_opacity` 0,02, `max_scale` 0,1 (mục 4); bảng trước / sau khi lọc |
 
-`or005` và `mo002` nhắm vào lớp mờ và floater (giả thuyết, chưa có số liệu). `or005` phạt opacity mạnh hơn preset. Với `mo002`, MCMC dời cả Gaussian có opacity đến 0,02 (bằng ngưỡng lọc ở mục 4) sang chỗ có Gaussian đậm ngay trong lúc train, thay vì để bộ lọc xóa sau khi train; trong gsplat @6e8c837, `strategy.min_opacity` cũng là opacity nhỏ nhất của Gaussian vừa được dời hoặc thêm (`relocate`, `sample_add` trong `gsplat/strategy/ops.py`).
+`or005` và `mo002` nhắm vào lớp mờ và floater (giả thuyết viết trước khi chạy; lượt 31/10/2026: cả hai kém `mcmc` quá d). `or005` phạt opacity mạnh hơn preset. Với `mo002`, MCMC dời cả Gaussian có opacity đến 0,02 (bằng ngưỡng lọc ở mục 4) sang chỗ có Gaussian đậm ngay trong lúc train, thay vì để bộ lọc xóa sau khi train; trong gsplat @6e8c837, `strategy.min_opacity` cũng là opacity nhỏ nhất của Gaussian vừa được dời hoặc thêm (`relocate`, `sample_add` trong `gsplat/strategy/ops.py`).
 
-`rs30k` và `sh2` (giả thuyết, chưa có số liệu):
+`rs30k` và `sh2` (giả thuyết viết trước khi chạy; lượt 31/10/2026: cả hai kém `mcmc` quá d, `sh2` −0,251 dB với PLY 226 thay vì 351 MB):
 - `rs30k`: mỗi 100 vòng, sau vòng 500 và trước `strategy.refine_stop_iter` (mặc định 25.000), MCMC của gsplat dời các Gaussian gần trong suốt sang chỗ có Gaussian đậm, và thêm Gaussian cho tới khi đạt `cap_max` (việc thêm thường dừng sau vài nghìn vòng). Notebook demo của nhóm đặt 35.000 khi chạy 40.000 vòng (`docs/research/demo_review.md`); với protocol 30.000 vòng, 35.000 và 30.000 như nhau: lần dời cuối ở vòng 29.900 thay vì 24.900. Biến thể kiểm tra lựa chọn đó: dời thêm 5.000 vòng để đặt lại Gaussian, nhưng Gaussian dời ở cuối có ít vòng để tối ưu.
 - `sh2`: SH bậc 2 thay vì 3 (gsplat tăng bậc SH mỗi 1.000 vòng đến `sh_degree`): PLY và checkpoint 152 thay vì 236 byte mỗi Gaussian, cùng số Gaussian, tức nhẹ hơn khoảng 36%; đổi lại có thể mất một phần màu thay đổi theo góc nhìn (bề mặt bóng loáng, phản chiếu). Lệnh chấm lại sau khi lọc và lệnh render dùng đúng lệnh đánh giá đã ghi của lượt, nên cùng `sh_degree` với lúc train.
 
@@ -267,7 +267,7 @@ Mục đích: chọn bộ tham số cho `mcmc_indoor` trên những lượt chư
 
 ### 3.7 Biến thể từ notebook v2: `bilagrid`, `kr`, `mono` và gói `v2`
 
-**Trạng thái: đã viết, đã kiểm thử trên CPU (mục cuối); chưa train trên GPU, chưa có số liệu.** Quyết định D16 (`docs/PROJECT_STATUS.md`).
+**Trạng thái: đã kiểm thử trên CPU (mục cuối); đã chạy trên pod ngày 31/10/2026 trong `tune_mcmc`: `kr`, `mono` trong mức dao động; `bilagrid` (−2,476 dB), `v2` (−2,750 dB) kém `mcmc` quá d (`docs/PROJECT_STATUS.md` mục "Kết quả").** Quyết định D16 (`docs/PROJECT_STATUS.md`).
 
 Notebook demo v2 của nhóm (`3D_demo_v2.ipynb`, giống v4 `3D_demo_v4_improved_30k.ipynb` nhưng 7.000 vòng) thêm vào `mcmc`: `global_scale` tính lại cho bền với camera lỗi, tâm cảnh theo vị trí camera, Kill-then-Relocate, bilateral grid, depth prior; cùng `depth_loss` (điểm SfM), `random_bkgd` và `strategy.refine_stop_iter` = 0,8 × số vòng. `depth_loss` và `random_bkgd` đã có ở `depth`, `rbg`. Ba thành phần còn lại thành ba biến thể, mỗi biến thể thêm đúng một thành phần; thêm một gói bật cùng lúc mọi thứ.
 
@@ -288,9 +288,9 @@ Notebook demo v2 của nhóm (`3D_demo_v2.ipynb`, giống v4 `3D_demo_v4_improve
 - Bỏ `global_scale` tính lại và tâm cảnh theo camera: cảnh benchmark không có camera đăng ký sai, còn đổi tâm cảnh chỉ dời và co giãn cả cảnh. Hai bước này thuộc phần chuẩn bị dữ liệu của cảnh tự quay; xét lại khi chạy video của nhóm.
 - Chỉ số: PSNR trên ảnh render không qua grid, không dùng `cc_psnr` (mục 3.5).
 
-**Gói `v2`** chỉ trả lời "notebook v2, đưa về protocol chung, so với `mcmc`" trên `room`, seed 42. Nó không phải ứng viên của vòng ghép: gộp sáu thay đổi nên không biết phần nào có ích, và một phần có lợi có thể bị một phần có hại che đi; câu hỏi đó do ba biến thể tách riêng trả lời. **Chưa quyết định:** có đưa `v2` vào vòng ghép như một cấu hình thêm (2 seed mới) để có số chắc hơn một seed hay không. Quyết định đó phải ghi lại trước khi đọc kết quả của `tune_mcmc` (mục 3.6: luật cố định trước khi có số liệu); không ghi thì `v2` chỉ là một dòng sàng lọc.
+**Gói `v2`** chỉ trả lời "notebook v2, đưa về protocol chung, so với `mcmc`" trên `room`, seed 42. Nó không phải ứng viên của vòng ghép: gộp sáu thay đổi nên không biết phần nào có ích, và một phần có lợi có thể bị một phần có hại che đi; câu hỏi đó do ba biến thể tách riêng trả lời. Có đưa `v2` vào vòng ghép như một cấu hình thêm (2 seed mới) hay không phải ghi lại trước khi đọc kết quả của `tune_mcmc` (mục 3.6: luật cố định trước khi có số liệu); không ghi thì `v2` chỉ là một dòng sàng lọc. Quyết định không được ghi trước, nên `v2` chỉ là một dòng sàng lọc và không vào vòng ghép; lựa chọn này chốt sau khi có kết quả, báo cáo phải ghi rõ (`docs/PROJECT_STATUS.md`).
 
-**Đã kiểm thử trên CPU** (chưa train trên GPU):
+**Đã kiểm thử trên CPU** (trước lượt chạy trên GPU ngày 31/10/2026):
 - vá `simple_trainer.py` thật của gsplat @6e8c837: đúng SHA-256 của bản ghim, 4 dòng chèn nằm đúng chỗ trong vòng lặp của `Runner.train` (cây cú pháp: sau khi tách màu / độ sâu; loss của prior sau loss độ sâu SfM, trước TV loss và `loss.backward()`; KR là lệnh đầu của nhánh MCMC, trước `step_post_backward`); `smoke_test_gsplat.py` mục 5 với trainer thật (PyTorch 2.7.1 chạy trên CPU, thư viện theo file khóa của env, fused-ssim thay bằng stub) phân giải đúng tham số của cả 18 lượt của `tune_mcmc`, kể cả bản sao có vá của `kr`, `mono`, `v2` (kiểm tra tay, ngoài bộ test);
 - KR với `MCMCStrategy` thật của gsplat: vòng KR trùng vòng relocate, Gaussian bị đánh dấu nằm trong mặt nạ "chết" mà relocate nhận; đúng các trường hợp quá lớn / hình kim / sát camera train, bỏ qua camera test, giới hạn 2 %;
 - loss Pearson bằng PyTorch: prior đúng hình dạng cho loss gần 0, prior ngược cho 2λ, có gradient, tắt sau 60 % số vòng, ảnh không dùng prior và ảnh ít pixel cho 0, prior nhỏ hơn được nội suy;
@@ -300,13 +300,13 @@ Notebook demo v2 của nhóm (`3D_demo_v2.ipynb`, giống v4 `3D_demo_v4_improve
 - launcher với trainer giả có đủ 4 chỗ chèn: chạy bản sao có vá, file gốc không đổi, mọi dòng chèn đều được gọi; `run.py`: bước `mono` → train (có `--hook`) → đánh giá (không hook), lỗi ở bước `mono` thì không train, đổi hằng số của hook thì không bỏ qua lượt cũ;
 - `run_experiment.sh` với stub: bước `depth_anything` chạy trước `env_check`; lỗi thì chỉ bỏ lượt dùng prior (kiểm tra môi trường và chỗ trống không tính lượt đó), các lượt khác vẫn train, báo cáo ghi một dòng; baseline dùng prior thì không train gì.
 
-Môi trường và cách làm các kiểm tra tay: `docs/PROJECT_STATUS.md`, mục "Kiểm thử trong sandbox", lượt 28/10/2026.
+Môi trường và cách làm các kiểm tra tay: `docs/PROJECT_STATUS.md` ở commit `704499b` (bản đầy đủ trước khi rút gọn), mục "Kiểm thử trong sandbox", lượt 28/10/2026.
 
 Chưa biết: thời gian và VRAM thêm của `bilagrid`, `mono`, `v2` (ước lượng ở mục 3.4 giả định +30 %); trọng số thật của Depth Anything V2 cho tương quan bao nhiêu với điểm SfM của `room`.
 
 ## 4. Lọc Gaussian sau khi train
 
-`src/training/prune.py`; trong kế hoạch: khóa `post_filter`; cho một lượt bất kỳ: `bash scripts/run_filter.sh <luồng> <cảnh> [<lượt> ...]` (vd. `custom phong1 mcmc_s42`). **Trạng thái: đã viết, đã kiểm thử trong sandbox (logic lọc bằng numpy; đọc / ghi checkpoint bằng PyTorch 2.7.1 chạy trên CPU; ghi PLY bằng `export_splats` thật của gsplat @6e8c837; lệnh chấm lại bằng runner giả); chưa chạy trên GPU.**
+`src/training/prune.py`; trong kế hoạch: khóa `post_filter`; cho một lượt bất kỳ: `bash scripts/run_filter.sh <luồng> <cảnh> [<lượt> ...]` (vd. `custom phong1 mcmc_s42`). **Trạng thái: đã viết, đã kiểm thử trong sandbox (logic lọc bằng numpy; đọc / ghi checkpoint bằng PyTorch 2.7.1 chạy trên CPU; ghi PLY bằng `export_splats` thật của gsplat @6e8c837; lệnh chấm lại bằng runner giả); đã chạy trên pod ngày 31/10/2026 trong `tune_mcmc`.**
 
 - **Bỏ** một Gaussian khi tham số không hữu hạn, khi opacity (sau sigmoid) < `min_opacity` (lớp sương mờ, vệt mờ lơ lửng), hoặc khi trục lớn nhất > `max_scale` × `scene_scale`. Mỗi Gaussian chỉ được đếm ở tiêu chí đầu tiên loại nó. Các Gaussian còn lại giữ nguyên tham số, không tối ưu lại.
 - **`scene_scale`** đúng như `simple_trainer.py` tính (Parser của gsplat trên thư mục dữ liệu của lượt: khoảng cách lớn nhất từ một camera tới tâm các camera sau khi chuẩn hóa, × 1,1 × `global_scale`), cùng đại lượng mà DefaultStrategy dùng cho ngưỡng `prune_scale3d` = 0,1 lúc densify. Script đối chiếu với dòng `Scene scale:` trong `train.log`; lệch thì dừng. Ngưỡng tính theo camera, nên mọi chế độ trên cùng cảnh dùng cùng một ngưỡng tuyệt đối.
@@ -350,14 +350,14 @@ Biến thể của một kế hoạch (mục 3.2) là một dòng riêng `<chế
 
 | Hạng mục | Trạng thái | Bằng chứng |
 |---|---|---|
-| B0 Inria trên Deep Blending | Repo trước đã chạy trên pod ngày 17/10/2026, đạt ngưỡng so với số liệu Inria. **Repo này chưa chạy** | `docs/PROJECT_STATUS.md` (lịch sử), `docs/ENVIRONMENT_AUDIT.md` mục 7 |
-| gsplat `default` / `mcmc` trên Deep Blending, seed 42 | Repo trước đã chạy trên pod ngày 17/10/2026. **Repo này chưa chạy** | như trên |
-| Thực nghiệm chính (mục 2): `default` / `mcmc`, 3 seed, Deep Blending + 4 cảnh Mip-NeRF 360 | **Đã viết, chưa chạy trên pod** | Kiểm thử bằng stub: `tests/unit/test_experiment.py`, `test_fetch.py`, `test_benchmarks.py`, `test_compare_modes.py`; mô phỏng notebook và rà soát độc lập (`docs/PROJECT_STATUS.md`) |
+| B0 Inria trên Deep Blending | Đã chạy bằng repo này ngày 31/10/2026 (trong `main`, mọi bước OK); `default` PASS so với B0 tự chạy (drjohnson −0,339 dB, playroom −0,136 dB). Repo trước: B0 đạt ngưỡng so với số Inria công bố (17/10/2026) | `docs/PROJECT_STATUS.md` mục "Kết quả", `docs/ENVIRONMENT_AUDIT.md` mục 7 |
+| gsplat `default` / `mcmc` trên Deep Blending | Đã chạy bằng repo này ngày 31/10/2026, 3 seed (trong thực nghiệm chính) | như trên |
+| Thực nghiệm chính (mục 2): `default` / `mcmc`, 3 seed, Deep Blending + 4 cảnh Mip-NeRF 360 | **Đã chạy trên pod ngày 31/10/2026**, mọi bước OK; kết quả ở `docs/PROJECT_STATUS.md` mục "Kết quả" | Kiểm thử bằng stub: `tests/unit/test_experiment.py`, `test_fetch.py`, `test_benchmarks.py`, `test_compare_modes.py`; mô phỏng notebook và rà soát độc lập (`docs/PROJECT_STATUS.md` ở commit `704499b` (bản đầy đủ trước khi rút gọn)) |
 | Chạy riêng từng phương pháp của thực nghiệm chính (`--only`, mục 2.3; 3 notebook của `app/notebooks/`) | **Đã viết, đã kiểm thử bằng stub và mô phỏng notebook; chưa chạy trên pod** | `tests/unit/test_experiment.py` (các test `test_only_*`, `test_separate_methods_then_the_whole_plan_train_each_run_once`), `test_benchmarks.py::test_b0_check_if_present_compares_with_b0_only_once_it_exists`, `test_notebooks.py` |
-| Tải dữ liệu benchmark trên pod | Đã viết; kiểm thử với curl giả và file zip tổng hợp; **chưa tải thật** (sandbox không ra được Internet) | `tests/unit/test_fetch.py` |
-| Mip-NeRF 360 (B0 và gsplat) | **Đã cấu hình, chưa chạy; chưa có dữ liệu trên volume** | `experiments/mipnerf360/README.md` |
+| Tải dữ liệu benchmark trên pod | Đã chạy trên pod ngày 31/10/2026 (Mip-NeRF 360, 4 cảnh trong nhà; SHA-256 ghi lại) | `tests/unit/test_fetch.py` |
+| Mip-NeRF 360 (gsplat) | Đã chạy 4 cảnh trong nhà ngày 31/10/2026; B0 trên Mip-NeRF 360 và 5 cảnh ngoài trời chưa chạy | `experiments/mipnerf360/README.md` |
 | Lệnh huấn luyện mà repo này sinh ra cho Deep Blending | Kiểm thử bằng stub: `default` / `mcmc` giống lệnh repo trước đã chạy ngày 17/10/2026, chỉ khác đường dẫn | `tests/unit/test_benchmarks.py` |
-| Dò tham số `mcmc` (`tune_mcmc`, mục 3): biến thể, kiểm tra điểm SfM, lọc theo seed | **Đã viết, chưa chạy trên pod** | Kiểm thử bằng stub: `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py` |
-| Biến thể từ notebook v2 (mục 3.7): `bilagrid`, `kr`, `mono`, gói `v2`; bản sao có vá của trainer; depth prior; bước `depth_anything` | **Đã viết, đã kiểm thử trên CPU (kể cả trainer và `MCMCStrategy` thật của gsplat), chưa train trên GPU, chưa chạy smoke test trên GPU, chưa tải Depth Anything V2 thật** | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_train_profiles.py`, `test_experiment.py`; các kiểm tra ngoài bộ test ghi ở mục 3.7 |
-| Vòng ghép (mục 3.6) | **Mới thiết kế**: luật chọn đã cố định; file kế hoạch viết khi có kết quả `tune_mcmc`; chưa chạy | Cơ chế đã có: biến thể nhiều tham số được kiểm tra trong kế hoạch (`test_experiment.py::test_a_combination_round_plan_has_several_parameters_per_variant`) và thành nhiều `--set` khi train (`test_benchmarks.py::test_variants_run_after_the_modes_into_their_own_folders`) |
-| Lọc Gaussian và chấm lại (mục 4) | **Đã viết, chưa chạy trên GPU**; logic lọc, checkpoint PyTorch và PLY của gsplat kiểm tra trên CPU | `tests/unit/test_prune.py`, `test_compare_modes.py`, `test_gsplat_results.py` |
+| Dò tham số `mcmc` (`tune_mcmc`, mục 3): biến thể, kiểm tra điểm SfM, lọc theo seed | **Đã chạy trên pod ngày 31/10/2026**, mọi bước OK; kết quả ở `docs/PROJECT_STATUS.md` mục "Kết quả" | Kiểm thử bằng stub: `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py` |
+| Biến thể từ notebook v2 (mục 3.7): `bilagrid`, `kr`, `mono`, gói `v2`; bản sao có vá của trainer; depth prior; bước `depth_anything` | **Đã chạy trên pod ngày 31/10/2026** trong `tune_mcmc` (Depth Anything V2 Small tải được, mọi bước OK) | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_train_profiles.py`, `test_experiment.py`; các kiểm tra ngoài bộ test ghi ở mục 3.7 |
+| Vòng ghép (mục 3.6) | **Chưa chạy**: theo luật, một ứng viên (`rbg`); kế hoạch đã viết, chưa đưa lên Git, chờ quyết định chạy hay bỏ (`docs/PROJECT_STATUS.md`, mục "Đề xuất chờ xác nhận") | Cơ chế đã có: biến thể nhiều tham số được kiểm tra trong kế hoạch (`test_experiment.py::test_a_combination_round_plan_has_several_parameters_per_variant`) và thành nhiều `--set` khi train (`test_benchmarks.py::test_variants_run_after_the_modes_into_their_own_folders`) |
+| Lọc Gaussian và chấm lại (mục 4) | **Đã chạy trên pod ngày 31/10/2026** (`tune_mcmc`): PSNR của `default` giảm 1,14 dB, của `mcmc` và các biến thể giảm 2,1–9,1 dB; không dùng để làm nhẹ file cho MCMC | `tests/unit/test_prune.py`, `test_compare_modes.py`, `test_gsplat_results.py` |

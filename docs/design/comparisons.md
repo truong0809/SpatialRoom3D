@@ -85,4 +85,4 @@ IMAGES="0 12 24" CROP=0.5,0.4,0.25,0.25 VIDEO=1 bash scripts/run_panels.sh custo
 
 Báo cáo không tự kết luận chế độ nào tốt hơn. Chỉ gọi là "cải thiện" khi có ít nhất 3 seed, mọi điều kiện đạt (ngân sách Gaussian EQUAL) và kết quả nhất quán trên các cảnh (`docs/design/training_modes.md` mục 4.3).
 
-Đã kiểm tra trong repo trước, trên kết quả thật của pod ngày 17/10/2026: cùng mã so sánh cho ra báo cáo giống hệt `reports/modes_db_20261017_162815.md`. Repo này chưa có kết quả nào trên pod (`docs/PROJECT_STATUS.md`).
+Đã kiểm tra trong repo trước, trên kết quả thật của pod ngày 17/10/2026: cùng mã so sánh cho ra báo cáo giống hệt `reports/modes_db_20261017_162815.md`. Repo này đã chạy mã so sánh trên kết quả thật của pod ngày 31/10/2026 (báo cáo `main_20261031_114145*.md`, `docs/PROJECT_STATUS.md` mục "Kết quả").

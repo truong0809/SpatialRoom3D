@@ -1,6 +1,6 @@
 # Mip-NeRF 360
 
-**Trạng thái: đã cấu hình, chưa chạy. Chưa có dữ liệu trên volume.**
+**Trạng thái: đã chạy 4 cảnh trong nhà (room, counter, kitchen, bonsai) ngày 31/10/2026, `default` / `mcmc` × 3 seed (`docs/PROJECT_STATUS.md` mục "Kết quả"). 5 cảnh ngoài trời chưa chạy.**
 
 Thư mục này chỉ chứa tài liệu của benchmark. Dữ liệu và kết quả nằm trên volume, không đưa lên Git.
 
@@ -53,12 +53,12 @@ bash scripts/run_evaluate.sh mipnerf360
 bash scripts/pod/run_experiment.sh tune_mcmc --plan           # dò tham số mcmc trên room: kế hoạch, các bước
 ```
 
-Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất khoảng 13–20 phút mỗi cảnh mỗi chế độ (số đo ở `docs/ENVIRONMENT_AUDIT.md` mục 7). Mip-NeRF 360 chưa chạy nên chưa có số đo thời gian (9 cảnh).
+Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất khoảng 13–20 phút mỗi cảnh mỗi chế độ (số đo ở `docs/ENVIRONMENT_AUDIT.md` mục 7). Mip-NeRF 360, 4 cảnh trong nhà × 2 chế độ × 3 seed: 6 giờ 13 phút (31/10/2026, `docs/ENVIRONMENT_AUDIT.md` mục 7); 5 cảnh ngoài trời chưa đo.
 
 ## Đã kiểm tra những gì
 
 - Lệnh sinh ra (hệ số ảnh theo cảnh, không có tham số mcmc riêng, dừng khi thiếu `images_N/`, báo cáo khi chỉ có một phần cảnh): `tests/unit/test_benchmarks.py`, chạy với stub.
-- Biến thể tham số của `tune_mcmc` (thư mục `<chế_độ>_<tag>_s<seed>`, cùng `cap_max` lấy từ `default`, tham số của biến thể đứng sau quy ước mcmc của benchmark): `tests/unit/test_benchmarks.py`, `tests/unit/test_experiment.py`, chạy với stub. Biến thể có code (`kr`, `mono`, `v2`): `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_train_run.py`, kiểm trên CPU, chưa train trên GPU (`docs/design/experiments.md` mục 3.7).
-- Tải và giải nén (chỉ cảnh và thư mục cần dùng, bỏ file ẩn / symlink, dừng khi đường dẫn không an toàn hoặc thiếu thư mục): `tests/unit/test_fetch.py`, với curl giả và file zip tổng hợp; **chưa tải file thật**.
+- Biến thể tham số của `tune_mcmc` (thư mục `<chế_độ>_<tag>_s<seed>`, cùng `cap_max` lấy từ `default`, tham số của biến thể đứng sau quy ước mcmc của benchmark): `tests/unit/test_benchmarks.py`, `tests/unit/test_experiment.py`, chạy với stub. Biến thể có code (`kr`, `mono`, `v2`): `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_train_run.py`, kiểm trên CPU; đã chạy trên GPU trong `tune_mcmc` ngày 31/10/2026 (`docs/design/experiments.md` mục 3.7).
+- Tải và giải nén (chỉ cảnh và thư mục cần dùng, bỏ file ẩn / symlink, dừng khi đường dẫn không an toàn hoặc thiếu thư mục): `tests/unit/test_fetch.py`, với curl giả và file zip tổng hợp; đã tải file thật trên pod ngày 31/10/2026 (4 cảnh trong nhà).
 - Bản xem dữ liệu, cache PNG dùng chung, cache dở dang hoặc có file lạ bị xóa, hai cảnh không dùng chung cache, cùng cấu hình thì bỏ qua: `tests/unit/test_train_run.py`, với runner giả ghép ảnh đúng như gsplat 6e8c837 (bắt được lỗi khi dấu `.complete` nằm trong thư mục PNG).
 - **Chưa chạy** với gsplat thật hay dữ liệu thật.

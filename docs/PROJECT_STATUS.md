@@ -1,375 +1,130 @@
 # PROJECT STATUS
 
-_Cập nhật: 31/10/2026; thêm luồng sản phẩm ngày 04/11/2026 (D20). Kết quả lượt chạy pod ngày 31/10/2026 chưa ghi vào file này._
+_Cập nhật: 04/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhật ký kiểm thử, rà soát độc lập, ghi chú từng lần sửa) nằm trong lịch sử Git của file này và trong các bản bàn giao của Project trên claude.ai._
 
 ## Mục tiêu hiện tại
 
-1. Dựng **pod mới gắn network volume mới (trống)** bằng repo này (`docs/USAGE_GUIDE.md` mục 1–2):
-   - volume loại Network volume, cho đổi quyền file (`chmod`; ô 1 kiểm); không dùng Global volume (`docs/ENVIRONMENT_AUDIT.md` mục 6);
-   - clone code qua HTTPS vào `/workspace/SpatialRoom3D` (repo public, D19);
-   - cài 3 env conda (`scripts/pod/run_all.sh`: chỉ cài môi trường, không train).
-2. **Thực nghiệm chính** (D12, `docs/design/experiments.md` mục 2): ô 7 với `WHAT = "experiment"`, `EXP = "main"`.
-   - Một việc nền: tự tải Deep Blending và 4 cảnh trong nhà của Mip-NeRF 360, B0 trên Deep Blending, rồi `default` / `mcmc` × seed 42, 43, 44 trên 6 cảnh, rồi bảng so sánh.
-   - Ước lượng: khoảng 12 giờ GPU trên RTX 4090 và thêm khoảng 56 GB trên volume (volume 100 GB đủ theo ước lượng). **Chỉ chạy khi đã duyệt chi phí.**
-   - Hoặc chạy riêng từng phương pháp (D17): `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` (`docs/USAGE_GUIDE.md` mục 5.1.1); cùng bộ lượt, cùng thư mục kết quả.
-3. **Dò tham số `mcmc`** (D14, D15, D16, `docs/design/experiments.md` mục 3): ô 7 với `EXP = "tune_mcmc"`.
-   - Một việc nền trên `room` (Mip-NeRF 360), seed 42, 30.000 vòng: `default`, `mcmc` và 16 biến thể của `mcmc`: `mono`, `kr`, `bilagrid` thêm từng thành phần của notebook v2 và gói `v2` (mục 3.7), chạy trước; 12 biến thể đổi một tham số; tải Depth Anything V2 Small ở bước `depth_anything` (lỗi thì chỉ bỏ `mono`, `v2`); kiểm tra điểm SfM trước khi train; lọc Gaussian rồi chấm lại sau khi train.
-   - Ước lượng: khoảng 8 giờ GPU trên RTX 4090, khoảng 6,7 giờ khi chạy sau bước 2 (`default_s42`, `mcmc_s42` của `room` đã có); thêm khoảng 35 GB trên volume. **Chỉ chạy khi đã duyệt chi phí.**
-4. **Vòng ghép** (D15, `docs/design/experiments.md` mục 3.6): từ kết quả bước 3, chọn tối đa 3 ứng viên theo luật cố định trước, ghép thành 1–4 cấu hình trong `configs/experiments/tune_mcmc_combo.yaml` (**chưa có**: viết khi có số liệu), chạy 2 seed mới (43, 44) trên `room`, chọn cấu hình cho `mcmc_indoor`. Chạy sau bước 2 (cần độ lệch chuẩn của `mcmc` trên `room` và các lượt seed 43, 44), trên cùng loại GPU.
-   - Ước lượng: khoảng 1–3,5 giờ GPU, thêm khoảng 10–20 GB. **Chỉ chạy khi đã duyệt chi phí.**
-5. **`mcmc_indoor` trong thực nghiệm chính:** định nghĩa chế độ trong `configs/base.yaml` (**chưa có**), thêm vào `main.yaml`, chạy lại `main`: chỉ 18 lượt `mcmc_indoor` được train (ước lượng khoảng 5–6 giờ GPU, thêm khoảng 25 GB). Chạy các bước 2–5 trên cùng volume và cùng loại GPU: nên 170 GB (tăng dần được). **Chỉ chạy khi đã duyệt chi phí.**
-6. Cảnh tự chụp, video của nhóm (thư mục ảnh hoặc video): bạn tự đưa lên (`docs/USAGE_GUIDE.md` mục 2.1), chạy qua ô 8 của notebook, sau thực nghiệm chính.
-
-**Repo này:** bắt đầu ngày 19/10/2026 (D7–D12, D14–D19). **Chưa chạy trên pod nào** (30–31/10/2026 đã dựng pod nhưng dừng ở bước lấy code: `docs/ENVIRONMENT_AUDIT.md` mục 6). Mọi số liệu GPU dưới đây là của repo trước (`3D-Indoor-Scene-Reconstruction-from-Images`), chạy ngày 17/10/2026 trên volume cũ.
+1. **Chạy luồng sản phẩm lần đầu trên pod** (D20, `docs/design/product.md`): dựng phòng nhóm bằng mô hình chính `mcmc`, mở file web trên một trình xem `.splat`.
+2. **Trang web xem 3D** (giai đoạn 5): đọc `manifest.json`, `model.splat`, `cameras.json` theo hợp đồng ở `docs/design/product.md` mục 4; ba chế độ xoay quanh, đi bộ, tham quan; sau đó là tải video / ảnh lên và dựng phòng từ web.
+3. **Báo cáo đồ án** (giai đoạn 6) từ kết quả thực nghiệm ngày 31/10/2026 (mục "Kết quả").
+4. Tùy chọn: vòng ghép của lượt dò tham số (D15), chỉ khi được duyệt chi phí GPU.
 
 ## Quy ước trạng thái
 
-`Đã viết` → `Đã chạy` → `Đã kiểm thử` → `Đã xác nhận đạt mục tiêu`.
-Chỉ mức cuối cùng mới được tính là hoàn thành.
+`Đã viết` → `Đã chạy` → `Đã kiểm thử` → `Đã xác nhận đạt mục tiêu`. Chỉ mức cuối cùng mới được tính là hoàn thành.
 
 ## Quyết định đã chốt
 
-| # | Ngày | Quyết định | Ghi chú |
-|---|---|---|---|
-| D1 | 09/10/2026 | Phương pháp trọng tâm là 3DGS; baseline là 3DGS gốc (Kerbl et al., 2023) | Bản cài đặt (Inria chính chủ hay gsplat) chọn sau khi so sánh số liệu |
-| D2 | 09/10/2026 | Hạ tầng tính toán: Runpod | Cấu hình cụ thể xem mục dưới |
-| D3 | 09/10/2026 | Chạy kiểm chứng trên Runpod gộp vào cuối, sau khi các bước không cần GPU đã xong | Mọi script phải có kiểm thử CPU trước đó |
-| D4 | 09/10/2026 | Dùng `src/reconstruction/colmap_runner.py` thay cho `convert.py` của Inria | `convert.py` dùng tên tùy chọn GPU cũ, không chạy với COLMAP 4.x (`docs/ENVIRONMENT_AUDIT.md` mục 4.1) |
-| D5 | 09/10/2026 | Pipeline hỗ trợ hai chế độ huấn luyện trên gsplat: 3DGS với Default Strategy làm baseline; 3DGS với MCMC Strategy dựa trên notebook demo của nhóm | Theo yêu cầu. B0 (Inria) giữ làm mốc đối chiếu cho Default. Thiết kế: `docs/design/training_modes.md` |
-| D6 | 18/10/2026 | Đầu vào: video, hoặc thư mục nhiều ảnh JPG/JPEG/PNG chụp cùng một căn phòng. Ảnh dùng thẳng, không chọn frame; chung bước COLMAP và huấn luyện với video. Một ảnh luôn bị từ chối, không có chế độ dựng từ một ảnh | Theo yêu cầu. Không đổi thuật toán huấn luyện, chế độ, baseline hay phiên bản thư viện |
-| D7 | 19/10/2026 | Cấu trúc repo theo sơ đồ "SpatialRoom3D_v2": `app/{cli,web,notebooks}`, package `src/{input,reconstruction,training,rendering,evaluation,datasets,utils}`, `configs/{base,custom_scene,mipnerf360,deep_blending}.yaml`, bốn lệnh chính `scripts/{prepare_data,run_train,run_render,run_evaluate}.sh` (phần thực thi trong `scripts/{pipeline,pod,setup,lib}/`), `tests/{test_dataset,test_pipeline}.py` + `tests/unit/`, `README.md` (giới thiệu) và `docs/{README,ENVIRONMENT_AUDIT,USAGE_GUIDE,PROJECT_PLAN}.md`, `experiments/{deep_blending,mipnerf360}/` (chỉ README). Code dùng chung, mỗi luồng dữ liệu một file cấu hình và thư mục riêng | Theo sơ đồ và các lựa chọn của bạn ngày 19/10/2026 ("đủ như ảnh, giữ phần cần chạy", "src/ là package", "YAML như ảnh"). Phần đã chạy trên pod ngày 17/10/2026 được dời chỗ, không viết lại; thuật toán, chế độ, protocol, phiên bản không đổi. Phần viết sau ngày đó chưa chạy trên pod (`docs/design/architecture.md` mục 7) |
-| D8 | 19/10/2026 | Bố cục `/workspace`: code ở `SpatialRoom3D/`; `data/` chỉ chứa dữ liệu gốc (`custom_scenes/<cảnh>/`, `benchmarks/{deep_blending,mipnerf360}/`); `outputs/` chứa mọi thứ sinh ra (`custom_scenes/<cảnh>/{colmap,<chế_độ>_s<seed>}/`, `benchmarks/<benchmark>/{inria_b0,gsplat,gsplat_quick}/`, `checkpoints/`, `logs/`, `reports/`, `jobs/`) | Theo sơ đồ của bạn. `docs/design/architecture.md` mục 2 |
-| D9 | 19/10/2026 | Repo GitHub mới `truong0809/SpatialRoom3D` (private; chuyển public ngày 31/10/2026, D19), lịch sử bắt đầu bằng một commit; repo cũ giữ làm lưu trữ, không sửa. Pod mới + volume mới: cài lại từ đầu, dữ liệu benchmark tải về pod (D11), chạy lại B0 + gsplat bằng code mới khi được duyệt GPU. Bỏ phần dời dữ liệu của volume cũ và mọi phần tương thích bố cục cũ | Theo ba lựa chọn của bạn ngày 19/10/2026 |
-| D10 | 19/10/2026 | `scripts/pod/run_all.sh` (ô 4) chỉ cài / kiểm tra môi trường: không train, không tải dữ liệu. Chạy với dữ liệu nào do người dùng chọn (ô 7, ô 8). Lệnh train không tự tải: thiếu dữ liệu thì dừng trước khi train và báo chỗ cần đặt. Không luồng dữ liệu nào bắt buộc | Theo yêu cầu của bạn ngày 19/10/2026 ("base cài set up môi trường thôi, còn chạy với data nào để t tự quyết"). Ô 6 chỉ kiểm tra bố cục và số ảnh |
-| D11 | 19/10/2026 | Dữ liệu benchmark tải thẳng về pod bằng một bước riêng, chỉ khi người dùng gọi: `scripts/pod/fetch_data.sh` (ô 7 `WHAT = "fetch"`, hoặc thực nghiệm chính). Nguồn trong mục `download` của `configs/<benchmark>.yaml`; kiểm SHA-256 khi có; chỉ tải cảnh còn thiếu, chỉ giải nén thư mục cần dùng, xóa file zip sau đó; không sửa dữ liệu đã có. Ảnh / video tự chụp vẫn do người dùng tự đưa lên | Theo yêu cầu của bạn ngày 19/10/2026 ("chuẩn bị để setup runpod tải data về vì ổ trên runpod t có 100gb") |
-| D12 | 19/10/2026 | Thực nghiệm chính: `default` / `mcmc` (cùng số Gaussian) trên Deep Blending (2 cảnh, kèm B0) và 4 cảnh trong nhà của Mip-NeRF 360; seed 42, 43, 44; 30.000 vòng, không chạy thử; một việc nền (`configs/experiments/main.yaml`, `scripts/pod/run_experiment.sh`); giữ mọi file kết quả của mọi seed | Theo các lựa chọn của bạn ngày 19/10/2026: "Deep Blending + 4 cảnh M360", "3 seed", "chạy đầy đủ ko chạy test", "giữ lại hết" (seed 43, 44) |
-| D14 | 21/10/2026 | Chế độ cải tiến dựa trên `mcmc`, chọn trên dữ liệu mở trước, thử trên video của nhóm sau: (1) dò tham số `mcmc` trên `room`, một seed, mỗi biến thể đổi một tham số (`opacity_reg`, `scale_reg`, `strategy.noise_lr`, `random_bkgd`, `depth_loss`; `configs/experiments/tune_mcmc.yaml`); (2) ghép các tham số đáng giữ thành `mcmc_indoor`, xác nhận một lượt trên `room` (bước này thay bằng vòng ghép ở D15); (3) so `default` / `mcmc` / `mcmc_indoor` trong thực nghiệm chính (D12). Kèm: kiểm tra điểm SfM trước khi train với `depth_loss`; lọc Gaussian sau khi train rồi chấm lại, báo cáo cạnh chỉ số gốc. `room` là cảnh dùng để chọn tham số: kết luận về `mcmc_indoor` dựa trên 5 cảnh còn lại và video của nhóm | Theo lựa chọn của bạn ("Duyệt", phương án "mô hình hoàn chỉnh": chạy bằng dữ liệu mở trước, rồi chạy thử trên video của nhóm). Tinh chỉnh tham số và hậu xử lý trên phương pháp có sẵn, không phải thuật toán mới (`docs/design/experiments.md` mục 3.1, 4) |
-| D15 | 24/10/2026 | Mở rộng D14: thêm 2 biến thể vào lượt dò (`rs30k`: `strategy.refine_stop_iter` 30.000, MCMC dời Gaussian đến vòng 29.900; `sh2`: SH bậc 2, file nhẹ hơn khoảng 36% với cùng số Gaussian); thay lượt xác nhận một seed bằng vòng ghép: tối đa 3 ứng viên, 1–4 cấu hình, chạy 2 seed mới (43, 44) trên `room`, chọn `mcmc_indoor` theo luật cố định trước khi có số liệu, không dùng lại các lượt seed 42 đã dùng để chọn (`docs/design/experiments.md` mục 3.6); "đạt" ở vòng ghép là bộ lọc thô, bằng chứng là thực nghiệm chính trên 5 cảnh còn lại. Thứ tự chạy: `main` trước, rồi `tune_mcmc`, vòng ghép, `mcmc_indoor`, trên cùng loại GPU | Theo lựa chọn của bạn ngày 24/10/2026 ("Làm 1 + 2 rồi push luôn"); thứ tự theo câu hỏi của bạn ngày 22/10/2026 (chạy hai chế độ trước, chế độ cải tiến sau). Seed mới thay cho 3 seed gồm cả seed 42: theo rà soát độc lập, dùng lại lượt seed 42 làm lệch việc chọn. Notebook demo của nhóm, đưa về cùng protocol và cùng số Gaussian, chỉ còn khác `mcmc` ở `strategy.refine_stop_iter` 35.000 (với 30.000 vòng: như `rs30k`) và, trên Deep Blending, ở `opacity_reg` (0,01 so với 0,001): không thêm chế độ demo riêng |
-| D16 | 28/10/2026 | Mở rộng lượt dò bằng ba thành phần của notebook v2 (`3D_demo_v2.ipynb`), mỗi thành phần một biến thể, cộng một biến thể gộp: `bilagrid` (bilateral grid có sẵn của gsplat), `kr` (Kill-then-Relocate) và `mono` (depth prior bằng Depth Anything V2 Small, loss Pearson), gói `v2` (mọi thứ notebook v2 thêm vào `mcmc`); tất cả theo protocol chung (30.000 vòng, cùng số Gaussian với `default`, antialiased tắt). `kr`, `mono` là biến thể có code: hook chạy trên bản sao có vá của `simple_trainer.py`, không sửa gsplat, bật bằng khóa `sr3d.kr` / `sr3d.mono` (`docs/design/training_modes.md` mục 3.1). Khác notebook: KR chỉ xét camera train; không tự tắt thành phần khi gặp NaN (lượt có hook kiểm tham số mỗi 500 vòng, không hữu hạn thì lượt lỗi); depth prior không khớp điểm SfM thì lượt lỗi; bỏ `global_scale` tính lại và tâm cảnh theo camera (không cần cho benchmark). Gói `v2` không phải ứng viên của vòng ghép | Theo lựa chọn của bạn ngày 28/10/2026 ("ok" với 3 biến thể tách riêng + 1 biến thể gộp v2). **Còn mở:** có đưa `v2` vào vòng ghép (2 seed mới) hay không; phải ghi trước khi đọc kết quả `tune_mcmc` (`docs/design/experiments.md` mục 3.7) |
-| D17 | 28/10/2026 | Ngoài code tổng (`runpod.ipynb`, ô 7, `EXP = "main"`), mỗi phương pháp của thực nghiệm chính có một notebook chạy riêng: `b0_inria.ipynb` (B0, 3DGS gốc của Inria), `gsplat_default.ipynb` (`default`), `gsplat_mcmc.ipynb` (`mcmc`). Bốn notebook sinh từ `app/notebooks/build_notebooks.py`, ô cài đặt (1–5) giống hệt nhau. Notebook phương pháp gọi `scripts/pod/run_experiment.sh main --only <phương pháp>`: cùng kế hoạch, dữ liệu, protocol, seed và thư mục kết quả; lượt đã xong ở bên nào cũng được bên kia dùng lại. `mcmc` cần lượt `default` cùng cảnh, cùng seed (ngân sách Gaussian): chưa có thì train trước. B0 chỉ trên benchmark. Chạy riêng `default` / `mcmc` khi chưa có B0 thì đối chiếu B0 chỉ là ghi chú (`B0_CHECK=if_present`); cả kế hoạch vẫn bắt buộc đối chiếu. Mỗi bản một tên dùng chung (tên bản): `main` (code tổng), `b0_inria`, `gsplat_default`, `gsplat_mcmc` (đúng tên notebook), `tune_mcmc`: tên việc nền, tiền tố của báo cáo, bảng, log, bản chụp kế hoạch, gói kết quả `ket_qua_<tên bản>_<thời gian>.tar.gz`; PLY xuất ra `gsplat_<chế độ>_<cảnh>_s<seed>.ply` (lượt chạy thử thêm `_quick`); file của các bước bên trong (`modes_<tag>_*`, `baseline_*`) giữ tên riêng. Thư mục lượt train giữ nguyên (`<cảnh>/<chế độ>_s<seed>`) để code tổng và notebook riêng dùng lại lượt của nhau | Theo yêu cầu của bạn ngày 28/10/2026 ("t muốn sẽ chạy code tổng nhưng cũng chia ra 3 file code cho 3 phương pháp để có thể chạy riêng nếu muốn"; "như nào là tốt nhất tính toán đi"; "ghi tên rõ từng bản để dễ ghi chú và xuất file ra cũng tên đúng như vậy", chọn bộ tên theo tên notebook, áp cho báo cáo và log, gói kết quả, PLY xuất ra, tên việc nền). Không đổi thuật toán, chế độ, protocol hay kế hoạch `main`: chỉ thêm cách chạy từng phần (`docs/design/experiments.md` mục 2.3, `docs/USAGE_GUIDE.md` mục 5.1.1) |
-| D18 | 29/10/2026 | Biểu đồ tổng cho báo cáo so sánh (`src/evaluation/charts.py`), vẽ từ chính file JSON của báo cáo, mỗi lần lập bảng chỉ vài ảnh: (1) đối chiếu `default` với Inria (B0 tự chạy từng cảnh, số công bố; vùng ngưỡng, ✓ / ✗; điều kiện để dùng `default` làm mốc), báo cáo chỉ B0 thì B0 so với số công bố; (2) chênh lệch tổng so với từng mốc, mỗi mốc một ảnh (`default`; `mcmc` khi có bảng so với `mcmc`, vd. `tune_mcmc`): mỗi phương pháp một thanh là chênh lệch trung bình trên mọi cặp (cảnh, seed) chung với mốc (đúng số ở bảng số cặp tốt hơn), chấm đen là từng cặp, số ghi kèm số cặp tốt hơn / số cặp. Thực nghiệm (`run_experiment.sh`): vẽ một lần ở cuối vào `<tên bản>_<thời_gian>_charts/`, gộp các benchmark cùng mốc (dòng tổng và một dòng cho mỗi benchmark; gộp theo tên thư mục lượt, nên `mcmc` của Deep Blending, với `opacity_reg` 0,001, và của Mip-NeRF 360 cùng là `mcmc`); `run_evaluate.sh` và các script train vẽ cho bảng của chúng vào `<báo cáo>_charts/`. Kèm `index.md` (cách đọc, bảng số kèm độ lệch chuẩn); báo cáo `.md` có mục "Biểu đồ"; notebook hiện bảng kẻ sẵn và ảnh (ô "Bảng"; `runpod.ipynb` ô 7, `WHAT = "report"` / `"evaluate"`). Quy ước: mọi khung chênh lệch "phải là tốt hơn" (trục LPIPS đảo chiều); số kiểu Việt (dấu phẩy, "−"), chênh lệch luôn có dấu như bảng; màu theo phương pháp, không theo thứ hạng; đầu ảnh ghi mốc, cảnh, seed, các mục điều kiện chưa đạt và file nguồn. Biểu đồ không tự kết luận; số từng cảnh, chi phí, dung lượng chỉ ở bảng; không có matplotlib thì chỉ có bảng (`CHARTS=0` để tắt); khi in báo cáo của `main`, notebook nhắc luật chọn `mcmc_indoor` (`docs/design/experiments.md` mục 3.6, bước 5) | Theo yêu cầu của bạn sau D17 ("có biểu đồ so sánh trực quan ko", "phải có thông số cụ thể chứ", "thêm những biểu đồ hoặc những gì cần thiết để so sánh cho người nhìn dễ hiểu"), rồi ngày 29/10/2026 ("thêm vừa phải thôi"; "so sánh chênh lệch tổng tất cả, 1 cái của default 1 cái của mcmc các loại", chọn "2 ảnh tổng, bớt ảnh khác": bỏ 6 ảnh chi tiết và ảnh chi phí B0 của bản đầu). Không đổi bảng, chỉ số, điều kiện so sánh hay kế hoạch nào; matplotlib đã có trong env `gs-gsplat` (3.10.5), không thêm phụ thuộc (`docs/design/comparisons.md`, mục Biểu đồ) |
-| D19 | 31/10/2026 | Repo `SpatialRoom3D` để public; pod lấy code qua HTTPS, bỏ khóa deploy. Ô 2 của 4 notebook chỉ kiểm tra pod đọc được nhánh `main`; ô 3 clone / `git pull` qua HTTPS và đổi remote SSH của bản clone cũ sang HTTPS. Ô 1 kiểm tra thêm `/workspace` cho đổi quyền file (`chmod`) | Bạn chuyển repo sang public ngày 31/10/2026 ("t để public rồi mà"). Khóa deploy lưu trên volume chưa lần nào chạy được trên pod (30–31/10/2026, `docs/ENVIRONMENT_AUDIT.md` mục 6). Trước khi public đã quét cả 14 commit: không có token, khóa riêng, mật khẩu, ID volume; commit dùng email noreply của GitHub; không có dữ liệu hay file mô hình |
-| D20 | 04/11/2026 | Sản phẩm (web) dùng **một mô hình chính**: chế độ `mcmc`, tốt nhất trong thực nghiệm chính. Code train của mô hình chính là file riêng, `src/product/train_main.py`: gọi thẳng `simple_trainer.py` của gsplat với cấu hình riêng `configs/product.yaml`, không dùng code thực nghiệm (`src/training/`). Hai luồng chỉ dùng chung bước chuẩn bị ảnh + COLMAP. Đầu vào của sản phẩm: video hoặc thư mục ảnh (như D6). Một lệnh cho cả luồng: `scripts/build_room.sh`. Web chỉ đọc một thư mục tĩnh: `manifest.json`, `model.splat`, `cameras.json`, `thumbnail.jpg`, cùng `progress.json` khi đang dựng (`docs/design/product.md`). Trang web không so sánh hai chế độ | Theo yêu cầu của bạn: "sản phẩm thì chỉ chọn 1 base tốt nhất"; "Bỏ phần so sánh giữa 2 chế độ đi nhưng mà t muốn phần code dc chọn làm mô hình chính có file riêng để chạy riêng các code trước đó chỉ để thực nghiệm thôi"; "code để train 3d chính sẽ là 1 file riêng ko trùng với những code thực nghiệm data ấy"; "luồng chạy đầu vào có thể là ảnh hoặc video mà". Kết quả làm căn cứ: thực nghiệm chính ngày 31/10/2026, `mcmc` hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS |
+| # | Ngày | Quyết định |
+|---|---|---|
+| D1 | 09/10/2026 | Phương pháp trọng tâm là 3DGS; baseline là 3DGS gốc (Kerbl et al., 2023) |
+| D2 | 09/10/2026 | Hạ tầng tính toán: Runpod |
+| D3 | 09/10/2026 | Chạy kiểm chứng trên GPU gộp vào cuối; mọi script có kiểm thử trên CPU trước |
+| D4 | 09/10/2026 | `src/reconstruction/colmap_runner.py` thay `convert.py` của Inria (COLMAP 4.x đổi tên tùy chọn GPU) |
+| D5 | 09/10/2026 | Hai chế độ trên gsplat: `default` (DefaultStrategy, baseline) và `mcmc` (MCMCStrategy, theo notebook demo của nhóm); B0 (3DGS gốc của Inria) làm mốc đối chiếu cho `default` |
+| D6 | 18/10/2026 | Đầu vào: một video, hoặc một thư mục ≥ 10 ảnh JPG/JPEG/PNG chụp cùng một phòng; một ảnh luôn bị từ chối |
+| D7 | 19/10/2026 | Cấu trúc repo: `app/`, package `src/`, `configs/*.yaml`, bốn lệnh chính trong `scripts/`, `tests/`, `docs/`, `experiments/` |
+| D8 | 19/10/2026 | Bố cục `/workspace`: `data/` chỉ chứa dữ liệu gốc, `outputs/` chứa mọi thứ sinh ra (`docs/design/architecture.md` mục 2) |
+| D9 | 19/10/2026 | Repo mới `truong0809/SpatialRoom3D`, cài lại từ đầu trên pod mới; repo cũ giữ làm lưu trữ |
+| D10 | 19/10/2026 | `scripts/pod/run_all.sh` chỉ cài và kiểm tra môi trường; chạy với dữ liệu nào do người dùng chọn |
+| D11 | 19/10/2026 | Dữ liệu benchmark tải về pod bằng bước riêng (`scripts/pod/fetch_data.sh`), kiểm SHA-256 khi có |
+| D12 | 19/10/2026 | Thực nghiệm chính: `default` / `mcmc` cùng số Gaussian; Deep Blending (2 cảnh, kèm B0) và 4 cảnh trong nhà của Mip-NeRF 360; seed 42, 43, 44; 30.000 vòng |
+| D14 | 21/10/2026 | Dò tham số `mcmc` trên `room` (`tune_mcmc`), kèm kiểm tra điểm SfM và lọc Gaussian rồi chấm lại; `room` chỉ dùng để chọn, kết luận dựa trên 5 cảnh còn lại |
+| D15 | 24/10/2026 | Thêm biến thể `rs30k`, `sh2`; vòng ghép: tối đa 3 ứng viên, 2 seed mới, luật chọn ghi trước khi có số liệu (`docs/design/experiments.md` mục 3.6) |
+| D16 | 28/10/2026 | Biến thể từ notebook v2 của nhóm: `bilagrid`, `kr`, `mono`, gói `v2`; `kr`, `mono` chạy bằng hook trên bản sao có vá của trainer, không sửa gsplat |
+| D17 | 28/10/2026 | Ngoài code tổng, mỗi phương pháp của thực nghiệm chính có một notebook chạy riêng (`b0_inria`, `gsplat_default`, `gsplat_mcmc`); tên bản dùng cho việc nền, báo cáo, gói kết quả |
+| D18 | 29/10/2026 | Hai biểu đồ tổng cho báo cáo so sánh: đối chiếu với Inria, chênh lệch so với từng mốc |
+| D19 | 31/10/2026 | Repo để public; pod lấy code qua HTTPS; ô 1 của notebook kiểm tra volume cho đổi quyền file (`chmod`) |
+| D20 | 04/11/2026 | Sản phẩm dùng **một mô hình chính**: `mcmc` (`configs/product.yaml`). Code train riêng `src/product/train_main.py`, không dùng code thực nghiệm; một lệnh `scripts/build_room.sh`; web chỉ đọc thư mục tĩnh `outputs/product/web/`; trang web không so sánh hai chế độ. Theo yêu cầu của bạn ("sản phẩm thì chỉ chọn 1 base tốt nhất", "code để train 3d chính sẽ là 1 file riêng", đầu vào "có thể là ảnh hoặc video") |
+| D21 | 04/11/2026 | Dọn repo: bỏ `docs/handoff/` (bản bàn giao lưu trong Project), rút gọn `PROJECT_STATUS.md` và `docs/ENVIRONMENT_AUDIT.md`; lịch sử còn trong Git. Theo yêu cầu của bạn ("bớt những cái thừa trên git") |
 
 ## Đề xuất chờ xác nhận
 
 | Hạng mục | Đề xuất | Lý do |
 |---|---|---|
-| Loại cloud | Secure Cloud | Network volume chỉ dùng được với pod trên Secure Cloud |
-| Lưu trữ | Network volume ≥ 100 GB (loại Network volume, không dùng Global volume: volume lỗi `chmod` ngày 31/10/2026 nhiều khả năng là loại này), cùng data center với GPU; thực nghiệm chính (D12) giữ mọi file: khoảng 56 GB cộng môi trường; chạy cả D14, D15 (dò tham số, vòng ghép, rồi `mcmc_indoor` trong thực nghiệm chính): nên 170 GB | Dữ liệu tồn tại độc lập với pod. Volume mới: chọn data center có sẵn loại GPU ở dòng dưới. Volume hiện có: 100 GB, EU-RO-1; tăng được, không giảm được |
-| GPU | RTX A6000 48 GB (thay thế: A40 48 GB, RTX 4090 24 GB) | Xem tiêu chí bên dưới. RTX 4090 đã chạy được cả luồng hai lần ngày 17/10/2026 (repo trước) |
-| Bản gsplat | Commit `6e8c837` (v1.5.3 + 4 commit), không dùng v1.3.0 của demo hay bản phát hành v1.5.3 | v1.5.3 có lỗi khiến `DefaultStrategy` không reset opacity; v1.3.0 reset cả ở bước 0 (`docs/research/demo_review.md`, mục 3.2) |
-| So sánh MCMC với Default | Cùng protocol; `cap_max` của MCMC bằng số Gaussian cuối của Default trên cùng cảnh; ≥ 3 seed trước khi kết luận | Giao thức của paper 3DGS-MCMC; chất lượng MCMC phụ thuộc trực tiếp vào `cap_max` |
-| Protocol Mip-NeRF 360 | Theo benchmark chính chủ của mỗi bên: Inria `-i images_2` (4 cảnh trong nhà) / `-i images_4` (5 cảnh ngoài trời); gsplat `data_factor` 2 / 4 | Đã đối chiếu `full_eval.py` @54c035f và `examples/benchmarks/basic.sh` @6e8c837 (`experiments/mipnerf360/README.md`) |
-| Repo cũ trên GitHub | Chuyển sang private hoặc archive | Kiểm kê ngày 18/10/2026 thấy repo cũ đang **public** |
-| Hai tham số của mô hình chính (D20) | `cap_max` cố định 1.000.000 (mặc định của `MCMCStrategy`), thay cho số Gaussian cuối của `default` cùng cảnh; train trên mọi ảnh, trừ ảnh số 0 (`test_every` 10^9), không chấm điểm | Không phải train `default` trước; biết trước dung lượng file web (≤ 32 MB); nhiều góc nhìn hơn. Ảnh hưởng của giới hạn 1 triệu trên phòng lớn chưa đo. Đã báo trước khi viết code; bạn hỏi lấy file gửi nhóm, chưa xác nhận riêng hai tham số này (`docs/design/product.md` mục 2) |
+| Hai tham số của mô hình chính (D20) | `cap_max` cố định 1.000.000; train trên mọi ảnh trừ ảnh số 0, không chấm điểm | Không phải train `default` trước; biết trước dung lượng file web (≤ 32 MB). Ảnh hưởng trên phòng lớn chưa đo (`docs/design/product.md` mục 2) |
+| Vòng ghép (D15) | Chỉ một ứng viên đạt luật (`rbg`, +0,156 dB, sát ngưỡng): chạy cấu hình {A} với seed 43, 44 trên `room`, hoặc bỏ vòng ghép | Dự báo khó đạt bước 4 của luật. Kế hoạch đã viết (`configs/experiments/tune_mcmc_combo.yaml`, chưa đưa lên Git). Khoảng 1,5 giờ GPU |
+| Lưu trữ, GPU | Network volume (không dùng Global volume) cùng data center với GPU; 170 GB nếu chạy tiếp thực nghiệm; RTX 4090 như lượt 31/10/2026 | `docs/ENVIRONMENT_AUDIT.md` mục 1 |
+| Bản gsplat | Giữ commit `6e8c837` | v1.5.3 có lỗi khiến `DefaultStrategy` không reset opacity |
+| Repo cũ trên GitHub | Chuyển sang private hoặc archive | Repo cũ đang public |
 
-**Tiêu chí chọn GPU**
+Hai lựa chọn được chốt **sau khi đã có kết quả**: dùng `mcmc` làm mô hình của sản phẩm, và không đưa gói `v2` vào vòng ghép. Báo cáo phải ghi rõ điều này.
 
-- Bắt buộc:
-  - VRAM ≥ 24 GB (mức Inria khuyến nghị để huấn luyện đạt chất lượng như paper).
-  - Compute capability 8.0 / 8.6 / 8.9 / 9.0 (Ampere, Ada, Hopper): extension được build sẵn cho đúng các kiến trúc này. Không dùng Blackwell (RTX 50xx...).
-  - Có trên Secure Cloud, cùng data center với network volume.
-- Ưu tiên:
-  - Giá/giờ thấp nhất trong số GPU đạt các tiêu chí bắt buộc.
-  - Cùng dòng với máy tham chiếu của Inria (A6000) để so sánh được thời gian huấn luyện.
+## Kết quả (lượt chạy pod ngày 31/10/2026)
+
+Code: commit `c0a7a92`. Pod và thời gian từng việc: `docs/ENVIRONMENT_AUDIT.md` mục 7. Số liệu lấy từ các báo cáo `main_20261031_114145*.md`, `tune_mcmc_20261031_155033*.md` và `compare_custom_20261031_214710.md` trên volume.
+
+**Thực nghiệm chính** (cùng số Gaussian, 3 seed, 30.000 vòng): `mcmc` hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS.
+
+| Cảnh | ΔPSNR (dB) | ΔSSIM | ΔLPIPS | σ PSNR `default` / `mcmc` |
+|---|---|---|---|---|
+| drjohnson (`mcmc` với `opacity_reg` 0,001) | +0,480 | +0,0034 | −0,0120 | 0,017 / 0,096 |
+| playroom (như trên) | +0,197 | +0,0026 | −0,0150 | 0,085 / 0,294 |
+| room | +0,809 | +0,0118 | −0,0246 | 0,060 / 0,137 |
+| counter | +0,544 | +0,0116 | −0,0195 | 0,193 / 0,026 |
+| kitchen | +0,435 | +0,0052 | −0,0058 | 0,083 / 0,123 |
+| bonsai | +0,571 | +0,0067 | −0,0158 | 0,034 / 0,082 |
+
+- Trung bình: Deep Blending +0,338 ± 0,239 dB; Mip-NeRF 360 +0,590 ± 0,181 dB (12/12 cặp tốt hơn ở cả 3 chỉ số). Ở playroom, ΔPSNR nhỏ hơn dao động giữa các seed của `mcmc`.
+- Kiểm chứng baseline:
+  - `default` so với số Inria công bố trên Deep Blending: PASS (−0,168 dB);
+  - so với B0 tự chạy: PASS (drjohnson −0,339 dB, playroom −0,136 dB);
+  - Mip-NeRF 360: không đối chiếu với số công bố (SKIPPED, mới chạy 4/9 cảnh).
+- Chi phí: thời gian train ×0,98–1,10 so với `default`; VRAM đỉnh của `mcmc` thấp hơn 0,1–0,9 GiB; PLY như nhau.
+- Phòng nhóm `phong_nhom` (1 seed): `default` 39,318 / 0,9769 / 0,0959; `mcmc` 39,069 / 0,9788 / 0,0873 (PSNR / SSIM / LPIPS; trái chiều). Ảnh test là các khung kề khung train của cùng video, nên số này không so với benchmark.
+- Dò tham số `tune_mcmc` (`room`, seed 42; ngưỡng d = 0,150 dB / 0,0012 / 0,0018):
+  - hơn `mcmc` quá d: chỉ `rbg` (+0,156 dB);
+  - trong mức dao động: `sr0001`, `depth`, `nlr1m`, `nlr250k`, `kr`, `mono`, `sr005`;
+  - kém quá d: `or0005`, `or0001`, `rs30k`, `sh2`, `mo002`, `or005`, `bilagrid` (−2,476 dB), `v2` (−2,750 dB);
+  - lọc Gaussian (opacity < 0,02, trục > 0,1 × `scene_scale`): `default` −1,14 dB, `mcmc` và các biến thể −2,1 đến −9,1 dB. Không dùng bộ lọc này để làm nhẹ file cho MCMC.
 
 ## Đã thực hiện
 
-### Repo này (19–31/10/2026, trong sandbox, không GPU)
-
 | Hạng mục | Trạng thái | Bằng chứng |
 |---|---|---|
-| Cấu trúc repo (D7), cấu hình YAML, bốn lệnh chính, bố cục `/workspace` (D8) | Đã viết; đã kiểm thử trên CPU | Mục "Kiểm thử trong sandbox" bên dưới |
-| Lệnh huấn luyện sinh ra cho Deep Blending | Đã kiểm thử bằng stub | Giống lệnh repo trước đã chạy trên pod ngày 17/10/2026, chỉ khác đường dẫn (`tests/unit/test_benchmarks.py::test_deep_blending_gsplat_commands_are_unchanged`) |
-| Cấu hình YAML so với các file JSON cũ | Đã kiểm tra | So từng khóa `configs/*.yaml` với `configs/{datasets,train_modes}.json` và `experiments/*/benchmark.json` của repo trước: `train_modes` giống hệt; dữ liệu, kết quả, protocol, số liệu công bố, ngưỡng giống hệt. Chỉ khác mô tả, lệnh, trạng thái; bỏ `previous_locations` (chỗ cũ, dùng cho việc dời) và khóa đường dẫn `benchmark`; `dataset`, `scenes` của phần benchmark nay lấy từ chính file cấu hình khi xuất JSON |
-| Render lại từ checkpoint, xuất PLY: `src/rendering/render.py`, `scripts/run_render.sh` | Đã viết; đã kiểm thử với runner giả và stub; **chưa chạy với gsplat thật** | `tests/unit/test_render.py`: dùng lại lệnh đánh giá đã ghi trong `run_meta.json` (chế độ `--ckpt` của `simple_trainer.py`), cùng seed và tập test, ghi vào thư mục mới; từ chối lượt chưa xong; PLY của bước cuối, liên kết cứng, không ghi đè |
-| Giao diện dòng lệnh `python -m app.cli` | Đã viết; đã kiểm thử | `tests/unit/test_cli.py` |
-| Notebook `app/notebooks/runpod.ipynb` cho pod mới, volume trống | Đã viết; đã mô phỏng; **chưa chạy trên pod** | Mục "Kiểm thử trong sandbox" |
-| Chạy riêng từng phương pháp (D17, 28/10/2026): `--only` của `scripts/pod/run_experiment.sh` (`select_method`, `estimate.only` trong `src/training/experiment.py` và `configs/experiments/main.yaml`); `B0_CHECK` của `scripts/pipeline/train_gsplat_modes.sh`; bộ sinh `app/notebooks/build_notebooks.py` và ba notebook `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` (`runpod.ipynb` chỉ thêm dòng chỉ tới chúng và tên bản); tên bản (`run_name`): việc nền, báo cáo, log, gói kết quả (`pack_results.sh --name`), PLY xuất ra (`src/rendering/render.py`), thực nghiệm gần nhất của `results.sh` (`src/evaluation/overview.py`) | Đã viết; đã kiểm thử bằng stub; đã mô phỏng qua notebook; **chưa chạy trên pod** | `tests/unit/test_experiment.py` (`test_only_*`, `test_separate_methods_then_the_whole_plan_train_each_run_once`, `test_background_with_only_names_the_job_after_the_method`, `test_bad_method_estimates_are_rejected`, `test_a_mode_named_b0_is_rejected`, `test_two_runs_cannot_share_a_run_name`), `test_benchmarks.py::test_b0_check_if_present_compares_with_b0_only_once_it_exists`, `test_notebooks.py`, `test_render.py::test_export_names_follow_the_version_scene_and_seed`, `test_overview.py` (`test_overview_shows_the_latest_experiment`, `test_pack_results_names_the_package_after_the_version`), `tests/test_dataset.py::test_b0_missing_scenes_uses_the_criterion_of_the_comparison_tables`; mục "Kiểm thử trong sandbox" |
-| Biểu đồ tổng (D18, 29/10/2026): `src/evaluation/charts.py`; hàm `make_charts` (`scripts/lib/config.sh`) gọi sau bảng của `scripts/run_evaluate.sh`, `scripts/pipeline/train_gsplat_modes.sh`, `train_inria_b0.sh`, và một lần ở cuối `scripts/pod/run_experiment.sh` cho cả lần chạy (gộp các benchmark; từng bảng không vẽ riêng); ô "Bảng" của ba notebook theo phương pháp và `runpod.ipynb` ô 7 (`WHAT = "report"`, `"evaluate"`) hiện bảng kẻ sẵn và ảnh; `results.sh` in đường dẫn thư mục biểu đồ (`src/evaluation/overview.py`) | Đã viết; đã kiểm thử trên báo cáo lập từ lượt giả, với matplotlib 3.10.5 như env `gs-gsplat`; **chưa vẽ từ kết quả thật** | `tests/unit/test_charts.py`, `test_benchmarks.py::test_evaluate_draws_charts_beside_the_report`, `test_notebooks.py` (`test_the_report_cell_shows_the_newest_summary_of_its_own_runs`, `test_the_report_of_the_whole_plan_is_shown_in_cell_7_of_runpod`), `test_experiment.py` (`test_only_b0_runs_the_inria_runs_and_their_table`, `test_runs_every_step_in_order_and_user_variables_cannot_change_the_plan`), `test_overview.py`; mục "Kiểm thử trong sandbox" |
-| Lấy code qua HTTPS và kiểm tra `chmod` của volume (D19, 31/10/2026): ô 1–3 của 4 notebook (`app/notebooks/build_notebooks.py`), `docs/USAGE_GUIDE.md` mục 1, `docs/ENVIRONMENT_AUDIT.md` mục 2 và 6 | Đã viết; đã mô phỏng ô 1–3; **chưa chạy trên pod** | Mục "Kiểm thử trong sandbox" |
-| Luồng sản phẩm (D20, 04/11/2026): `configs/product.yaml`, `src/product/` (`train_main.py`, `export_web.py`, `progress.py`, `ply.py`, `config.py`), `scripts/build_room.sh`, lệnh `build-room` của `app.cli`, `docs/design/product.md` | Đã viết; đã kiểm thử bằng stub, trainer giả và Parser giả; đã đối chiếu trên CPU với code thật của gsplat @6e8c837 (phân giải tham số của `simple_trainer.py`, exporter `.splat`, `Parser`); **chưa chạy trên GPU, chưa dựng phòng thật, chưa có trang web đọc các file này** | `tests/unit/test_product.py`, `test_product_export.py`, `test_build_room.py`; đối chiếu ngoài repo: `docs/design/product.md` mục 7 |
-| Luồng cảnh tự chụp với COLMAP thật trên cây này | Đã chạy với COLMAP 3.9.1 bản CPU trên dữ liệu tổng hợp, huấn luyện thay bằng stub | Mục "Kiểm thử trong sandbox" |
-| Rà soát độc lập (19/10/2026 và 21/10/2026, mỗi lần hai lượt, người rà soát không tham gia viết code) | Đã làm; lỗi chặn và lỗi vừa đã sửa, kèm test | Mục "Rà soát độc lập ngày 21/10/2026" và "... ngày 19/10/2026" bên dưới |
-| Tải dữ liệu benchmark (D11): `src/datasets/fetch.py`, `scripts/pod/fetch_data.sh` | Đã viết; đã kiểm thử với curl giả và file zip tổng hợp; **chưa tải file thật** (sandbox không ra được Internet) | `tests/unit/test_fetch.py`: chỉ cảnh còn thiếu, chỉ thư mục `keep`; SHA-256 sai hoặc zip hỏng thì xóa file và dừng; đường dẫn không an toàn, thiếu thư mục thì dừng trước khi giải nén; bỏ file ẩn / symlink; không đụng thư mục cảnh đã có; cảnh đã vào chỗ có bản ghi ngay cả khi cảnh sau lỗi, báo cáo được ghi cả khi lỗi; curl ngắt khi kết nối treo |
-| Thực nghiệm chính (D12): `configs/experiments/main.yaml`, `src/training/experiment.py`, `scripts/pod/run_experiment.sh`; nhiều chế độ trong `train_gsplat_modes.sh` (`MODES`); bảng theo tập cảnh con và theo mốc khác `default` | Đã viết; đã kiểm thử bằng stub; đã mô phỏng qua notebook; **chưa chạy trên pod** | `tests/unit/test_experiment.py` (thứ tự các bước, xen kẽ seed, biến môi trường của người dùng không đổi được kế hoạch, chỗ trống trước khi chạy và trước mỗi seed kể cả khi chạy lại sau khi dừng giữa chừng, tải lỗi chỉ bỏ benchmark đó, chạy nền một việc, kế hoạch có thêm chế độ tự định nghĩa), `tests/unit/test_benchmarks.py`, `tests/unit/test_compare_modes.py`; rà soát độc lập lần 2 (mục bên dưới) |
-| Dò tham số và lọc Gaussian (D14): biến thể tham số trong kế hoạch (`variants`; `VARIANTS` của `train_gsplat_modes.sh`; `src.training.run --tag`), kiểm tra điểm SfM (`src/training/depth_check.py`, bước `depth_check_<benchmark>`), lọc Gaussian rồi chấm lại (`src/training/prune.py`, `scripts/run_filter.sh`, khóa `post_filter`, bảng trước / sau trong `compare_modes`, dòng `+ đã lọc` của `results.sh`), `configs/experiments/tune_mcmc.yaml`; notebook ô 7 `EXP`, ô 9 `LOC` | Đã viết; đã kiểm thử bằng stub và runner giả; đọc / ghi checkpoint bằng PyTorch 2.7.1 (CPU) và ghi PLY bằng `export_splats` thật của gsplat @6e8c837 đã chạy trên CPU; **chưa chạy trên GPU, chưa có số liệu** | `tests/unit/test_experiment.py` (kế hoạch `tune_mcmc`, biến thể và ngưỡng lọc sai bị từ chối, thứ tự các bước, kiểm tra điểm SfM lỗi chỉ bỏ benchmark đó, lọc lỗi không dừng train), `test_prune.py`, `test_depth_check.py`, `test_benchmarks.py`, `test_compare_modes.py`, `test_gsplat_results.py`, `test_overview.py`, `test_train_run.py`, `test_cli.py` |
-| Bảng so sánh mở rộng và ảnh so sánh (22/10/2026): số cặp và số cảnh tốt hơn kèm điều kiện, chất lượng theo dung lượng (trên seed chung, gồm bản đã lọc), cấu trúc mô hình từ PLY (`src/evaluation/splat_stats.py`, gọi trong `scripts/run_evaluate.sh`); ảnh so sánh và video xếp chồng (`src/evaluation/panels.py`, `scripts/run_panels.sh`, lệnh `panels` của `app.cli`, ô 7 `WHAT = "panels"`, ô 9 `SO_SANH`) | Đã viết; đã kiểm thử với PLY, ảnh render và video tổng hợp; **chưa chạy trên kết quả thật** | `tests/unit/test_compare_modes.py`, `test_splat_stats.py`, `test_panels.py`, `test_benchmarks.py::test_evaluate_writes_model_structure_statistics`; cột `Render (ms/ảnh)` gồm khởi động của lượt chấm, không phải tốc độ render (`docs/design/comparisons.md`) |
-| Mở rộng dò tham số (D15, 24/10/2026): biến thể `rs30k`, `sh2` trong `configs/experiments/tune_mcmc.yaml`; thiết kế vòng ghép (`docs/design/experiments.md` mục 3.6) | Đã viết; đã kiểm thử bằng stub (kế hoạch 14 lượt; một kế hoạch vòng ghép mẫu với biến thể nhiều tham số); vòng ghép chưa có file kế hoạch; **chưa chạy trên pod** | `tests/unit/test_experiment.py::test_the_tune_mcmc_plan_is_valid`, `::test_a_combination_round_plan_has_several_parameters_per_variant`, `::test_variant_tags_are_not_reused_across_plans`; mô phỏng notebook; hai lượt rà soát độc lập (mục "Kiểm thử trong sandbox") |
-| Biến thể từ notebook v2 (D16, 28/10/2026): `bilagrid`, `kr`, `mono`, gói `v2` trong `configs/experiments/tune_mcmc.yaml`; khóa `sr3d.*` (`src/training/profiles.py`); bản sao có vá của trainer và hai hook (`src/training/trainer_hooks.py`, `--hook` của `gsplat_launcher`); bước `mono` của `src.training.run` và depth prior (`src/training/mono_depth.py`); `scripts/setup/setup_depth_anything.sh` (bước `depth_anything` của `run_experiment.sh`, trước `env_check`; lỗi thì chỉ bỏ lượt dùng prior); kiểm NaN của lượt có hook; smoke test kiểm bản vá, chạy thử KR, loss của prior, kiểm NaN và Depth Anything V2 trên GPU; `pack_results.sh` gom `*.jsonl` | Đã viết; đã kiểm thử trên CPU, gồm `simple_trainer.py` thật của gsplat @6e8c837 (bản vá đúng chỗ), `MCMCStrategy` thật (vòng KR trùng vòng relocate), phần chạy thử của smoke test (trừ bước relocate cần CUDA), `setup_depth_anything.sh` với kho git cục bộ; kiểm tra tay, ngoài bộ test: bản sao có vá phân giải tham số của 18 lượt, code Depth Anything V2 thật với trọng số ngẫu nhiên; **chưa train trên GPU, chưa chạy smoke test trên GPU, chưa tải trọng số thật, chưa có số liệu** | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_train_profiles.py`, `test_experiment.py`, `test_overview.py`; `docs/design/experiments.md` mục 3.7; mục "Kiểm thử trong sandbox" |
+| Cài 3 env conda (`scripts/pod/run_all.sh`) | Đã chạy trên pod (31/10/2026) | `docs/ENVIRONMENT_AUDIT.md` mục 7 |
+| Ảnh / video → khung ảnh → COLMAP → kiểm tra trước khi train (`src/input/`, `src/reconstruction/`) | Đã chạy trên pod: video phòng nhóm (31/10/2026) | `sfm_report.json` của `phong_nhom`; `tests/unit/test_frames.py`, `test_sfm.py`, `tests/test_pipeline.py` |
+| Tải benchmark (`scripts/pod/fetch_data.sh`) | Đã chạy trên pod: Mip-NeRF 360, 4 cảnh trong nhà (SHA-256 ghi lại) | `outputs/reports/fetch_*.json`; `tests/unit/test_fetch.py` |
+| Thực nghiệm chính, B0, bảng và biểu đồ (D12, D17, D18) | Đã chạy trên pod, mọi bước OK; baseline đã kiểm chứng | Mục "Kết quả"; `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_compare_modes.py`, `test_charts.py` |
+| Dò tham số, lọc Gaussian (D14–D16) | Đã chạy trên pod, mọi bước OK | Mục "Kết quả"; `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_prune.py` |
+| Vòng ghép (D15) | Đã viết kế hoạch; **chưa chạy**, chưa đưa lên Git | `configs/experiments/tune_mcmc_combo.yaml` (trong sandbox) |
+| Render lại từ checkpoint, xuất PLY (`src/rendering/render.py`) | Đã kiểm thử với runner giả; **chưa xác nhận trên pod** | `tests/unit/test_render.py` |
+| Ảnh so sánh, video xếp chồng (`scripts/run_panels.sh`) | Đã chạy trên pod; `VIDEO=1` bị dừng vì hết RAM ở 2/3 cảnh | Mục "Còn mở" |
+| Notebook lấy code qua HTTPS, kiểm tra `chmod` (D19) | Đã viết, đã mô phỏng; **ô 1–3 bản mới chưa chạy trên pod** (lượt 31/10 clone bằng tay) | `tests/unit/test_notebooks.py` |
+| Luồng sản phẩm (D20): `configs/product.yaml`, `src/product/`, `scripts/build_room.sh` | Đã viết; đã kiểm thử bằng stub và gsplat giả; đã đối chiếu trên CPU với code thật của gsplat @6e8c837; **chưa chạy trên GPU, chưa có trang web** | `tests/unit/test_product.py`, `test_product_export.py`, `test_build_room.py`; `docs/design/product.md` mục 7 |
+| Toàn bộ test trên CPU | 518 test đạt, 9 bỏ qua vì cần PyTorch (04/11/2026, Python 3.10, bản clone sạch) | `python -m pytest` |
 
-### Lịch sử: repo trước (đã chạy trên pod ngày 17/10/2026)
+## Còn mở
 
-Các lượt dưới đây chạy bằng repo trước, trên volume cũ, với bố cục và tên file cũ (đối chiếu tên: `docs/design/architecture.md` mục 7). Code tương ứng đã được dời vào repo này, không viết lại.
-
-| Hạng mục | Trạng thái | Bằng chứng |
-|---|---|---|
-| Kế hoạch Giai đoạn 0 | Đã viết, đã được duyệt | `docs/PROJECT_PLAN.md` |
-| Danh sách tài liệu khảo sát ban đầu | Đã viết | `docs/research/reading_list.md` (venue/link chưa kiểm chứng hết) |
-| Kiểm tra máy (`scripts/setup/env_probe.sh`) | Đã chạy trên Runpod (17/10/2026) | SUMMARY 6/6 PASS: RTX 4090 24 GB, driver CUDA 12.8, `/workspace` là network volume, mọi host truy cập được (`docs/ENVIRONMENT_AUDIT.md` mục 7) |
-| Cài môi trường 3DGS gốc (`scripts/setup/setup_3dgs_inria.sh`, `configs/environment/gs-inria.conf`) | Đã chạy trên Runpod (17/10/2026) | 9 bước xong trong 29 phút; smoke test PASSED (simple-knn, fused-ssim, rasterizer forward/backward) với torch 2.7.1+cu128, nvcc 12.4, gcc 11.4. Phiên bản trong file conf vẫn để `provisional` |
-| Env `gs-tools` (COLMAP 4.2.1, ffmpeg) | Đã chạy trên Runpod (17/10/2026, lượt thứ hai) | COLMAP 4.2.1 bản CUDA và ffmpeg 9.0.2 với driver CUDA 13.0; lượt đầu (driver 12.8) không cài được bản CUDA, nay tự chọn bản CPU |
-| Env `gs-gsplat` (`scripts/setup/setup_gsplat.sh`) | Đã chạy trên Runpod (17/10/2026), smoke test PASSED | Lượt đầu FAIL vì Jupyter đặt `MPLBACKEND=module://matplotlib_inline...`; đã sửa (`MPLBACKEND=Agg`). Lượt thứ hai: `SMOKE TEST PASSED` |
-| Quy trình quay video và chụp ảnh | Đã viết | `docs/data/capture_protocol.md` (mục 8: chụp ảnh), sẽ hiệu chỉnh sau lần thu thử |
-| Bước 4: tái lập Deep Blending (B0) | **Đã xác nhận đạt** (17/10/2026, RTX 4090) | Trung bình 2 cảnh ở step 30.000: PSNR 29,723 / SSIM 0,9066 / LPIPS 0,2384, so với Inria công bố 29,690 / 0,906 / 0,238 (lệch +0,033 dB). Chi tiết: `docs/ENVIRONMENT_AUDIT.md` mục 7 |
-| Bước 4a, 4b: gsplat `default` / `mcmc` trên Deep Blending (seed 42) | Đã chạy trên Runpod (17/10/2026); `default` đạt điều kiện làm baseline; **chưa đủ seed để kết luận về `mcmc`** | `default` so với số liệu Inria công bố: PASS (trung bình ΔPSNR −0,192 dB); so với B0 tự chạy, từng cảnh: PASS (ΔPSNR −0,209 / −0,241 dB). `mcmc` (`opacity_reg` 0,001, cùng số Gaussian với `default`): ΔPSNR +0,070 / +0,003 dB, ΔLPIPS −0,010 / −0,015 so với `default` ở drjohnson / playroom; một seed nên bảng ghi `seeds=FEW`, không gọi là cải thiện |
-| Chạy nền và khóa GPU (`run_all.sh`, `job.sh`) | Đã chạy trên Runpod (17/10/2026) | `run_all` báo OK cả 7 bước trong khoảng 2 giờ; trạng thái việc đi đúng SUBMITTED → QUEUED → RUNNING → DONE, exit 0. `AUTO_STOP=1` chưa thử |
-| Chuẩn bị cảnh tự chụp (ảnh / video → COLMAP) trên pod | **Chưa có lượt chạy thành công trên pod** | Các lượt `video8` của gói kết quả 17/10/2026 dừng trước khi cài `gs-tools` |
-| Kiểm tra notebook demo 3DGS-MCMC và repo SpatialScene3D | Đã viết | `docs/research/demo_review.md`; notebook gốc lưu ở `docs/research/references/demo_3dgs_mcmc/` |
-| Hai chế độ huấn luyện (D5), đầu vào ảnh và kiểm tra trước khi train (D6), cấu hình Mip-NeRF 360 | Đã viết; đã kiểm thử trên CPU; đã qua các lượt rà soát độc lập ngày 17–18/10/2026 | `docs/design/training_modes.md` mục 8, `docs/USAGE_GUIDE.md` mục 3, `experiments/mipnerf360/README.md` |
-
-### Kiểm thử trong sandbox (không GPU)
-
-**Repo này, 31/10/2026 (D19: lấy code qua HTTPS, kiểm tra `chmod` của volume):**
-- **pytest:** 475 test, Python 3.10: 466 qua, 9 bỏ qua; Python 3.13: 457 qua, 18 bỏ qua (test cần PyTorch, `simple_trainer.py` thật của gsplat hoặc matplotlib). Thay đổi chỉ chạm bộ sinh notebook và tài liệu, nên không chạy lại ở các môi trường PyTorch và thư viện của env `gs-gsplat`.
-- `build_notebooks.py --check`: 4 notebook đúng là bản sinh ra; pyflakes sạch; liên kết trong mọi file `.md`: 0 lỗi.
-- **Mô phỏng ô 1–3** (`/workspace` giả, remote giả `file://` thay cho địa chỉ GitHub, không dùng cấu hình git của sandbox): **18/18 kiểm tra đạt**.
-  - Ô 1 ĐẠT khi `chmod` được; CHƯA ĐẠT, có dòng ✗, khi `chmod` giả báo `Operation not permitted`; không để lại file thử.
-  - Ô 2 ✓ (in 7 ký tự commit của `main`) và ✗ khi địa chỉ sai (in dòng `fatal` của git).
-  - Ô 3: clone mới; bản clone cũ có remote SSH được đổi sang HTTPS rồi pull được commit mới; chạy lại không đổi gì; từ chối khi code có thay đổi chưa commit hoặc thư mục không phải repo Git; báo lỗi và gợi ý ô 2 khi không clone được.
-- **GitHub thật:** `git ls-remote https://github.com/truong0809/SpatialRoom3D.git refs/heads/main`, không kèm thông tin đăng nhập, trả `c0a7a92` (qua proxy của sandbox).
-- **Sửa nhờ mô phỏng:** `git remote get-url` trả địa chỉ đã viết lại theo `url.*.insteadOf` (sandbox đổi `git@github.com:` thành HTTPS), nên ô 3 đọc địa chỉ gốc bằng `git config --get remote.origin.url`.
-- **Chưa chạy:** trên pod.
-
-**Repo này, 29/10/2026 (D18: biểu đồ tổng):**
-- **pytest:** 475 test trên năm môi trường như lượt 22/10/2026: 457 qua, 18 bỏ qua (cần PyTorch, `simple_trainer.py` thật của gsplat hoặc matplotlib); môi trường có matplotlib 3.10.9: 466 qua, 9 bỏ qua. 164 test của biểu đồ và phần shell / notebook dùng chúng qua với matplotlib 3.10.5 và các thư viện ghim của env `gs-gsplat`; 123 test cần PyTorch và 60 test của env `gs-gsplat` đều qua.
-- **Kiểm tay, ngoài bộ test:** số trên ảnh tổng tính lại độc lập trên báo cáo lập từ lượt giả (một báo cáo: khớp mục `wins`; gộp hai benchmark: khớp trung bình và độ lệch chuẩn tính lại từ `pairs`). Ảnh mẫu từ số giả chỉ để xem bố cục, không đưa vào repo.
-- **shellcheck**, **pyflakes**, liên kết trong mọi file `.md`: sạch. `build_notebooks.py --check`: 4 notebook đúng là bản sinh ra.
-- **Notebook**, cùng cách mô phỏng: **89/89 kiểm tra đạt**; `WHAT = "evaluate"` vẽ 2 ảnh (đối chiếu Inria, chênh lệch tổng so với `default`), hiện bảng rồi ảnh; gói kết quả có các ảnh.
-- **Rà soát độc lập** (một lượt, người rà soát không viết code; chạy thật `run_experiment.sh` với `main`, `tune_mcmc`, `--only b0|default|mcmc`, chỉ phần train là giả; kiểm số trên 8 bộ báo cáo mẫu và 600 bộ ngẫu nhiên: không lệch): không có lỗi chặn.
-  - 1 lỗi vừa: các bước B0 / gsplat bên trong thực nghiệm vẫn tự vẽ biểu đồ cho bảng của chúng (thêm 7 thư mục với `main`).
-  - 5 lỗi nhỏ: cùng một file báo cáo đưa hai lần thì các cặp bị tính hai lần; khi gọi tay, mốc của lượt chạy thử bị gộp với mốc đúng protocol cùng tên thư mục; lý do "không vẽ" sai khi báo cáo chỉ có mốc; ô `WHAT = "evaluate"` in bảng dạng chữ, bị cắt phần đầu (tài liệu nói kẻ bảng sẵn); mục "Biểu đồ" thành hai mục khi đổi thư mục ảnh; `results.sh` in cả các dòng ảnh Markdown.
-  - 1 rủi ro: khi `main` có `mcmc_indoor`, ảnh tổng gộp cả `room` (cảnh dùng để chọn).
-  - Đã sửa kèm test; rủi ro `room` ghi trong tài liệu, kèm lệnh vẽ ảnh tổng không có `room` (`docs/design/experiments.md` mục 3.1). Kiểm lại bằng script của người rà soát: mỗi lần chạy thực nghiệm chỉ còn một thư mục biểu đồ. Các bản sửa chưa được rà soát lại.
-- **Chưa chạy:** vẽ từ kết quả thật; trên pod.
-
-**Repo này, 28/10/2026 (D17: chạy riêng từng phương pháp của thực nghiệm chính; tên bản):**
-- **pytest:** 452 test; 443 qua, 9 bỏ qua (cần PyTorch hoặc `simple_trainer.py` thật của gsplat, như lượt D16) trên năm môi trường như lượt 22/10/2026. 123 test cần PyTorch và 60 test chạy với phiên bản thư viện của env `gs-gsplat` đều qua.
-- **shellcheck**, **pyflakes**, liên kết trong mọi file `.md`: sạch. `python3 app/notebooks/build_notebooks.py --check`: 4 notebook trong repo đúng là bản sinh ra.
-- **Notebook**, cùng cách mô phỏng: **86/86 kiểm tra đạt**, thêm 19 kiểm tra cho ba notebook theo phương pháp:
-  - ô "Bảng" khi chưa chạy báo chưa có báo cáo; ô 6 với `CHAY = False` in kế hoạch của riêng phương pháp đó (có dòng tên bản), không tạo việc, không tải;
-  - `CHAY = True` thành đúng một việc nền mang tên bản (`b0_inria`, `gsplat_default`, `gsplat_mcmc`; lệnh `run_experiment.sh main --only <phương pháp>`), dừng ở `env_check` (không GPU), không tải, không train; có gói `ket_qua_<tên bản>_<thời gian>.tar.gz` cùng thời gian với báo cáo;
-  - ô "Bảng" in báo cáo mới nhất `<tên bản>_<thời gian>.md`; ô dừng với `DUNG=0` không dừng gì;
-  - `gsplat_default` / `gsplat_mcmc`: ô 7 từ chối thư mục một ảnh và chạy cảnh tự chụp với đúng chế độ (`default`; `default mcmc`);
-  - các kiểm tra cũ theo tên bản: việc nền `main`, `tune_mcmc`; báo cáo `main_<thời gian>.*`; gói của ô 10 `ket_qua_main_<thời gian>.tar.gz`; PLY xuất ra `gsplat_default_demo_s42.ply`.
-- **Rà soát độc lập lượt 1** (người rà soát không viết code). So sánh đầu cuối bằng script thật (`run_experiment.sh` → `run_train.sh` → `train_gsplat_modes.sh` / `train_inria_b0.sh`; chỉ trainer, GPU, conda, tải, đánh giá, đóng gói là stub), ba thứ tự: cả kế hoạch; `b0` → `default` → `mcmc`; `mcmc` → `default` → `b0` → cả kế hoạch. Cả ba cho cùng 36 lệnh train gsplat và 2 lệnh B0, giống từng byte; lần chạy sau không train gì. Không có `--only`: kế hoạch, chỗ trống và toàn bộ lời gọi của `main`, `tune_mcmc` giống HEAD. Không có lỗi chặn.
-  - 1 lỗi vừa: ô "Bảng" có thể in bảng của một benchmark, hoặc báo cáo của chế độ khác có tên bắt đầu như vậy (`mcmc_indoor`).
-  - 4 lỗi nhỏ: "đã có B0" chỉ xét có file `results.json` (file hỏng thì chạy riêng `default` thành INCOMPLETE, exit 1; `--only b0` không giữ chỗ); báo cáo của lần chạy riêng không cho biết `default` đã được đối chiếu với B0 chưa; `--only b0` với kế hoạch không có `estimate.only.b0` bị từ chối vì dùng ước lượng của cả kế hoạch; ghi đã mô phỏng mà chưa có ghi chép.
-  - 5 lỗi chữ / ghi chú: lời của `--only b0`; dòng mới của `runpod.ipynb` chỉ sai chỗ; `--only` chưa có trong trợ giúp CLI; ba chỗ trong test; tên của lần chạy riêng có thể trùng tên kế hoạch khác.
-  - Đã sửa kèm test.
-- **Rà soát độc lập lượt 2** (kiểm lại từng bản sửa với các ca của lượt 1; chạy lại so sánh đầu cuối, so với HEAD): mọi bản sửa đạt, hành vi của cả kế hoạch không đổi. 1 lỗi nhỏ mới (thiếu mặc định `ours_30000` khi kiểm B0) và 3 ghi chú (thông báo tên trùng, câu chữ cột B0, chỉ số `null` trong `results.json`): đã sửa kèm test.
-- **Rà soát độc lập lượt 3** (phần tên bản; chạy lại so sánh đầu cuối): mọi file chính của mỗi bản mang đúng tên bản, không còn chỗ nào tìm tên cũ, lệnh train và việc dùng lại lượt không đổi.
-  - 2 lỗi nhỏ: PLY của lượt chạy thử trùng tên PLY của lượt chuẩn (khác thư mục), cảnh tự chụp có thể trùng tên cảnh benchmark; file của các bước bên trong (`modes_<tag>_*`, `baseline_*`) không mang tên bản mà tài liệu viết như có.
-  - 4 ghi chú: tên bản có thể trùng tên việc / báo cáo loại khác; PLY của lượt cũ `.prev_*` đặt seed trước cảnh; chưa có tên bản cho PLY đã lọc và PLY của B0; gói của ô 10 luôn tên `main`.
-  - Đã sửa: thêm `_quick`, giữ `.prev_*` sau cùng, chặn tên trùng loại khác (kèm test); tài liệu ghi rõ file nào mang tên bản, khuyên đặt tên cảnh tự chụp khác tên cảnh benchmark; ô gói kết quả ghi rõ nội dung gói. Chưa làm: tên bản cho PLY đã lọc, xuất PLY của B0. Các bản sửa của lượt 3 chỉ được kiểm bằng test và mô phỏng, chưa rà soát lại.
-- **Chưa chạy:** trên pod / GPU; ước lượng thời gian và dung lượng từng phương pháp là suy ra, chưa đo.
-
-**Repo này, 28/10/2026 (D16: biến thể từ notebook v2):**
-- **pytest:** 426 test; 417 qua, 9 bỏ qua (8 cần PyTorch, 1 cần `simple_trainer.py` thật của gsplat) trên năm môi trường như lượt 22/10/2026. 122 test cần PyTorch qua trên Python 3.10.20 + PyTorch 2.7.1 chạy trên CPU, gồm hook với `simple_trainer.py` và `MCMCStrategy` thật của gsplat @6e8c837 (`SR3D_GSPLAT_TRAINER`). 60 test chạy với phiên bản thư viện của env `gs-gsplat` qua.
-- **Kiểm tra tay, ngoài bộ test** (cùng Python và PyTorch; thư viện của `examples/` theo file khóa của env `gs-gsplat`, fork pycolmap mà gsplat dùng, fused-ssim thay bằng stub):
-  - `smoke_test_gsplat.check_trainer_cli` với `simple_trainer.py` thật @6e8c837 cho 18 lượt của `tune_mcmc`, theo thứ tự mới: PASS; `mcmc_mono`, `mcmc_kr`, `mcmc_v2` chạy bản sao có vá, file gốc đúng bản ghim. Người rà soát lượt 2 dựng lại riêng: cùng kết quả;
-  - `mono_depth.prepare` với code Depth Anything V2 thật @`a561b84` và trọng số ngẫu nhiên, trên cảnh COLMAP tổng hợp của `test_mono_depth.py`: 4/4 ảnh, bản đồ 48 × 64 float16 chuẩn hóa về [0, 1], manifest đủ; kiểm cả cảnh báo không đạt như mong đợi với trọng số ngẫu nhiên (trung vị tương quan 0,26 < 0,3);
-  - cờ xoay EXIF: cv2 4.11.0 và 5.0.0 đọc thường thì xoay ảnh (JPEG cờ 3), có `IMREAD_IGNORE_ORIENTATION` thì giống imageio 2.37.0, cách gsplat đọc ảnh; người rà soát lượt 2 thử thêm cờ 6, 8: như vậy;
-  - dung lượng Depth Anything V2: bản checkout đầy đủ 113,9 MB (lịch sử git 47,4 MB), trọng số 24,8 triệu tham số, khoảng 99 MB.
-- **shellcheck**, **pyflakes**, liên kết trong mọi file `.md`: sạch.
-- **Notebook**, cùng cách mô phỏng, thêm: `git clone https://github.com/...` trỏ vào một thư mục không có. **67/67 kiểm tra đạt**; ô 7 `EXP = "tune_mcmc"`: kế hoạch có bước `depth_anything` trước `env_check`; `CHAY = True`: `depth_anything` lỗi (không clone được) thì chỉ bỏ `mcmc_mono`, `mcmc_v2`, dừng ở `env_check`, không gọi curl, không tải, không train.
-- **Rà soát độc lập lượt 1** (người rà soát không viết code; đối chiếu gsplat @6e8c837; chạy KR rồi `MCMCStrategy.step_post_backward` thật, chỉ thay kernel CUDA; dựng lại lỗi bằng stub): không có lỗi chặn.
-  - 1 lỗi vừa: code mới của bốn biến thể chạy lần đầu sau 4–5,5 giờ của việc, nên lỗi thiết bị / kiểu dữ liệu hay cổng của prior lộ ra muộn.
-  - 5 lỗi nhỏ: ảnh JPEG có cờ xoay EXIF cho prior lệch hướng với ảnh gsplat đọc; script cài hỏng khi thư mục đích có sẵn mà không phải bản checkout; tài liệu nói NaN thì lượt dừng nhưng code không kiểm; tiêu chí P6 mâu thuẫn về exit code; dung lượng Depth Anything V2 ghi thấp.
-  - 1 ghi chú (Gaussian bị KR dời giữ moment Adam cũ, như MCMC và notebook) và 1 lỗi chữ.
-  - Đã sửa kèm test: bốn biến thể chạy trước; smoke test chạy thử KR cùng relocate thật, loss của prior, kiểm NaN trên GPU; bước `depth_anything` riêng, lỗi thì chỉ bỏ lượt dùng prior; đọc ảnh bỏ cờ xoay EXIF; script dừng khi thư mục không phải bản checkout; kiểm NaN mỗi 500 vòng ở lượt có hook; P6 ghi rõ exit code; dung lượng khoảng 0,2 GB; ghi chú moment Adam; thông báo lỗi của smoke test.
-- **Rà soát độc lập lượt 2** (kiểm lại từng bản sửa; chạy `hook_smoke` với bước relocate thật trên CPU, thay 2 kernel CUDA bằng bản PyTorch: đạt): 8/8 bản sửa đạt.
-  - 2 lỗi nhỏ mới: tải code / trọng số có thể treo cả việc khi mạng nghẽn; hai kiểm tra tay ở trên được ghi như đã kiểm thử mà chưa có ghi chép.
-  - 4 lỗi chữ / ghi chú: `run.py` chỉ kiểm file trọng số; kế hoạch in sai khi baseline dùng prior; kiểm NaN của lượt có hook chặt hơn các lượt được so; thư mục rỗng có sẵn bị từ chối.
-  - Đã sửa kèm test: curl / git ngắt khi tải quá chậm, git không hỏi mật khẩu, lỗi clone có dòng `ERROR`; ghi chép ở mục này; câu chữ; cách đọc ở `docs/design/experiments.md` mục 3.5 (`counts.removed.non_finite` của mọi lượt); thư mục rỗng được thay bằng bản checkout.
-  - Còn lại, có chủ ý: chạy thử Depth Anything V2 trên GPU lỗi thì `env_check` dừng cả việc (lỗi code / môi trường, sửa rồi chạy lại); 4 dòng chèn vào trainer chỉ thật sự chạy khi train, lượt `mono` là lượt thứ ba (khoảng 40 phút sau khi bắt đầu trên volume mới).
-- **Chưa chạy:** trên GPU (train, smoke test của biến thể có code, Depth Anything V2 với trọng số thật); trọng số thật chưa tải (Hugging Face bị chặn trong sandbox).
-
-**Repo này, 24/10/2026 (D15: biến thể `rs30k`, `sh2`; thiết kế vòng ghép):**
-- **pytest:** 384 test; 383 qua, 1 bỏ qua (cần PyTorch) trên năm môi trường như lượt 22/10/2026; 58 test cần PyTorch và 50 test chạy với phiên bản thư viện của env `gs-gsplat` đều qua.
-- **shellcheck**, **pyflakes**, liên kết trong mọi file `.md`: sạch.
-- **Notebook**, cùng cách mô phỏng: **67/67 kiểm tra đạt** (ô 7 với `EXP = "tune_mcmc"`, `CHAY = False` in đúng 12 biến thể và ước lượng mới).
-- **Rà soát độc lập lượt 1** (người rà soát không viết code; đối chiếu mã gsplat @6e8c837; thử `export_splats` thật với SH bậc 2 trên CPU; dry-run lệnh train, chấm, chấm lại sau khi lọc và render của `sh2`): không có lỗi chặn; 4 lỗi vừa (D15 nói sai về notebook demo; vòng ghép dùng lại lượt seed 42 đã dùng để chọn ứng viên, làm lệch việc chọn; tiêu chí chọn chưa đủ rõ; chưa ghi yêu cầu cùng loại GPU) và 11 lỗi nhỏ (mô tả `rs30k`, ước lượng, ví dụ `VOLUME_GB`, câu chữ): đã sửa; vòng ghép chuyển sang 2 seed mới (43, 44), tag mới, luật số cố định trước.
-- **Rà soát độc lập lượt 2** (kiểm lại từng bản sửa; mô phỏng bảng so sánh của vòng ghép): 11/15 bản sửa đạt, 3 đạt một phần, 1 hẹn làm sau (mục kiểm thử này); 6 lỗi nhỏ mới (luật tag mới chưa có kiểm tra tự động; σ ước từ 3 lượt quá bất định; luật hòa; tỉ lệ đạt nhầm của bước chọn; bảng nguồn của Δ; vai trò của bằng chứng floater): đã sửa (test tag không trùng giữa các kế hoạch; σ gộp của `default` và `mcmc`; ghi rõ "đạt" chỉ là bộ lọc thô).
-- **Chưa chạy:** trên GPU (lượt dò, vòng ghép); file kế hoạch của vòng ghép chưa có.
-
-**Repo này, 22/10/2026 (bảng so sánh mở rộng, thống kê PLY, ảnh so sánh):**
-- **pytest:** 382 test; 381 qua, 1 bỏ qua (cần PyTorch) trên năm môi trường như lượt 21/10/2026; 58 test cần PyTorch qua trên Python 3.10.20 + PyTorch 2.7.1 chạy trên CPU. 50 test của thống kê PLY, ảnh so sánh và bảng so sánh chạy thêm trên Python 3.10.20 với numpy 1.26.4, opencv-python-headless 4.11.0.86, imageio 2.37.0 và imageio-ffmpeg 0.6.0, đúng phiên bản của env `gs-gsplat`: video ghép ghi bằng H.264 (test kiểm đúng bộ mã hóa theo môi trường).
-- **Đọc PLY:** người rà soát độc lập đối chiếu với PLY do `export_splats` thật của gsplat @6e8c837 ghi ra (CPU): header, thứ tự thuộc tính, 236 byte mỗi Gaussian ở SH bậc 3, các tỉ lệ và trung vị khớp giá trị tính từ tensor.
-- **shellcheck**, **pyflakes**, liên kết trong mọi file `.md`: sạch.
-- **Notebook**, cùng cách mô phỏng: **67/67 kiểm tra đạt** (thêm: ô 7 `WHAT = "panels"` khi chưa chọn cảnh và khi chưa có kết quả; ô 9 `SO_SANH = True` chạy ngay, không tạo việc nền, lượt gốc không đổi).
-- **Rà soát độc lập lượt 1** (người rà soát không viết code): 1 lỗi chặn (cột FPS lấy từ thời gian chấm, gồm khởi động CUDA, không phản ánh tốc độ render: đã bỏ FPS, ghi chú cột `Render (ms/ảnh)`), 5 lỗi vừa (bảng chất lượng theo dung lượng và bảng cấu trúc trộn bộ seed; bảng số cặp thắng thiếu điều kiện; ảnh so sánh lấy cả lượt cũ, lượt chưa xong, lặng lẽ bỏ bớt ảnh; thống kê PLY mất tác dụng trong gói kết quả nhẹ; ảnh và video bị gom vào gói nhẹ), 6 lỗi nhỏ: đã sửa kèm test.
-- **Rà soát độc lập lượt 2** (chỉ các bản sửa; chạy thêm trên gói kết quả nhẹ thật của repo trước): 12/12 bản sửa đạt, bảng cũ không đổi; 4 lỗi nhỏ mới (video H.264 lỗi vẫn báo thành công; lượt khác protocol làm hỏng bộ ảnh mặc định; bảng mất dòng không ghi chú; test chưa kiểm bộ mã hóa): đã sửa kèm test.
-- **Chưa chạy:** trên kết quả thật của pod (PLY hàng triệu Gaussian, ảnh render và video thật của gsplat).
-
-**Repo này, 21/10/2026 (D14: biến thể tham số, kiểm tra điểm SfM, lọc Gaussian):**
-- **pytest:** 351 test; 350 qua, 1 bỏ qua (cần PyTorch) trên bốn môi trường như lượt 19/10/2026 (Python 3.13.16 / 3.10.20; numpy 2.5.4 / 2.2.6 / 1.26.4; opencv 4.11 / 5.0). Test bị bỏ qua (đọc / ghi checkpoint bằng PyTorch thật) qua trên Python 3.10.20 + PyTorch 2.7.1 chạy trên CPU, cùng các test đọc kết quả đã lọc (`test_prune.py`, `test_gsplat_results.py`, `test_compare_modes.py`, `test_overview.py`: 50 test).
-- **Ghi PLY bằng `export_splats` thật** của gsplat @6e8c837 (kiểm tra tay trong sandbox, không nằm trong bộ test: CPU, 1.000 Gaussian tổng hợp, qua `src.training.prune.TorchIO`): đọc lại đúng vị trí, opacity, hệ số SH theo bố cục PLY của Inria, đúng số Gaussian còn lại. Người rà soát độc lập dựng lại riêng: PLY giống từng byte với PLY do `export_splats` ghi cho cùng tập Gaussian.
-- **shellcheck**, **pyflakes**, liên kết tương đối trong mọi file `.md`: sạch.
-- **Notebook**, cùng cách mô phỏng như dưới: **64/64 kiểm tra đạt**. Thêm so với lượt 19/10/2026: ô 7 với `EXP = "tune_mcmc"` và `CHAY = False` in đúng kế hoạch (10 biến thể, `room` còn thiếu, bước `depth_check_mipnerf360` và `filter_mipnerf360_s42`, ước lượng), không tạo việc, không tải; `CHAY = True` thành đúng một việc nền `exp_tune_mcmc`, dừng ở `env_check`, không tải, không train; ô 9 với `LOC = True` xếp hàng việc `filter_<cảnh>_<lượt>`, dừng sớm vì không có GPU, lượt gốc không đổi, không tạo `filtered/`; lượt không có thì báo lỗi rõ; khi lượt có `filtered/`, ô 9 in dòng `+ đã lọc` ngay dưới lượt đó kèm PLY đã lọc.
-
-**Repo này, 19/10/2026:**
-- **pytest:** 282 test đều qua trên bốn môi trường: Python 3.13.16 với numpy 2.5.4 / opencv 4.11.0.86; Python 3.13.16 và 3.10.20 cài đúng `requirements.txt` (numpy 2.2.6, opencv 5.0.0.93 như env `gs-inria`); Python 3.10.20 với numpy 1.26.4 / opencv 4.11.0.86 như env `gs-gsplat`. Không test nào bị bỏ qua (máy có `colmap`, `ffmpeg`).
-- **shellcheck** 0.11.0 (`scripts/*.sh scripts/*/*.sh`) và **pyflakes** (`src app tests scripts/setup/*.py`): sạch.
-- **Notebook** (`app/notebooks/runpod.ipynb`) trên `/workspace` giả, pod mới, volume trống. GitHub được thay bằng một bare repo cục bộ, `ssh` và `curl` là stub (không kết nối mạng; mọi lần gọi `curl` được ghi lại; khi tải thì báo lỗi mạng, hoặc trả về một file zip giả), không GPU, không conda. **59/59 kiểm tra đạt**:
-  - không ô code nào tự tải (`curl`, `wget`, `unzip`); chỉ ô 7 gọi bước tải riêng (`fetch_data.sh`, `run_experiment.sh`). Cả lượt, `curl` chỉ được `env_probe` gọi để thử kết nối tới GitHub, gitlab.inria.fr, PyPI, kho PyTorch và conda (`-o /dev/null`), và cho hai lần tải `tandt_db.zip` được bật ở ô 7; không tải Mip-NeRF 360; không còn `data/downloads`;
-  - ô 1 báo ĐẠT với GPU giả (RTX 4090, driver CUDA 13.0) và cảnh báo khi `python3` không có PyYAML;
-  - ô 2 tạo khóa ed25519 (`600`, thư mục `700`), chỉ in khóa công khai, chạy lại không tạo khóa mới; `ssh` được gọi với đúng khóa, `IdentitiesOnly`, `known_hosts` trên volume;
-  - ô 3 clone đúng commit, cây file giống hệt repo, giữ quyền thực thi; chạy lại thì `pull --ff-only`; code trên pod có thay đổi chưa commit thì từ chối (exit 1), không stash, thay đổi còn nguyên; đang có việc nền hoặc thư mục không phải repo Git thì từ chối;
-  - ô 4 chạy nền `run_all.sh` (không tham số); tóm tắt chỉ có `env_probe` (FAIL vì không có GPU) và ba bước cài đặt (SKIP); không cài gì, không tạo `outputs/benchmarks` hay `data/benchmarks`; log và báo cáo nằm trong `outputs/`;
-  - ô 6 trên volume trống: Deep Blending và Mip-NeRF 360 chỉ báo "chưa có" (không luồng nào bắt buộc), không tạo thư mục nào; thiếu PyYAML thì lỗi hiện rõ trong ô; sau khi đưa Deep Blending giả (đúng bố cục) lên thì báo OK;
-  - ô 7, thực nghiệm chính: `WHAT = "experiment"` (mặc định) với `CHAY = False` chỉ in kế hoạch (2 chế độ, 3 seed, 6 cảnh còn thiếu, ước lượng), không tạo việc, không tải, không tạo thư mục dữ liệu; `QUICK = True` bị từ chối; `CHAY = True` thành đúng một việc nền `exp_main`, dừng ở `env_check` (không GPU, không env), không tải, không train, vẫn có bảng các bước và gói kết quả;
-  - ô 7, tải dữ liệu: `fetch` với `CHAY = False` không chạy; `CHAY = True` thành việc nền `fetch_deep_blending`, gọi đúng `tandt_db.zip` của Inria; lỗi mạng thì dừng, không có cảnh, không còn file tải dở; file sai SHA-256 thì dừng trước khi giải nén và xóa file zip;
-  - ô 7, các lệnh khác: `WHAT = "check"` báo `dataset not found` kèm chỗ cần đưa lên, cho cả Deep Blending và Mip-NeRF 360; `gsplat` / `b0` với `CHAY = False` không chạy; `CHAY = True` khi chưa có dữ liệu thì báo ngay, không xếp hàng; `evaluate` khi chưa có kết quả báo rõ; `WHAT` không hợp lệ chỉ in hướng dẫn. Khi đã có dữ liệu: `check` báo OK; `gsplat` với `QUICK = True` thành việc nền `gsplat_quick_deep_blending` (thư mục `gsplat_quick`), `b0` thành `b0_deep_blending`, cả hai dừng sớm vì không có GPU / env và không tạo lượt nào; dữ liệu đã đưa lên không bị sửa;
-  - ô 8 từ chối 1 ảnh, 5 ảnh, một file ảnh, `SOURCE = "-"` không có `SCENE`; tên cảnh lấy đúng từ thư mục ảnh, thư mục chứa video, hoặc tên file video; ảnh / video gốc không bị sửa;
-  - ô 8 với `CHAY = False` (mặc định) không chạy gì; ô 9 xuất PLY bằng liên kết cứng; render lại chạy nền và dừng sớm khi không có GPU, không đụng lượt gốc;
-  - ô 10 tạo gói kết quả không có PLY, checkpoint, video, ảnh gốc, `data/` hay `.ssh`; ô 11 với `DUNG=0` (mặc định) không dừng gì, `DUNG=1` dừng mọi việc; sau mọi ô `git status` của repo trên pod vẫn sạch.
-- **COLMAP 3.9.1 bản CPU thật** trên ảnh và video tổng hợp (cảnh dựng bằng code, không phải dữ liệu thực nghiệm), qua `scripts/pod/run_scene.sh` và `scripts/prepare_data.sh custom`, huấn luyện thay bằng stub:
-  - thư mục 1 ảnh: từ chối trước khi xếp hàng GPU;
-  - roomA, 36 ảnh có tiêu cự EXIF 27 mm (`run_scene.sh`): 36/36 ảnh, 31.396 điểm, 0,146 px, phủ 360°, PASS (188 giây);
-  - video tổng hợp 5 giây (150 frame, 30 fps) đi vòng quanh phòng: chọn 68/75 frame ứng viên, 68/68 đăng ký, 42.208 điểm, 0,251 px, PASS (646 giây);
-  - `- roomA`: dùng lại COLMAP, không đọc lại nguồn;
-  - roomB, 24 ảnh không EXIF, qua `scripts/prepare_data.sh custom` rồi `scripts/run_train.sh custom`: 24/24, 15.576 điểm, 0,134 px, PASS kèm cảnh báo dưới 30 ảnh và thiếu tiêu cự EXIF (73 giây);
-  - dấu SHA-256 của mọi file trong `data/` không đổi; `scripts/pod/results.sh` và `scripts/pod/check_datasets.sh --dataset custom_scene` đọc đúng cả bốn cảnh;
-  - chạy lại roomB qua `scripts/prepare_data.sh custom` sau khi sửa lỗi (147 giây): 24/24, 13.894 điểm, 0,600 px, PASS. Cùng 24 ảnh không EXIF nhưng lượt này COLMAP tự hiệu chỉnh ra tiêu cự lệch hai trục (fx 689 / fy 500 px) và ảnh sau khử méo bị cắt còn 548×393 (lượt trước: fx ≈ fy ≈ 500, 639×479). Kiểm tra trước khi train chưa bắt được trường hợp này (mục "Chưa xác minh / còn mở").
-
-### Rà soát độc lập ngày 21/10/2026 (D14)
-
-Hai lượt, người rà soát không tham gia viết code: làm trên bản sao, chạy lại test, dựng lại lỗi bằng stub và bằng đoạn code của gsplat @6e8c837 chạy trên CPU. Lượt 1: 1 lỗi chặn, 2 lỗi vừa, 7 lỗi nhỏ. Lượt 2 kiểm lại từng bản sửa (đều đạt; dựng 84 tổ hợp quy ước mcmc × lượt, bash và Python cho cùng tham số) và tìm thêm 8 lỗi nhỏ. Đã sửa (đã kiểm thử trên CPU, chưa chạy trên pod):
-
-| Mức | Lỗi | Đã sửa | Test |
-|---|---|---|---|
-| Chặn | Chạy `main` sau `tune_mcmc`: bảng so sánh lẫn các biến thể có tag của `room`, nên chỉ `room` "đủ mọi biến thể" và trung bình trên các cảnh chỉ còn `room`, seed 42 | Lượt có tag chỉ vào bảng khi được yêu cầu (`compare_modes --tags`, `TAGS` của `run_evaluate.sh`); bảng của một kế hoạch có các biến thể của chính nó | `test_compare_modes.py::test_runs_with_a_tag_stay_out_unless_their_tag_is_asked_for`, `test_experiment.py`, `test_benchmarks.py` |
-| Vừa | Quy ước `opacity_reg=0.001` của Deep Blending đè tham số mà một chế độ mới tự đặt (vd. `mcmc_indoor`) | Ưu tiên tăng dần: preset → quy ước của benchmark → tham số của chế độ → tham số của biến thể, như nhau ở bash và Python. Lượt cùng chế độ, cùng cấu hình là lỗi; hai chế độ khác tên cùng cấu hình chỉ là cảnh báo | `test_benchmarks.py::test_a_mode_that_sets_the_convention_key_keeps_its_own_value`, `test_experiment.py` |
-| Vừa | Tài liệu nói dòng của `room` "được ghi riêng", công cụ không làm vậy | Tài liệu ghi đúng: bảng tự động vẫn tính `room`; thêm lệnh lập bảng không có `room` | — |
-| Nhỏ | Kiểm tra điểm SfM coi ảnh mà mọi điểm nằm ngoài ảnh là lỗi (thực ra chỉ làm giá trị loss ghi ra là NaN, gradient hữu hạn), và bỏ cả benchmark, kể cả B0 | Trường hợp đó chỉ cảnh báo; không đạt thì chỉ bỏ các lượt có loss độ sâu, B0 vẫn chạy; bảng so sánh và chỗ trống không tính lượt bị bỏ | `test_depth_check.py`, `test_experiment.py` |
-| Nhỏ | Lọc Gaussian: lỗi lạ ở một lượt dừng cả loạt; không kiểm được ảnh test, hoặc chỉ số NaN, vẫn ghi OK; bản đã lọc mất file vẫn được bỏ qua | Bắt lỗi theo từng lượt; hai trường hợp đó là lỗi; chỉ bỏ qua khi chỉ số đọc được và PLY còn | `test_prune.py` |
-| Nhỏ | Kiểm tra chỗ trống không tính bản đã lọc của lượt đã xong mà chưa lọc | Tính thêm checkpoint, PLY, ảnh, video của lượt đó | `test_experiment.py` |
-| Nhỏ | Ngưỡng lọc bị làm tròn 6 chữ số khi chuyển cho bash; ngưỡng khác nhau giữa các dòng không ghi theo dòng; ước lượng thời gian của `tune_mcmc` khác giả định của `main`; vài câu tài liệu cũ; ô 7 không đưa được biến thể vào bảng | Đã sửa (ô 7: biến `TAGS`) | `test_experiment.py`, `test_compare_modes.py` |
-
-### Rà soát độc lập ngày 19/10/2026
-
-Người rà soát làm trên một bản sao, chạy lại test và lint, dựng lại từng lỗi bằng stub. Kết quả: 1 lỗi chặn, 8 lỗi vừa, khoảng 15 lỗi nhỏ / tài liệu. Đã sửa (đã kiểm thử trên CPU, chưa chạy trên pod):
-
-| Mức | Lỗi | Đã sửa | Test |
-|---|---|---|---|
-| Chặn | `scripts/pipeline/train_scene.sh` đọc `configs/base.yaml (train_modes)` như một file JSON (lỗi khi đổi tên hàng loạt): **mọi lượt train cảnh tự chụp lỗi trước khi bắt đầu**. Test cũ không bắt được vì thay `train_scene.sh` bằng stub | Đọc `train_modes` bằng `src.training.profiles.load_config` | Mới: `tests/unit/test_train_scene.py` chạy `train_scene.sh` thật (3 test; cả 3 lỗi với bản cũ) |
-| Vừa | B0 đọc cấu hình sau `conda activate gs-inria` (python3 của env không có PyYAML): chưa có env `gs-gsplat` thì B0 dừng | `scripts/lib/config.sh` giữ python3 tìm thấy lúc được source (trước khi kích hoạt env) | `tests/test_dataset.py` (lỗi với bản cũ) |
-| Vừa | Xuất PLY trùng tên: lượt chạy thử và lượt chuẩn, hoặc lượt cũ trước khi train lại, làm lệnh xuất lỗi sau khi đã render | Lượt chạy thử xuất vào `checkpoints/<benchmark>_quick/`; tên đã là PLY khác thì xuất `<lượt>_<thời điểm train xong>.ply`; thiếu PLY thì dừng trước khi render | `tests/unit/test_render.py` |
-| Vừa | Render lại một lượt sau khi cảnh đã làm lại COLMAP: checkpoint cũ với camera mới, ảnh và chỉ số sai mà không báo | So dấu SHA-256 của mô hình COLMAP với dấu ghi trong `run_meta.json`; khác thì dừng | `tests/unit/test_render.py` |
-| Vừa | Ô 8 của notebook chạy GPU ngay khi chạy ô (hoặc "Run All"); ô 11 dừng mọi việc vừa được xếp hàng | Thêm `CHAY = False` cho ô 8, `DUNG=0` cho ô 11 | Mô phỏng notebook |
-| Vừa | B0 với `FORCE=1` ghi đè kết quả cũ | Lượt cũ đổi tên `<cảnh>.prev_<thời gian>` trước khi chạy lại | `tests/unit/test_benchmarks.py` |
-| Vừa | Tài liệu nói quá: test chạy `train_scene.sh` thật (sai), luồng cảnh tự chụp đã chạy với COLMAP thật (bước train chỉ là stub), mọi code đã chạy trên pod (phần viết sau 17/10 chưa chạy) | Sửa lại cho đúng (`docs/design/architecture.md` mục 3 và 7, `docs/design/training_modes.md` mục 8, `docs/USAGE_GUIDE.md` mục 9) | — |
-| Nhỏ | Bảng đối chiếu tên cũ → mới ghi sai tên của lượt 17/10; `configs/local.yaml` sai dạng gây traceback, khóa `train_modes` trong đó bị bỏ qua lặng lẽ; phần hướng dẫn của vài script in cả dòng code; chú thích cũ (`PYTHONPATH=src`, `env_probe.sh`, `run_scene.sh`); `ssh-keygen` trong tài liệu hỏi lại khi khóa đã có; hai gói kết quả trong cùng một phút trùng tên; CLI chạy script trong thư mục repo thay vì thư mục hiện tại; `runs/` trong `.gitignore` không neo gốc | Đã sửa (`local.yaml` chỉ nhận mục `datasets` dạng mapping; tên gói có giây) | `tests/test_dataset.py` |
-
-Giữ nguyên, có lý do:
-- Render lại ghi một thư mục mới `render_<quỹ_đạo>_<thời gian>/` **bên trong** lượt gốc: không sửa file nào của lượt, giữ ảnh render cạnh lượt của nó; tài liệu đã ghi rõ.
-- File PLY xuất là liên kết cứng tới PLY của lượt (không tốn thêm chỗ): tài liệu ghi chỉ đọc / tải về, không sửa tại chỗ.
-- Gói `ket_qua_*.tar.gz` ở gốc `/workspace` (như sơ đồ).
-
-**Lượt 2: thực nghiệm chính, tải dữ liệu** (bản chưa commit sau `5d83cd7`). Người rà soát chạy lại 279 test và shellcheck trên một bản sao và dựng lại lỗi bằng stub. Kiểm tra thêm và thấy đúng: chạy lại bỏ qua lượt đã xong, lượt dở dang được đổi tên `.prev_*` rồi train lại; biến môi trường của người dùng không vào được các bước; tải lỗi chỉ bỏ benchmark đó; đường dẫn không an toàn trong zip bị chặn; bảng so với một mốc khác `default` ghép đúng seed.
-
-Đã sửa (đã kiểm thử trên CPU, chưa chạy trên pod):
-
-| Mức | Lỗi | Đã sửa | Test |
-|---|---|---|---|
-| Vừa | Chạy lại sau khi dừng (đúng cách tài liệu hướng dẫn) thì kiểm tra chỗ trống gần như không còn tác dụng: chỗ cần cho seed sau lấy theo phần ghi thêm trong lần chạy này (lượt đã xong không ghi gì), và kiểm tra lúc đầu không tính phần thực nghiệm đã dùng. Người rà soát dựng lại được: volume 52 GB, đã xong 2 seed, seed 44 vẫn được train và lên tới 64 GB | Chỗ cần cho một seed = tổng các lượt chưa xong của seed đó, mỗi lượt theo dung lượng thật của lượt cùng cảnh, cùng chế độ đã xong ở seed khác (chưa có thì theo ước lượng); kiểm tra trước mọi seed, kể cả seed đầu; lúc đầu so với tổng dung lượng đang dùng | `tests/unit/test_experiment.py`: hai ca của người rà soát (chạy lại sau khi dừng vì thiếu chỗ; pod dừng giữa seed 43) |
-| Nhỏ | Bản ghi nguồn tải chỉ được ghi khi mọi cảnh của file zip xong: cảnh sau lỗi thì cảnh trước đã vào chỗ mà không có nguồn, SHA-256 | Ghi sau mỗi cảnh; báo cáo được ghi cả khi lỗi, kèm lỗi | `tests/unit/test_fetch.py` |
-| Nhỏ | curl không ngắt khi kết nối treo: việc treo ở giờ đầu mà vẫn giữ khóa GPU | `--speed-limit 102400 --speed-time 300` (dưới 100 KB/s suốt 5 phút thì ngắt, `--retry` thử lại) | `tests/unit/test_fetch.py` |
-
-Tìm thêm khi chạy lại test (trước lượt rà soát): khi `run_experiment.sh` chạy trực tiếp (không qua việc nền), tiến trình `tee` ghi log giữ fd khóa GPU, nên khóa có thể được nhả chậm một chút sau khi script kết thúc (4/30 lượt test hỏng khi máy bận). Sửa: `tee` đóng fd khóa, như `scripts/lib/gpu_lock.sh` hướng dẫn cho tiến trình phụ; 60/60 lượt qua.
-
-**Repo trước, 18–19/10/2026** (cùng code chuẩn bị cảnh, bố cục trước khi dời sang repo này):
-
-| Ca | Kết quả COLMAP | Kết luận | Đúng mong đợi? |
-|---|---|---|---|
-| Video 5 giây, đi vòng quanh phòng | 68/68 frame, khoảng 42.200 điểm, sai số 0,251 px, phủ 360° | PASS | Có |
-| roomB: 24 ảnh, không EXIF | 24/24, 16.425 điểm, 0,134 px, phủ 360° | PASS (cảnh báo dưới 30 ảnh) | Có |
-| roomA: 36 ảnh, **không** tiêu cự EXIF | 23/36 ảnh, tách 2 nhóm | FAIL, không train | Có (thiếu tiêu cự ban đầu) |
-| roomA: cùng 36 ảnh, **có** tiêu cự EXIF 27 mm | 36/36, khoảng 31.400 điểm, 0,145 px, phủ 360° | PASS | Có |
-| Hai phòng lẫn nhau (24 + 16 ảnh), có EXIF | 24/40: đúng 24 ảnh phòng A; 16 ảnh phòng B được liệt kê kèm tên file gốc | FAIL, không train | Có |
-| Đứng một chỗ chỉ xoay máy, có EXIF | Không dựng được: không có cặp ảnh khởi tạo đủ thị sai | FAIL, gợi ý chụp lại có di chuyển | Có |
-| 1 ảnh; 1 file ảnh; 5 ảnh | — | Từ chối trước khi xếp hàng GPU | Có |
-
-Số điểm 3D lệch nhẹ giữa các lượt vì COLMAP chạy nhiều luồng. Log: sandbox của phiên làm việc (không đưa vào repo). Các ngưỡng còn phải hiệu chỉnh với ảnh thật.
-
-## Chưa xác minh / còn mở
-
-- **Repo này chưa chạy trên pod.** Chưa chạy thật: clone qua HTTPS và ô 1–3 bản mới (D19) trên pod, cài 3 env trên volume trống, tải dữ liệu benchmark, B0 và gsplat bằng code mới, render lại bằng chế độ `--ckpt` của gsplat thật, mở PLY trên một trình xem 3DGS.
-- Thực nghiệm chính (D12) chưa chạy:
-  - ước lượng thời gian (khoảng 12 giờ) và dung lượng (khoảng 56 GB) chỉ có phần Deep Blending dựa trên số đo; Mip-NeRF 360 chưa đo; môi trường conda trên volume (khoảng 15–20 GB) chưa đo;
-  - `AUTO_STOP=1` (dừng pod khi xong) chưa thử trên pod.
-- Tải dữ liệu: URL và SHA-256 của `tandt_db.zip` đã dùng được trên pod ngày 17/10/2026 (repo trước). URL của `360_v2.zip` lấy từ script tải của gsplat @6e8c837, chưa tải thử bằng repo này; dung lượng file chưa biết (script in ra khi tải).
-- Ảnh không có EXIF tiêu cự: hai lượt COLMAP trên cùng 24 ảnh tổng hợp cho hai mô hình khác nhau; một lượt có tiêu cự lệch hai trục (fx 689 / fy 500 px) và ảnh sau khử méo bị cắt còn 548×393, vẫn PASS. Cần thêm cảnh báo (vd. fx/fy lệch nhau, ảnh sau khử méo nhỏ hơn hẳn ảnh vào) và thử lại với ảnh thật trước khi dùng ảnh không EXIF.
-- PyYAML trong `python3` của template Runpod: suy ra từ JupyterLab 4.2.5 có trong template (`jupyter_events` cần PyYAML), chưa kiểm tra trực tiếp. Ô 1 của notebook kiểm tra; `env_probe.sh` nay liệt kê PyYAML. Không có thì chỉ các lệnh đọc cấu hình chạy trước khi cài xong `gs-gsplat` bị ảnh hưởng, kèm thông báo cách sửa.
-- Câu trả lời của GVHD cho Q1–Q3 và Q5–Q12 (`docs/PROJECT_PLAN.md`, mục 2): đang dùng giả định tạm.
-- Cách chia train/test cho dữ liệu tự quay: code Inria gán cứng mỗi ảnh thứ 8 làm test; cần quyết định ở M4.
-- Chưa chọn LICENSE cho repository.
-- Cảnh tự chụp: chưa có lượt nào chạy xong xác minh được trên pod.
-- Mip-NeRF 360:
-  - chưa có dữ liệu trên volume (`bash scripts/pod/check_datasets.sh --dataset mipnerf360`);
-  - `360_v2.zip` chỉ có 7 cảnh; flowers và treehill nằm trong gói riêng `360_extra_scenes.zip` (đã ghi trong mục `download`, bố cục bên trong chưa kiểm tra);
-  - trung bình công bố chỉ so được khi chạy đủ 9 cảnh;
-  - gsplat và Inria dùng ảnh thu nhỏ khác nhau (gsplat tự thu nhỏ từ `images/`, Inria đọc `images_N/`), cần ghi rõ khi so `default` với B0.
-- Đầu vào ảnh:
-  - các ngưỡng (tối thiểu 10 ảnh, khuyến nghị 30, khoảng hướng trống ≥ 90 độ, camera dịch chuyển < 5 % khoảng cách tới cảnh) là điểm xuất phát, cần hiệu chỉnh sau lần chụp thử;
-  - ảnh được ghi lại bằng OpenCV và chỉ giữ thẻ tiêu cự 35 mm của EXIF (các thẻ khác, kể cả GPS, bị bỏ). Ảnh không có thẻ này thì COLMAP tự đoán tiêu cự; trên ảnh tổng hợp, điều này làm số ảnh ghép được giảm từ 36/36 xuống 23/36;
-  - COLMAP có thể ghép nhầm hai nơi có họa tiết giống hệt nhau và vẫn báo PASS (`docs/USAGE_GUIDE.md` mục 3.4).
-- Chưa đăng ký quyền truy cập ScanNet++.
-- Đoạn quay kiểm tra riêng: `src.training.run --test-list` đã hỗ trợ cho gsplat. Còn thiếu bước đưa frame của đoạn kiểm tra vào cùng model COLMAP với video chính (`scripts/pipeline/prepare_scene.sh`, mốc M4).
-- `opacity_reg` của MCMC trên Deep Blending: paper dùng 0,001, config chính chủ chỉ đặt cho `drjohnson`. Benchmark Deep Blending dùng 0,001 cho cả hai cảnh (`benchmark.gsplat.mcmc_set` trong `configs/deep_blending.yaml`); cần ghi rõ khi báo cáo.
-- COLMAP: chưa đo thời gian với video hay ảnh thật trên pod. Matcher mặc định là `exhaustive` như `convert.py` của Inria (250 frame ≈ 31.000 cặp ảnh); nếu quá chậm trên CPU thì thử `COLMAP_ARGS="--matcher sequential --loop-detection"` và so sánh tỉ lệ đăng ký.
-- Dò tham số và lọc Gaussian (D14, D15) chưa chạy:
-  - `tune_mcmc`: ước lượng khoảng 8 giờ GPU và 35 GB chưa đo; vòng ghép chưa có file kế hoạch, `mcmc_indoor` chưa được định nghĩa (chờ số liệu);
-  - biến thể từ notebook v2 (D16): chưa train trên GPU; thời gian và VRAM thêm của `bilagrid`, `mono`, `v2` chưa đo (ước lượng giả định +30 %); trọng số Depth Anything V2 chưa tải thử (URL và SHA-256 lấy từ trang Hugging Face, script kiểm khi tải); chưa biết prior thật tương quan bao nhiêu với điểm SfM của `room`; bước KR chỉ được kiểm với `MCMCStrategy` thật trên CPU (relocate thật cần CUDA); phần chạy thử trên GPU của `env_check` (KR cùng relocate thật, loss của prior, kiểm NaN, Depth Anything V2) chưa chạy trên GPU; chưa quyết định có đưa gói `v2` vào vòng ghép không;
-  - kiểm tra điểm SfM chưa chạy trên `room` thật; lọc rồi chấm lại bằng chế độ `--ckpt` của gsplat thật chưa chạy;
-  - ngưỡng lọc (opacity 0,02, trục lớn nhất 0,1 × `scene_scale`) là điểm xuất phát, chưa hiệu chỉnh; bỏ Gaussian lớn có thể làm thủng tường hay trần ở xa;
-  - tham số được chọn bằng ảnh test của `room` (cảnh dùng để chọn, không tính vào kết luận); cách chặt hơn là tách tập kiểm định từ ảnh train của `room` (chưa làm).
-- `configs/environment/*.conf` vẫn để `provisional` (`run_all.sh` đặt `ALLOW_PROVISIONAL=1`). Điều kiện để chốt (B0 đạt, smoke test của `gs-gsplat` PASSED trên pod) đã có từ 17/10/2026 với repo trước; chưa sửa file.
+- Luồng sản phẩm chưa chạy trên GPU; thời gian của cả luồng và ảnh hưởng của `cap_max` 1 triệu chưa đo; chưa có trang web.
+- Phòng tự dựng chưa có điểm đánh giá: cần một đoạn quay kiểm tra định vị chung mô hình COLMAP với video chính (`scripts/pipeline/prepare_scene.sh`, chưa có).
+- Lượt 31/10/2026: chưa xác minh `repo_dirty` trong `run_meta.json` (notebook từng được mở thẳng trong repo trên pod).
+- `run_panels.sh` với `VIDEO=1` bị `Killed` (hết RAM) ở `phong_nhom` và `mipnerf360 room`; link tải `/files/workspace/...` của Jupyter chưa xác nhận chạy được.
+- `bilagrid`, `v2`: PSNR giảm mạnh nhưng LPIPS gần như không đổi. Giả thuyết chưa kiểm: lệch màu vì ảnh test chấm không qua bilateral grid.
+- Mip-NeRF 360 mới chạy 4/9 cảnh, nên chưa so được với trung bình công bố. Deep Blending dùng `opacity_reg` 0,001 cho cả hai cảnh (paper chỉ ghi cho `drjohnson`); báo cáo phải nêu rõ.
+- Ảnh chụp: các ngưỡng (≥ 10 ảnh, nên ≥ 30) là điểm xuất phát. Ảnh không có EXIF tiêu cự cho kết quả COLMAP kém ổn định. COLMAP có thể ghép nhầm hai nơi có họa tiết giống nhau mà vẫn PASS.
+- `configs/environment/*.conf` vẫn để `provisional`; `AUTO_STOP=1` chưa thử trên pod.
+- Câu trả lời của GVHD cho Q1–Q3, Q5–Q12 (`docs/PROJECT_PLAN.md` mục 2); chưa chọn LICENSE; chưa công bố việc dùng AI theo quy định của trường.
 
 ## Môi trường
 
-Phương án, bố cục `/workspace`, sự cố đã biết: `docs/ENVIRONMENT_AUDIT.md`. Pod và phiên bản thực tế của các lượt chạy 17/10/2026 (repo trước): `docs/ENVIRONMENT_AUDIT.md` mục 7 (RTX 4090, EU-RO-1, image `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`; driver CUDA 12.8 ở lượt đầu, 13.0 ở lượt thứ hai).
-
-Lệnh chính: `README.md` ở gốc repo, mục "Chạy trên Runpod"; từng bước và notebook: `docs/USAGE_GUIDE.md`; benchmark: `docs/design/experiments.md`.
+Phiên bản ghim, cách cài, sự cố đã biết, cấu hình pod đã chạy: `docs/ENVIRONMENT_AUDIT.md`. Lệnh chính: `README.md` mục "Chạy trên Runpod"; từng bước và notebook: `docs/USAGE_GUIDE.md`.
 
 ## Dữ liệu, checkpoint, kết quả
 
-Lưu trên network volume của Runpod tại `/workspace`, không đưa lên Git. Nơi lưu của từng luồng: `configs/*.yaml`; bố cục: `docs/design/architecture.md` mục 2.
-
-- Volume mới (100 GB, EU-RO-1): **chưa có gì**. Sau ô 3–4 của notebook và khi chạy ô 7, 8:
-  - code `/workspace/SpatialRoom3D`; env `/workspace/miniforge3`; mã nguồn Inria / gsplat `/workspace/code`;
-  - Deep Blending (ô 7 tải về, hoặc bạn tự đưa lên) `/workspace/data/benchmarks/deep_blending/{drjohnson,playroom}`; kết quả `/workspace/outputs/benchmarks/deep_blending/{inria_b0,gsplat,gsplat_quick}/`;
-  - Mip-NeRF 360, 4 cảnh trong nhà (ô 7 tải về) `/workspace/data/benchmarks/mipnerf360/{room,counter,kitchen,bonsai}`; kết quả `/workspace/outputs/benchmarks/mipnerf360/gsplat/`;
-  - thực nghiệm chính: `/workspace/outputs/reports/main_<thời_gian>.{md,tsv}`, chạy riêng từng phương pháp: `{b0_inria,gsplat_default,gsplat_mcmc}_<thời_gian>.{md,tsv}` (tên bản, D17); dò tham số: `tune_mcmc_<thời_gian>.{md,tsv}` cùng thư mục, các lượt ở `/workspace/outputs/benchmarks/mipnerf360/gsplat/room/<chế_độ>[_<tag>]_s42/`, bản đã lọc trong `<lượt>/filtered/`;
-  - cảnh tự chụp: nguồn `/workspace/data/custom_scenes/<cảnh>/`, kết quả `/workspace/outputs/custom_scenes/<cảnh>/`;
-  - PLY đã xuất `/workspace/outputs/checkpoints/<luồng>/<cảnh>/gsplat_<chế_độ>_<cảnh>_s<seed>.ply`; báo cáo, log, trạng thái việc nền `/workspace/outputs/{reports,logs,jobs}`, biểu đồ của mỗi báo cáo so sánh `/workspace/outputs/reports/<báo cáo>_charts/` (thực nghiệm: một thư mục `<tên bản>_<thời_gian>_charts/` cho cả lần chạy; D18); gói kết quả nhẹ `/workspace/ket_qua_<tên bản>_<thời_gian>.tar.gz`.
-- Volume cũ (EU-RO-1): còn kết quả ngày 17/10/2026 của repo trước, ở bố cục cũ. Repo này không đọc và không sửa volume đó.
+Tất cả nằm trên network volume tại `/workspace`, không đưa lên Git; bố cục: `docs/design/architecture.md` mục 2.
+- Dữ liệu gốc: `data/benchmarks/{deep_blending,mipnerf360}/`, `data/custom_scenes/<cảnh>/`.
+- Kết quả thực nghiệm: `outputs/benchmarks/<benchmark>/{inria_b0,gsplat}/`, `outputs/custom_scenes/phong_nhom/`.
+- Báo cáo và biểu đồ: `outputs/reports/` (`main_20261031_114145.*`, `tune_mcmc_20261031_155033.*`, `compare_custom_20261031_214710.md`).
+- Gói kết quả: `ket_qua_main_20261031_114145.tar.gz` (123 MB), `ket_qua_tune_mcmc_20261031_155033.tar.gz` (244 MB).
+- Sản phẩm: `outputs/product/<phòng>/` và thư mục web `outputs/product/web/`. Chưa có phòng nào.
 
 ## Việc tiếp theo
 
-**Trên pod mới, volume mới.** Hướng dẫn: `docs/USAGE_GUIDE.md` mục 1–2, `app/notebooks/runpod.ipynb`.
-
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
-| P1 | Tạo pod gắn volume loại Network volume, không phải Global volume (170 GB để chạy P5–P8 trên cùng volume; 100 GB đủ cho P5 theo ước lượng, tăng volume trước P6 cũng được; P5–P8 dùng cùng loại GPU, vì P6–P8 dùng lại lượt của P5 và bảng so sánh kiểm tra tên GPU; `docs/USAGE_GUIDE.md` mục 1); tải `app/notebooks/runpod.ipynb` lên `/workspace`; chạy ô 1 | Ô 1 báo `=> ĐẠT`; có dòng `✓ /workspace cho đổi quyền file (chmod)` và `✓ python3 có PyYAML` (không có PyYAML thì cài theo hướng dẫn trong ô) |
-| P2 | Ô 2: kiểm tra pod đọc được repo qua HTTPS | Dòng cuối `✓ Đọc được https://github.com/truong0809/SpatialRoom3D.git` |
-| P3 | Ô 3 | `Đã clone ... (nhánh main)`; commit in ra trùng commit mới nhất trên GitHub |
-| P4 | Ô 4, theo dõi ở ô 5 (khoảng 80 phút) | Việc `run_all` exit 0: `env_probe`, `setup_inria`, `data_tools`, `setup_gsplat` OK, smoke test PASSED; không có bước train nào |
-| P5 | Ô 7, `WHAT = "experiment"`, `EXP = "main"`, `CHAY = False`: xem kế hoạch; rồi `VOLUME_GB` = dung lượng thật của volume, `CHAY = True` (khoảng 12 giờ GPU, **cần duyệt**). Theo dõi ở ô 5. Hoặc chạy riêng (D17), theo thứ tự `b0_inria.ipynb` → `gsplat_default.ipynb` → `gsplat_mcmc.ipynb`, ô 6 của mỗi notebook (`CHAY = False` rồi `CHAY = True`; khoảng 1 + 6 + 6 giờ GPU theo ước lượng, mỗi lần **cần duyệt**); tiêu chí như bên phải cho ba việc `b0_inria`, `gsplat_default`, `gsplat_mcmc` (tên bản = tên notebook) | Việc `main` exit 0: mọi bước OK trong `main_*.md`; `fetch_*.json` có SHA-256 (Deep Blending khớp cấu hình); trên Deep Blending, B0 đạt ngưỡng so với số Inria công bố và `default` PASS so với B0 từng cảnh; mỗi cảnh × chế độ đủ 3 seed, mọi mục điều kiện OK, ngân sách EQUAL; có thư mục biểu đồ `main_<thời_gian>_charts/` (lần đầu vẽ từ kết quả thật; ở bước này chỉ dùng phần kiểm điều kiện: `01_doi_chieu_inria.png`, bước `b0_deep_blending` OK (B0 so với số công bố), cột n / Seed của bảng; ảnh `02_so_voi_default.png` là chênh lệch `default` / `mcmc`, `docs/design/comparisons.md` mục Biểu đồ). Chưa đọc chênh lệch `default` / `mcmc` trên 5 cảnh kết luận (đọc ở P9, sau khi chọn ở P7) |
-| P6 | Trước khi chạy: quyết định có đưa gói `v2` vào vòng ghép không, ghi lại (D16). Ô 7, `EXP = "tune_mcmc"`, `CHAY = False`: xem kế hoạch; tăng volume nếu cần, đặt `VOLUME_GB`, rồi `CHAY = True` (khoảng 6,7 giờ GPU sau P5, **cần duyệt**). Theo dõi ở ô 5 | Việc `tune_mcmc` exit 0: `depth_anything` OK (Depth Anything V2 Small tải được, đúng SHA-256); `env_check` OK (nhận tham số của 16 biến thể, kể cả bản sao có vá của `kr`, `mono`, `v2`; KR, loss của prior, kiểm NaN và Depth Anything V2 chạy được trên GPU); `depth_check_mipnerf360` OK; 18 lượt của `room` có `summary.json` OK (`default_s42`, `mcmc_s42` dùng lại từ P5), cùng ngân sách Gaussian; `mcmc_mono_s42`, `mcmc_v2_s42` có `mono_depth.json` OK; `sr3d_hooks.jsonl` của `kr`, `v2` có dòng KR, của `mono`, `v2` có dòng loss; mọi lượt có `filtered/filter_meta.json` OK; báo cáo có bảng so với `default`, với `mcmc` và sau khi lọc. Kết quả khác vẫn ghi lại được, nhưng việc kết thúc với exit 1: prior không khớp điểm SfM (bước `mono` của `mono`, `v2` lỗi) hoặc lượt có hook dừng vì tham số không hữu hạn: `gsplat_mipnerf360_s42` LỖI, các lượt khác, lọc và báo cáo vẫn chạy; ghi như một kết quả của biến thể. `depth_anything` lỗi: `mono`, `v2` không train, các lượt khác vẫn chạy; sửa rồi chạy lại để train hai lượt đó |
-| P7 | Chọn ứng viên từ P6 và lập cấu hình theo luật ở `docs/design/experiments.md` mục 3.6: độ lệch chuẩn của `mcmc` trên `room` lấy từ P5; bảng so với `mcmc`, chất lượng theo dung lượng, ảnh so sánh và video độ sâu của `room` (ô 7 `WHAT = "panels"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `PANEL_RUNS`); không dùng số liệu của 5 cảnh kết luận. Viết `configs/experiments/tune_mcmc_combo.yaml` (seed 43, 44, tag mới; commit), ô 3 lấy code mới, ô 7 `EXP = "tune_mcmc_combo"` (khoảng 1–3,5 giờ GPU, **cần duyệt**) | Mỗi ứng viên có lý do theo luật; không có ứng viên thì ghi lại như vậy, không có vòng ghép, không thêm chế độ. Việc `tune_mcmc_combo` exit 0: mỗi cấu hình có seed 43, 44 trên `room`, các mục điều kiện khác `seeds` đều OK, ngân sách EQUAL; cấu hình được chọn (hoặc không chọn) có lý do theo bước 4 của mục 3.6, ghi trước khi đọc bảng của 5 cảnh ở P9, kèm số cấu hình đã thử |
-| P8 | Thêm `mcmc_indoor` (đúng `set` của cấu hình chọn ở P7) vào `configs/base.yaml` và vào `modes` của `configs/experiments/main.yaml`, `also_against: [mcmc]`, cập nhật `estimate` (commit); muốn bảng chính có bản đã lọc (chất lượng theo dung lượng) thì thêm `post_filter`: lọc thêm khoảng 48 lượt, khoảng 3 giờ GPU và 35–50 GB, cần volume khoảng 210 GB (ước lượng); ô 3 lấy code mới, ô 7 với `EXP = "main"`, `CHAY = False` xem kế hoạch, rồi `VOLUME_GB`, `CHAY = True` (khoảng 5–6 giờ GPU, **cần duyệt**). Không có `mcmc_indoor` thì bỏ bước này | Việc `main` exit 0; các lượt `default` / `mcmc` của P5 không train lại; `mcmc_indoor` đủ 3 seed trên 6 cảnh, mọi mục điều kiện OK, ngân sách EQUAL |
-| P9 | Đọc kết quả P5, P8 theo `docs/design/experiments.md` mục 2.5, 3.1 và `docs/design/training_modes.md` mục 4.3 (cả bảng số cặp và số cảnh tốt hơn, chất lượng theo dung lượng, cấu trúc mô hình; dòng bản đã lọc chỉ có cho `default`, `mcmc` của `room`, không dùng để so chế độ); ghi chênh lệch `default` / `mcmc` so với lượt 17/10/2026 của repo trước; bảng và biểu đồ: ô 7 `WHAT = "report"` (ảnh cho báo cáo đồ án lấy từ `<báo cáo>_charts/`, bảng số trong `index.md`); ảnh so sánh cho báo cáo: ô 7 `WHAT = "panels"` từng cảnh; lập bảng `mcmc_indoor` / `mcmc` không có `room` (hai lệnh ở mục 3.1, không dùng GPU) | Kết luận về `mcmc` và `mcmc_indoor` ghi đúng như số liệu: cảnh nào tốt hơn, kém hơn, chênh lệch so với độ lệch chuẩn giữa các seed; kết luận về `mcmc_indoor` dựa trên bảng không có `room`; không cải thiện thì vẫn ghi đủ |
-| P10 | `bash scripts/run_render.sh deep_blending playroom default_s42` (render lại từ checkpoint, cần GPU, vài phút) | `render_meta.json` exit 0; PSNR / SSIM / LPIPS của lần render bằng số của lượt gốc (cùng checkpoint, cùng tập test); có video; PLY ở `outputs/checkpoints/deep_blending/playroom/gsplat_default_playroom_s42.ply` |
-| P11 | Video của nhóm hoặc một cảnh tự chụp (≥ 30 ảnh theo `docs/data/capture_protocol.md` mục 8) vào `data/custom_scenes/<cảnh>/`, chạy ô 8, xem ô 9; thêm `mcmc_indoor` (`bash scripts/run_train.sh custom <cảnh> mcmc_indoor`) nếu P9 cho thấy đáng dùng | `sfm_report.json` không FAIL; có `summary.json` cho cả `default` và `mcmc` (và `mcmc_indoor` nếu chạy); mô hình xem được trên trình xem 3DGS; `coverage` khớp với cách chụp thực tế |
-| P12 | Mip-NeRF 360 đủ 9 cảnh (tùy chọn, khi được duyệt chi phí GPU): ô 7 `WHAT = "fetch"` với `BENCH = "mipnerf360"`, rồi `b0`, `gsplat` | Số liệu đầy đủ đối chiếu được với trung bình công bố |
-
-**Không cần GPU**
-
-| Bước | Việc | Tiêu chí nghiệm thu |
-|---|---|---|
-| — | Chọn trình xem 3DGS cho file PLY, rồi viewer web bản thô (`app/web/`, giai đoạn 5) | Mở được mô hình mẫu trên trình duyệt; có số đo thời gian tải; có kiểm thử chuyển đổi định dạng |
-| — | Thu thử 1 cảnh: quay video theo `docs/data/capture_protocol.md` (video chính + đoạn quay kiểm tra), hoặc chụp ≥ 30 ảnh theo mục 8 | Đặt tên và ghi metadata đúng quy ước; ảnh cùng chiều máy, cùng ống kính, dùng file gốc |
-| — | Chọn LICENSE; quyết định chế độ hiển thị của repo cũ | Có file LICENSE; repo cũ private hoặc archive |
+| 1 | Trên pod: lấy code mới (ô 3 hoặc `git pull`), rồi `bash scripts/build_room.sh /workspace/data/custom_scenes/room/video2.mp4 phong_nhom --background` | `manifest.json` có `phong_nhom`; `model.splat` khoảng 32 MB; `cameras.json` có đủ khung; mở `model.splat` trên một trình xem `.splat`, góc `default_view` giống ảnh đầu vào tương ứng; ghi thời gian từng bước |
+| 2 | Trang web xem 3D theo `docs/design/product.md` mục 4 | Tải được `manifest.json` và mô hình phòng nhóm; ba chế độ xem chạy được; đo thời gian tải |
+| 3 | Quyết định vòng ghép: chạy hoặc bỏ (mục "Đề xuất chờ xác nhận") | Ghi lại quyết định và lý do. Nếu chạy: `tune_mcmc_combo` exit 0, kết luận theo bước 4 của `docs/design/experiments.md` mục 3.6 |
+| 4 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
+| 5 | Chọn LICENSE; repo cũ để private hoặc archive | Có file LICENSE |
