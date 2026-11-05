@@ -257,6 +257,12 @@ def test_the_library_lists_rooms_being_built_before_finished_ones(tmp_path):
     assert [r["id"] for r in rooms] == ["new1", "done1"]
     assert rooms[0]["status"] == "running" and rooms[0]["build"]["percent"] == 41.3 and rooms[0]["entry"] is None
     assert rooms[1]["status"] == "done" and rooms[1]["build"] is None and rooms[1]["name"] == "Phòng xong"
+    # bảng lịch sử: lần dựng gần nhất, kể cả đã xong (build chỉ có khi đang dựng lại)
+    assert rooms[0]["last_build"] == rooms[0]["build"]
+    assert rooms[1]["last_build"]["status"] == "done" and rooms[1]["last_build"]["finished_at"]
+    manifest["rooms"].append({"id": "old1", "name": "Phòng có sẵn", "files": {}})  # không có progress.json
+    (web / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert room_info.list_rooms(web, root, ws)[-1]["last_build"] is None
     detail = room_info.room_detail(web, root, ws, "done1")
     assert detail["status"] == "done" and detail["entry"]["id"] == "done1"
     assert room_info.room_detail(web, root, ws, "none") is None and room_info.room_detail(web, root, ws, "../x") is None

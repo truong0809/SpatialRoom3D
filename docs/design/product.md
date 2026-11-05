@@ -251,7 +251,9 @@ Chưa chạy: train trên GPU, một phòng thật, trang web trên pod.
 
 ## 8. Trang web
 
-Code: `app/web/` (cách chạy, bảng file: `app/web/README.md`). Server HTTP chỉ dùng thư viện chuẩn Python, chạy trên pod cạnh luồng sản phẩm; trang tĩnh dùng three.js 0.180.0 và [Spark](https://github.com/sparkjsdev/spark) 2.4.0 (MIT, WebGL2) để vẽ `model.splat`, ghim phiên bản và mã kiểm tra ở `configs/environment/web_viewer.lock.json`.
+Code: `app/web/` (cách chạy, bảng file: `app/web/README.md`). Server HTTP chỉ dùng thư viện chuẩn Python, chạy trên pod cạnh luồng sản phẩm; trang tĩnh dùng three.js 0.180.0 và [Spark](https://github.com/sparkjsdev/spark) 2.4.0 (MIT, WebGL2) để vẽ `model.splat`, phông Be Vietnam Pro 5.3.0 (SIL OFL 1.1, đủ dấu tiếng Việt); ghim phiên bản và mã kiểm tra ở `configs/environment/web_viewer.lock.json`.
+
+Giao diện (làm lại ngày 05/11/2026): thanh bên thu gọn được (Tổng quan, Dự án mới, các dự án gần đây, trạng thái pod); Tổng quan → Dự án mới → Tiến độ → Xem 3D. Trang không tự đặt số: số Gaussian, dung lượng, số ảnh định vị được lấy từ `manifest.json`; thông số dựng ở trang Dự án mới lấy từ `configs/product.yaml` qua trường `pipeline` của `/api/status` (số khung tối đa 250 và cạnh dài 1.600 px là mặc định của `src/input/frames.py`, có test giữ hai nơi khớp nhau); tiến độ tổng là ước lượng theo trọng số đặt tay cho từng bước (`app/web/static/js/ui.js`), chỉ % của bước train là số thật.
 
 ```bash
 bash scripts/web_server.sh start     # trên pod; rồi Edit Pod -> Expose HTTP Ports: 8000; mở https://<POD_ID>-8000.proxy.runpod.net
@@ -259,8 +261,8 @@ bash scripts/web_server.sh start     # trên pod; rồi Edit Pod -> Expose HTTP 
 
 | Bước của người dùng | Trang | Phía server |
 |---|---|---|
-| Chọn video hoặc nhiều ảnh, đặt tên | Dựng phòng mới | kiểm tra như `build_room.sh` (loại file, ≥ 10 ảnh, tên phòng chưa dùng) trước khi nhận dữ liệu |
-| Tải lên | Dựng phòng mới | nhận từng phần ≤ 8 MiB đúng thứ tự (`offset`), phần lỗi gửi lại; đủ thì chuyển sang `$WS/data/uploads/<phòng>/` |
+| Chọn video hoặc nhiều ảnh, đặt tên | Dự án mới | kiểm tra như `build_room.sh` (loại file, ≥ 10 ảnh, tên phòng chưa dùng) trước khi nhận dữ liệu |
+| Tải lên | Dự án mới | nhận từng phần ≤ 8 MiB đúng thứ tự (`offset`), phần lỗi gửi lại; đủ thì chuyển sang `$WS/data/uploads/<phòng>/` |
 | Bắt đầu dựng | → Tiến độ | `scripts/build_room.sh <nguồn> <phòng> --name <tên> --background` (việc nền `room_<phòng>`, xếp hàng chờ GPU); lỗi đầu vào của script trả về đúng câu báo lỗi |
 | Theo dõi | Tiến độ | đọc `progress.json` (bước, %, thời gian từng bước), cuối log, trạng thái việc nền (pod tắt giữa chừng: "bị gián đoạn"); hủy = `job.sh stop`; dựng lại = `build_room.sh` với nguồn đã tải lên (dùng lại ảnh và COLMAP đã xong) |
 | Xem | Xem 3D | `manifest.json`, `model.splat`, `cameras.json` (mục 4); tải `.splat`, PLY đầy đủ |

@@ -3,7 +3,7 @@
 Chỉ chạy khi đặt SR3D_BROWSER=1 và có Playwright (chậm: SwiftShader vẽ vài giây một khung):
   SR3D_BROWSER=1 python -m pytest tests/browser -q            # SR3D_BROWSER_SHOTS=<thư mục>: lưu ảnh chụp màn hình
 
-Kiểm tra trọn luồng của người dùng với một bản dựng giả (không GPU): đăng nhập -> thư viện -> dựng phòng mới từ ảnh
+Kiểm tra trọn luồng của người dùng với một bản dựng giả (không GPU): đăng nhập -> tổng quan -> dựng phòng mới từ ảnh
 (tải lên từng phần thật) -> trang tiến độ đi qua các bước -> xem 3D. Và kiểm tra camera của trình xem khớp mô hình:
 các điểm mốc của phòng tổng hợp (tests/helpers/synthetic_room.py) phải hiện đúng pixel mà cameras.json tính ra.
 """
@@ -143,7 +143,7 @@ def page(site):
         page.wait_for_selector("#login-dialog[open]", timeout=20000)
         page.fill("#login-token", TOKEN)
         page.click("#login-form button[type=submit]")
-        page.wait_for_selector(".card", timeout=20000)
+        page.wait_for_selector("[data-room]", timeout=20000)  # tổng quan đã có dự án (cảnh lớn hoặc thẻ)
         yield page
         browser.close()
 
@@ -197,6 +197,10 @@ def test_the_viewer_camera_matches_the_model(page, site):
     cameras = json.loads((site["web"] / "rooms" / room["room"] / "cameras.json").read_text(encoding="utf-8"))
     page.goto(f"{page.url.split('#')[0]}#/view/{room['room']}")
     page.wait_for_function("window.__sr3dViewer && window.__sr3dViewer.ready", timeout=180000)
+    # ẩn bảng thông tin (nút trên thanh công cụ): khung xem rộng hơn, đủ điểm mốc lọt khung trong cửa sổ 1000 × 700
+    page.click("#tb-panel")
+    page.wait_for_function("document.body.classList.contains('panel-hidden')"
+                           " && document.querySelector('#vp canvas').width >= 900", timeout=20000)
     errors = []
     for index in (12, 24, 36):
         image = wait_stable(page, index)

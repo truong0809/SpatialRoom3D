@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>SpatialRoom3D</title>
 <link rel="icon" href="/app/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/app/app.css">
@@ -18,28 +19,49 @@
 <script type="module" src="/app/js/main.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <a class="brand" href="#/">
-    <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 3.5 7v10l8.5 4.5 8.5-4.5V7z"/><path d="M3.5 7 12 11.5 20.5 7"/><path d="M12 11.5v10"/></svg>
-    <span>SpatialRoom3D</span>
-  </a>
-  <nav class="mainnav" aria-label="Điều hướng chính">
-    <a href="#/" data-nav="library">Thư viện phòng</a>
-    <a href="#/new" data-nav="new">Dựng phòng mới</a>
-  </nav>
-  <div class="podstatus" id="pod-status" role="status" aria-live="polite">
-    <span class="dot" aria-hidden="true"></span><span class="label">Đang kết nối…</span>
-  </div>
-</header>
-<main id="view" tabindex="-1"></main>
+<a class="skip" href="#view">Bỏ qua tới nội dung</a>
+<div class="shell">
+  <aside class="sidebar" id="sidebar" aria-label="Thanh bên">
+    <div class="sb-top">
+      <a class="brand" href="#/" aria-label="SpatialRoom3D: tổng quan">
+        <svg class="mark" aria-hidden="true" width="26" height="26" viewBox="0 0 24 24"><ellipse cx="9" cy="10.2" rx="6.6" ry="4.1" transform="rotate(-28 9 10.2)" fill="#6B9BFF" opacity=".92"/><ellipse cx="15.2" cy="8.8" rx="5.1" ry="2.9" transform="rotate(34 15.2 8.8)" fill="#B7CCFF" opacity=".78"/><ellipse cx="12.6" cy="15.6" rx="6.2" ry="3.3" transform="rotate(8 12.6 15.6)" fill="#3D6BD6" opacity=".88"/></svg>
+        <span class="brand-name">SpatialRoom3D</span>
+      </a>
+      <button type="button" class="icon-btn sb-toggle" id="sb-toggle" aria-controls="sidebar" aria-expanded="true" aria-label="Thu gọn thanh bên" title="Thu gọn thanh bên">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
+      </button>
+    </div>
+    <nav class="sb-nav" aria-label="Điều hướng chính">
+      <a href="#/" data-nav="dashboard" title="Tổng quan">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="8" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.8"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.8"/><rect x="3.5" y="14.5" width="7" height="6" rx="1.8"/></svg>
+        <span>Tổng quan</span></a>
+      <a href="#/new" data-nav="new" title="Dự án mới">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M12 8v8M8 12h8"/></svg>
+        <span>Dự án mới</span></a>
+    </nav>
+    <section class="sb-recent hidden" id="sb-recent-section" aria-labelledby="sb-recent-title">
+      <h2 class="sb-heading" id="sb-recent-title">Gần đây</h2>
+      <ul class="sb-list" id="sb-recent"></ul>
+    </section>
+    <div class="sb-bottom">
+      <div class="podstatus" id="pod-status" role="status" aria-live="polite" title="Trạng thái server">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="txt"><span class="label">Đang kết nối…</span><span class="detail" id="pod-detail"></span></span>
+      </div>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <main id="view" tabindex="-1"></main>
+</div>
 <dialog id="login-dialog" aria-labelledby="login-title">
   <form method="dialog" id="login-form" class="login">
-    <h2 id="login-title">Đăng nhập</h2>
-    <p class="muted">Trang này chạy trên pod GPU và cần mật khẩu của server. Lệnh <code>bash scripts/web_server.sh status</code> trên pod in mật khẩu.</p>
+    <svg class="mark" aria-hidden="true" width="34" height="34" viewBox="0 0 24 24"><ellipse cx="9" cy="10.2" rx="6.6" ry="4.1" transform="rotate(-28 9 10.2)" fill="#6B9BFF" opacity=".92"/><ellipse cx="15.2" cy="8.8" rx="5.1" ry="2.9" transform="rotate(34 15.2 8.8)" fill="#B7CCFF" opacity=".78"/><ellipse cx="12.6" cy="15.6" rx="6.2" ry="3.3" transform="rotate(8 12.6 15.6)" fill="#3D6BD6" opacity=".88"/></svg>
+    <h2 id="login-title">Đăng nhập SpatialRoom3D</h2>
+    <p class="muted">Trang chạy trên pod GPU nên cần mật khẩu của server. Lệnh <code>bash scripts/web_server.sh status</code> trên pod in ra mật khẩu.</p>
     <label for="login-token">Mật khẩu</label>
-    <input id="login-token" name="token" type="password" autocomplete="current-password" required>
+    <input id="login-token" class="input" name="token" type="password" autocomplete="current-password" required>
     <p class="error" id="login-error" role="alert"></p>
-    <div class="row end"><button type="submit" class="btn primary">Đăng nhập</button></div>
+    <button type="submit" class="btn primary lg block">Đăng nhập</button>
   </form>
 </dialog>
 <noscript><p class="noscript">Trang cần JavaScript để chạy.</p></noscript>

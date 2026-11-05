@@ -7,29 +7,25 @@ import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
 import * as api from "./api.js";
 import * as fmt from "./fmt.js";
 import * as cam from "./camera.js";
+import * as ui from "./ui.js";
 
 const QUALITY = { high: 1, medium: 0.5, light: 0.2 };  // phần Gaussian được vẽ; file xếp theo độ quan trọng giảm dần
 const RECORD_FPS = 30;
-const ICON = {
-  reset: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
-  shot: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
-  rec: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>',
-  full: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
-  perf: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19a8 8 0 1 1 16 0"/><path d="M12 19l4-6"/></svg>',
-  orbit: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>',
-  walk: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M9 21l2-6 3 3v3"/><path d="M7 12l3-4 4 1 3 3"/><path d="M10 8l1 7"/></svg>',
-  tour: '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M7 18h6a4 4 0 0 0 0-8h-2a4 4 0 0 1 0-8h6"/></svg>',
-};
+const MAX_VIEWS = 12;  // số góc nhìn (lấy đều trên đường quay) trong mục Góc nhìn
+const MODE_LABEL = { orbit: "Xoay quanh", walk: "Đi bộ", tour: "Tham quan" };
 const TOUCH = window.matchMedia?.("(pointer: coarse)").matches;  // điện thoại, máy tính bảng
+// gợi ý thao tác ở góc khung xem: [thao tác, kết quả]; ẩn dần sau HINT_MS hoặc ngay sau lần thao tác đầu
 const HINTS = TOUCH ? {
-  orbit: "Một ngón: xoay · Hai ngón: phóng to / thu nhỏ, dời khung nhìn",
-  walk: "Kéo để nhìn quanh · Đi lại cần bàn phím (W A S D); trên điện thoại dùng chế độ Tham quan",
-  tour: "Đang đi lại đúng đường đã quay · Kéo để nhìn quanh, thả ra để tiếp tục",
+  orbit: [["Một ngón", "xoay"], ["Hai ngón", "phóng to, thu nhỏ, dời khung nhìn"]],
+  walk: [["Kéo", "nhìn quanh"], ["Đi lại", "cần bàn phím; trên điện thoại dùng chế độ Tham quan"]],
+  tour: [["Tự động", "đi lại đúng đường đã quay"], ["Kéo", "nhìn quanh, thả ra để đi tiếp"]],
 } : {
-  orbit: "Kéo chuột trái để xoay · Cuộn để phóng to / thu nhỏ · Kéo chuột phải để dời khung nhìn · R: về góc ban đầu",
-  walk: "Nhấp vào khung xem để điều khiển bằng chuột (Esc để thoát) · W A S D: đi · Q / E: hạ / nâng · Shift: đi nhanh",
-  tour: "Đang đi lại đúng đường đã quay · Kéo chuột để nhìn quanh, thả ra để tiếp tục",
+  orbit: [["Kéo chuột trái", "xoay"], ["Cuộn chuột", "phóng to, thu nhỏ"], ["Kéo chuột phải", "dời khung nhìn"], ["R", "về góc ban đầu"]],
+  walk: [["Nhấp khung xem", "điều khiển bằng chuột"], ["Esc", "trả lại con trỏ chuột"]],
+  tour: [["Tự động", "đi lại đúng đường đã quay"], ["Kéo chuột", "nhìn quanh, thả ra để đi tiếp"]],
 };
+const HINT_MS = 12000;
+const SFM_VERDICT = { PASS: "Đạt", WARN: "Đạt, có cảnh báo", FAIL: "Không đạt" };  // src/reconstruction/report.py
 
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -82,80 +78,89 @@ async function fetchBytes(url, expected, onProgress, signal) {
 
 export async function mount(container, ctx, roomId, query) {
   const detail = await api.room(roomId);
-  const page = document.createElement("div");
-  page.className = "viewer-page";
-  container.append(page);
-  document.body.classList.add("viewer-open");
+  if (ctx.alive && !ctx.alive()) return () => {};  // đã sang trang khác trong lúc chờ server
   const entry = detail.entry;
   if (!entry) {
-    page.innerHTML = `<div class="page"><div class="notice">Phòng <strong>${fmt.escapeHtml(roomId)}</strong> chưa dựng xong.
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `${ui.topbar([["Tổng quan", "#/"], [detail.name || roomId]])}<div class="page"><div class="notice">Dự án <strong>${fmt.escapeHtml(detail.name || roomId)}</strong> chưa dựng xong.
       <a href="#/room/${encodeURIComponent(roomId)}">Xem tiến độ</a>.</div></div>`;
+    container.append(...wrap.children);
     return () => {};
   }
+  const page = document.createElement("div");
+  page.className = "viewer";
+  container.append(page);
+  document.body.classList.add("viewer-open");
+  if (window.matchMedia?.("(max-width: 720px)").matches) document.body.classList.add("panel-hidden");
   const modesAllowed = new Set(entry.viewer_modes || ["orbit"]);
   const src = entry.source || {};
   const model = entry.model || {};
-  page.innerHTML = `<div class="viewer-bar">
-      <a class="back" href="#/"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>Thư viện</a>
-      <div class="title"><h1>${fmt.escapeHtml(detail.name)}</h1>
-        <span class="muted" style="font-size:13px">${src.kind === "video" ? "Video" : src.kind === "photos" ? "Ảnh chụp" : "Phòng"} · ${fmt.escapeHtml(model.name || "mcmc")}</span></div>
-      <div class="modes" role="group" aria-label="Chế độ xem">
-        <button type="button" data-mode="orbit" aria-pressed="false">${ICON.orbit}Xoay quanh</button>
-        <button type="button" data-mode="walk" aria-pressed="false" ${modesAllowed.has("walk") ? "" : "disabled title=\"Không có vị trí camera\""}>${ICON.walk}Đi bộ</button>
-        <button type="button" data-mode="tour" aria-pressed="false" ${modesAllowed.has("tour") ? "" : "disabled title=\"Không có vị trí camera\""}>${ICON.tour}Tham quan</button>
-      </div></div>
-    <div class="viewer-layout">
+  const kindText = src.kind === "video" ? `Video${src.video_duration_s ? ` ${fmt.clock(src.video_duration_s)}` : ""}` : src.kind === "photos" ? "Ảnh chụp" : "Không rõ nguồn";
+  const tool = (id, iconName, label, extra = "") => `<button type="button" class="icon-btn" id="${id}" aria-label="${label}" title="${label}" ${extra}>${ui.icon(iconName)}</button>`;
+  const modeButton = (m) => `<button type="button" data-mode="${m}" aria-pressed="false" ${m === "orbit" || modesAllowed.has(m) ? "" : 'disabled title="Không có vị trí camera"'}>${ui.icon(m, 16)}<span class="lbl">${MODE_LABEL[m]}</span></button>`;
+  page.innerHTML = `<header class="vbar">
+      <a class="back" href="#/" aria-label="Về tổng quan">${ui.icon("chevLeft", 18)}<span class="lbl">Tổng quan</span></a>
+      <span class="divider" aria-hidden="true"></span>
+      <div class="title"><h1>${fmt.escapeHtml(detail.name)}</h1><span class="sub">${fmt.escapeHtml(kindText)}, ${fmt.escapeHtml(fmt.millions(entry.num_gaussians))} Gaussian</span></div>
+      <div class="seg modes" role="group" aria-label="Chế độ xem">${["orbit", "walk", "tour"].map(modeButton).join("")}</div>
+      <div class="tools" role="toolbar" aria-label="Công cụ">
+        ${tool("tb-shot", "camera", "Chụp ảnh")}${tool("tb-rec", "record", "Quay video")}${tool("tb-full", "full", "Toàn màn hình (F)")}
+        <span class="divider" aria-hidden="true"></span>${tool("tb-panel", "panel", "Bảng thông tin (I)", 'aria-pressed="true" aria-controls="vp-panel"')}
+      </div></header>
+    <div class="vbody">
       <section class="viewport" id="vp" aria-label="Khung xem 3D">
-        <div class="overlay tl"><span class="pill" id="vp-mode">Chế độ: Xoay quanh</span><p class="hintbox" id="vp-hint"></p></div>
-        <div class="overlay tr"><span class="fps" id="vp-fps">– FPS</span></div>
-        <div class="overlay center" id="vp-loading"><div class="loading"><span id="vp-loading-text">Đang tải mô hình…</span>
+        <div class="overlay tl"><span class="chip float" id="vp-mode"></span><dl class="hintbox float" id="vp-hint"></dl></div>
+        <div class="overlay tr"><span class="fps float" id="vp-fps">– FPS</span></div>
+        <div class="overlay center" id="vp-loading"><div class="loading float"><span id="vp-loading-text">Đang tải mô hình…</span>
           <div class="progressbar"><span id="vp-loading-bar"></span></div></div></div>
-        <div class="overlay bl hidden" id="vp-walkhelp"><div class="walkhelp"><div class="keys" aria-hidden="true"><span></span><span>W</span><span></span><span>A</span><span>S</span><span>D</span></div>
+        <div class="overlay bl hidden" id="vp-walkhelp"><div class="walkhelp float"><div class="keys" aria-hidden="true"><span></span><span>W</span><span></span><span>A</span><span>S</span><span>D</span></div>
           <ul><li>W A S D: đi tới, sang trái, lùi, sang phải</li><li>Chuột: nhìn quanh</li><li>Q / E: hạ thấp, nâng cao</li><li>Shift: đi nhanh</li></ul></div></div>
-        <div class="overlay br hidden" id="vp-minimap"><div class="minimap"><div>Bản đồ nhỏ (nhìn từ trên)</div><canvas id="vp-minimap-canvas" width="400" height="300" role="img" aria-label="Bản đồ nhỏ: đường quay và vị trí hiện tại"></canvas><div>Nét đứt: đường đã quay</div></div></div>
+        <div class="overlay br hidden" id="vp-minimap"><div class="minimap float"><div>Bản đồ nhìn từ trên</div><canvas id="vp-minimap-canvas" width="400" height="300" role="img" aria-label="Bản đồ nhỏ: đường quay và vị trí hiện tại"></canvas><div>Nét đứt là đường đã quay</div></div></div>
         <div class="overlay bc" id="vp-bottom">
-          <div class="toolbar" id="vp-toolbar" role="toolbar" aria-label="Công cụ xem">
-            <button type="button" class="btn" id="tb-reset" aria-label="Đặt lại góc nhìn">${ICON.reset}<span class="label">Đặt lại góc nhìn</span></button>
-            <button type="button" class="btn" id="tb-shot" aria-label="Chụp ảnh">${ICON.shot}<span class="label">Chụp ảnh</span></button>
-            <button type="button" class="btn" id="tb-rec" aria-label="Quay video">${ICON.rec}<span class="label">Quay video</span></button>
-            <button type="button" class="btn" id="tb-full" aria-label="Toàn màn hình">${ICON.full}<span class="label">Toàn màn hình</span></button>
+          <div class="camdock float" id="vp-toolbar" role="toolbar" aria-label="Điều khiển camera">
+            ${tool("tb-reset", "reset", "Về góc ban đầu (R)")}
+            <span class="sep" aria-hidden="true"></span>
+            ${tool("tb-prev", "chevLeft", "Góc nhìn trước")}<span class="view-label" id="view-label">–</span>${tool("tb-next", "chevRight", "Góc nhìn sau")}
+            <span class="sep orbit-only" aria-hidden="true"></span>
+            <span class="orbit-only" style="display:contents">${tool("tb-zoom-out", "zoomOut", "Thu nhỏ")}${tool("tb-zoom-in", "zoomIn", "Phóng to")}${tool("tb-spin", "spin", "Tự xoay quanh", 'aria-pressed="false"')}</span>
           </div>
-          <div class="tourbar hidden" id="vp-tourbar">
-            <button type="button" class="btn small" id="tour-play">Tạm dừng</button>
+          <div class="tourbar float hidden" id="vp-tourbar">
+            <button type="button" class="btn sm" id="tour-play">Tạm dừng</button>
             <label class="sr-only" for="tour-slider">Vị trí trên đường tham quan</label>
             <input type="range" id="tour-slider" min="0" max="1" step="0.001" value="0">
             <span class="time" id="tour-time">0:00 / 0:00</span>
             <div class="seg" role="group" aria-label="Tốc độ"><button type="button" data-speed="0.5" aria-pressed="false">0,5×</button><button type="button" data-speed="1" aria-pressed="true">1×</button><button type="button" data-speed="2" aria-pressed="false">2×</button></div>
-            <label class="switch" style="min-height:0"><input type="checkbox" id="tour-loop" checked> Lặp lại</label>
+            <label class="loop"><input type="checkbox" id="tour-loop" checked> Lặp lại</label>
           </div>
         </div>
       </section>
-      <aside class="aside" aria-label="Thông tin và tùy chỉnh">
-        <section><h2>Mô hình</h2><dl class="kv">
+      <aside class="vpanel" id="vp-panel" aria-label="Thông tin và tùy chỉnh">
+        <section><h2>Cảnh</h2><dl class="kv">
           <dt>Phương pháp</dt><dd>3DGS-MCMC (gsplat)</dd>
-          <dt>Số Gaussian</dt><dd class="mono">${fmt.int(entry.num_gaussians)}</dd>
-          <dt>File web</dt><dd class="mono">${fmt.bytes(entry.size_bytes)} (.splat)</dd>
+          <dt>Số Gaussian</dt><dd>${fmt.int(entry.num_gaussians)}</dd>
+          <dt>File xem web</dt><dd>${fmt.bytes(entry.size_bytes)} (.splat)</dd>
           <dt>Thời gian train</dt><dd>${model.train_seconds ? fmt.duration(model.train_seconds) : "–"}</dd>
           <dt>Dựng xong</dt><dd>${fmt.escapeHtml(fmt.dateTime(model.trained_at || entry.built_at))}</dd></dl></section>
         <section><h2>Nguồn và camera</h2><dl class="kv">
-          <dt>Nguồn</dt><dd>${src.kind === "video" ? `Video${src.video_duration_s ? ` ${fmt.clock(src.video_duration_s)}` : ""}` : src.kind === "photos" ? "Ảnh chụp" : "–"}</dd>
-          <dt>Ảnh đầu vào</dt><dd class="mono">${fmt.int(src.input_images)}</dd>
-          <dt>Ảnh định vị được</dt><dd class="mono">${fmt.int(src.registered_images)}</dd>
-          <dt>COLMAP</dt><dd>${fmt.escapeHtml(src.sfm_verdict || "–")}</dd></dl></section>
-        <section><h2>Chất lượng</h2><p class="note">Chưa chấm điểm: muốn đo PSNR / SSIM / LPIPS đúng ở góc nhìn mới cần một lượt quay kiểm tra riêng, không dùng để train. Số đo của phương pháp trên benchmark nằm trong báo cáo thực nghiệm.</p>
-          ${(entry.warnings || []).map((w) => `<p class="notice warn">${fmt.escapeHtml(w)}</p>`).join("")}</section>
+          <dt>Nguồn</dt><dd>${fmt.escapeHtml(kindText)}</dd>
+          <dt>Ảnh đầu vào</dt><dd>${fmt.int(src.input_images)}</dd>
+          <dt>Ảnh định vị được</dt><dd>${fmt.int(src.registered_images)}</dd>
+          <dt>Kiểm tra COLMAP</dt><dd>${fmt.escapeHtml(SFM_VERDICT[src.sfm_verdict] || src.sfm_verdict || "–")}</dd></dl></section>
+        <section><h2>Góc nhìn</h2>
+          <p class="note" id="views-note">Các vị trí camera lúc quay, lấy đều trên đường đi. Bấm để đưa camera về đó.</p>
+          <div class="views" id="views" role="group" aria-label="Góc nhìn"></div></section>
         <section><h2>Hiển thị</h2>
           <div class="seg" role="group" aria-label="Chất lượng render" id="q-group">
-            <button type="button" data-q="high" aria-pressed="true">Cao</button><button type="button" data-q="medium" aria-pressed="false">Vừa</button><button type="button" data-q="light" aria-pressed="false">Nhẹ (điện thoại)</button></div>
+            <button type="button" data-q="high" aria-pressed="true">Cao</button><button type="button" data-q="medium" aria-pressed="false">Vừa</button><button type="button" data-q="light" aria-pressed="false">Nhẹ</button></div>
           <p class="note" id="q-note"></p>
-          <div class="slider"><div class="lbl"><label for="res-scale">Độ phân giải render</label><span class="mono" id="res-value">100%</span></div>
+          <div class="slider"><div class="lbl"><label for="res-scale">Độ phân giải render</label><span id="res-value">100%</span></div>
             <input id="res-scale" type="range" min="50" max="100" step="5" value="100"></div>
           <label class="switch">Hiện vị trí camera lúc quay <input type="checkbox" id="show-cams" ${modesAllowed.has("walk") ? "" : "disabled"}></label>
           <label class="switch">Nền sáng <input type="checkbox" id="light-bg"></label>
           <div class="hidden" id="walk-settings">
-            <div class="slider"><div class="lbl"><label for="walk-speed">Tốc độ đi</label><span class="mono" id="walk-speed-v">1,0×</span></div>
+            <div class="slider"><div class="lbl"><label for="walk-speed">Tốc độ đi</label><span id="walk-speed-v">1×</span></div>
               <input id="walk-speed" type="range" min="0.25" max="4" step="0.25" value="1"></div>
-            <div class="slider"><div class="lbl"><label for="walk-height">Độ cao tầm mắt</label><span class="mono" id="walk-height-v">theo camera lúc quay</span></div>
+            <div class="slider"><div class="lbl"><label for="walk-height">Độ cao tầm mắt</label><span id="walk-height-v">theo camera lúc quay</span></div>
               <input id="walk-height" type="range" min="-100" max="100" step="5" value="0"></div>
             <label class="switch">Giữ trong vùng đã quay <input type="checkbox" id="walk-keep" checked></label>
             <p class="note">Mô hình không có tỉ lệ mét thật, nên tốc độ và độ cao tính theo kích thước cảnh. Ra xa vùng đã quay thì ảnh nhòe hoặc có mảng lơ lửng.</p>
@@ -165,12 +170,18 @@ export async function mount(container, ctx, roomId, query) {
             <label class="switch">Làm mượt hướng nhìn <input type="checkbox" id="tour-smooth" checked></label>
           </div>
         </section>
-        <section><h2>Tải xuống</h2><div class="row">
-          <a class="btn" href="/web/${encodeURI(entry.files.model)}?v=${encodeURIComponent(entry.version || "")}" download="${fmt.escapeHtml(roomId)}.splat">File .splat</a>
-          ${detail.has_ply ? `<a class="btn" href="/download/${encodeURIComponent(roomId)}/model.ply" download>PLY gốc</a>` : ""}</div>
+        <section><h2>Chất lượng</h2><p class="note">Chưa chấm điểm: đo PSNR, SSIM, LPIPS đúng ở góc nhìn mới cần một lượt quay kiểm tra riêng, không dùng để train. Số đo của phương pháp trên benchmark nằm trong báo cáo thực nghiệm.</p>
+          ${(entry.warnings || []).map((w) => `<p class="notice warn">${fmt.escapeHtml(w)}</p>`).join("")}</section>
+        <section><h2>Tải xuống</h2><div class="row-dl" style="display:flex;flex-wrap:wrap;gap:8px">
+          <a class="btn sm" href="/web/${encodeURI(entry.files.model)}?v=${encodeURIComponent(entry.version || "")}" download="${fmt.escapeHtml(roomId)}.splat">${ui.icon("download", 15)}File .splat</a>
+          ${detail.has_ply ? `<a class="btn sm" href="/download/${encodeURIComponent(roomId)}/model.ply" download>${ui.icon("download", 15)}PLY gốc</a>` : ""}</div>
           <p class="note">PLY gốc giữ đủ màu theo góc nhìn (SH bậc 3), mở được bằng SuperSplat hoặc phần mềm 3DGS khác; .splat chỉ giữ màu cơ bản.</p></section>
-        <section><h2>Hiệu năng</h2><button type="button" class="btn" id="perf-run">${ICON.perf}Đo trên máy này (10 giây)</button>
-          <pre class="perf hidden" id="perf-out"></pre><button type="button" class="btn small hidden" id="perf-copy">Sao chép số liệu</button></section>
+        <section><h2>Hiệu năng</h2><button type="button" class="btn sm" id="perf-run">${ui.icon("gauge", 15)}Đo trên máy này (10 giây)</button>
+          <pre class="perf hidden" id="perf-out"></pre><button type="button" class="btn sm hidden" id="perf-copy">Sao chép số liệu</button></section>
+        <section><h2>Phím tắt</h2><dl class="shortcuts">
+          <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>Xoay quanh, đi bộ, tham quan</dd>
+          <dt><kbd>R</kbd></dt><dd>Về góc ban đầu</dd><dt><kbd>F</kbd></dt><dd>Toàn màn hình</dd><dt><kbd>I</kbd></dt><dd>Ẩn hoặc hiện bảng này</dd>
+          <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Đi lại (chế độ đi bộ)</dd></dl></section>
       </aside>
     </div>`;
 
@@ -181,6 +192,22 @@ export async function mount(container, ctx, roomId, query) {
     target.addEventListener(type, fn, opts);
     cleanups.push(() => target.removeEventListener(type, fn, opts));
   };
+
+  // gợi ý thao tác: hiện khi đổi chế độ, mờ dần sau HINT_MS hoặc 3 giây sau lần thao tác đầu trên khung xem
+  let hintTimer = null;
+  const fadeHint = (ms) => {
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => $("#vp-hint").classList.add("faded"), ms);
+  };
+  function showHint(lines) {
+    const box = $("#vp-hint");
+    box.innerHTML = lines.map(([what, does]) => `<dt>${fmt.escapeHtml(what)}</dt><dd>${fmt.escapeHtml(does)}</dd>`).join("");
+    box.classList.remove("faded");
+    fadeHint(HINT_MS);
+  }
+  listen(viewport, "pointerdown", () => fadeHint(3000));
+  listen(viewport, "wheel", () => fadeHint(3000), { passive: true });
+  cleanups.push(() => clearTimeout(hintTimer));
 
   // ---------------------------------------------------------------------------------------- three + Spark
   const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "high-performance" });
@@ -210,6 +237,30 @@ export async function mount(container, ctx, roomId, query) {
   // ------------------------------------------------------------------------------------- tải dữ liệu
   const abort = new AbortController();
   cleanups.push(() => abort.abort());
+  let mesh = null;
+  let orbit = null;
+  // rời trang khi còn đang tải (main.js đã dựng trang khác, khung xem không còn trong trang): dọn ngay, không đặt lại
+  // địa chỉ hay chế độ cho trang mới
+  const gone = () => abort.signal.aborted || !page.isConnected || (ctx.alive ? !ctx.alive() : false);
+  let disposed = false;
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    if (orbit) orbit.dispose();
+    for (const fn of cleanups.splice(0).reverse()) {
+      try {
+        fn();
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    if (mesh) {
+      scene.remove(mesh);
+      mesh.dispose?.();
+    }
+    renderer.dispose();
+    renderer.forceContextLoss?.();
+  }
   const loadStart = performance.now();
   let cameras = null;
   if (entry.files.cameras) {
@@ -217,8 +268,15 @@ export async function mount(container, ctx, roomId, query) {
       const response = await fetch(`/web/${encodeURI(entry.files.cameras)}?v=${encodeURIComponent(entry.version || "")}`, { credentials: "same-origin", signal: abort.signal });
       if (response.ok) cameras = await response.json();
     } catch (error) {
-      if (error.name === "AbortError") return () => cleanups.forEach((fn) => fn());
+      if (error.name === "AbortError") {
+        dispose();
+        return () => {};
+      }
     }
+  }
+  if (gone()) {
+    dispose();
+    return () => {};
   }
   const radius = cameras?.scene_radius || 1;
   camera.near = radius * 0.005;
@@ -231,17 +289,24 @@ export async function mount(container, ctx, roomId, query) {
   try {
     bytes = await fetchBytes(`/web/${encodeURI(entry.files.model)}?v=${encodeURIComponent(entry.version || "")}`, entry.size_bytes,
       (received, total) => {
+        if (gone()) abort.abort();  // đã rời trang: thôi tải phần còn lại
         $("#vp-loading-bar").style.width = total ? `${((100 * received) / total).toFixed(1)}%` : "50%";
         $("#vp-loading-text").textContent = `Đang tải mô hình ${fmt.bytes(received)}${total ? ` / ${fmt.bytes(total)}` : ""}…`;
       }, abort.signal);
   } catch (error) {
-    if (error.name === "AbortError") return () => cleanups.forEach((fn) => fn());
+    if (error.name === "AbortError" || gone()) {
+      dispose();
+      return () => {};
+    }
     $("#vp-loading-text").textContent = error.message;
-    return () => cleanups.forEach((fn) => fn());
+    return dispose;
+  }
+  if (gone()) {
+    dispose();
+    return () => {};
   }
   const downloadMs = performance.now() - loadStart;
   const totalSplats = Math.floor(bytes.length / 32);
-  let mesh = null;
   let decodeMs = null;
   let shownSplats = 0;
 
@@ -254,7 +319,7 @@ export async function mount(container, ctx, roomId, query) {
     // bản sao: Spark có thể chuyển (transfer) bộ đệm sang worker, bản gốc giữ lại để đổi mức chất lượng
     const next = new SplatMesh({ fileBytes: bytes.slice(0, count * 32), fileType: "splat" });
     await next.initialized;
-    if (abort.signal.aborted) {
+    if (gone()) {
       next.dispose?.();
       return;
     }
@@ -271,7 +336,10 @@ export async function mount(container, ctx, roomId, query) {
     for (const button of page.querySelectorAll("[data-q]")) button.setAttribute("aria-pressed", String(button.dataset.q === level));
   }
   await showQuality("high");
-  if (abort.signal.aborted) return () => cleanups.forEach((fn) => fn());
+  if (gone()) {
+    dispose();
+    return () => {};
+  }
   const firstFrameMs = performance.now() - loadStart;
 
   // ------------------------------------------------------------------------- camera ban đầu, đường quay
@@ -284,6 +352,21 @@ export async function mount(container, ctx, roomId, query) {
     }
   }
   const startIndex = cameras ? Math.min(Math.max(0, cameras.default_view ?? 0), cameras.frames.length - 1) : 0;
+  // góc nhìn để chọn nhanh: các khung lấy đều trên đường quay, luôn có góc ban đầu
+  const views = [];
+  if (cameras?.frames?.length) {
+    const n = cameras.frames.length;
+    const count = Math.min(n, MAX_VIEWS);
+    for (let k = 0; k < count; k++) views.push(Math.round((k * (n - 1)) / Math.max(1, count - 1)));
+    if (!views.includes(startIndex)) {
+      // thay góc lấy đều gần nhất bằng góc ban đầu: vẫn đúng MAX_VIEWS ô, không thêm ô lẻ
+      let near = 0;
+      for (let k = 1; k < views.length; k++) if (Math.abs(views[k] - startIndex) < Math.abs(views[near] - startIndex)) near = k;
+      views[near] = startIndex;
+      views.sort((a, b) => a - b);
+    }
+  }
+  let viewPos = 0;
 
   const helpers = new THREE.Group();
   helpers.visible = false;
@@ -320,7 +403,6 @@ export async function mount(container, ctx, roomId, query) {
 
   // ------------------------------------------------------------------------------------- chế độ xem
   let mode = null;
-  let orbit = null;
   const walk = { yaw: 0, pitch: 0, keys: new Set(), base: null, height: 0, dragging: false, last: null };
   const tour = { t: 0, playing: true, speed: 1, frames: null, smooth: null, curve: null, look: new THREE.Euler(), drag: null };
   const ground = cameras?.frames?.length ? cam.groundBasis(cameras) : null;
@@ -349,8 +431,10 @@ export async function mount(container, ctx, roomId, query) {
     if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
     mode = next;
     for (const button of page.querySelectorAll("[data-mode]")) button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
-    $("#vp-mode").textContent = `Chế độ: ${{ orbit: "Xoay quanh", walk: "Đi bộ", tour: "Tham quan" }[mode]}`;
-    $("#vp-hint").textContent = HINTS[mode];
+    $("#vp-mode").innerHTML = `${ui.icon(mode, 15)}${MODE_LABEL[mode]}`;
+    showHint(HINTS[mode]);
+    for (const el of page.querySelectorAll(".orbit-only")) el.classList.toggle("hidden", mode !== "orbit");
+    setSpin(false);
     $("#vp-walkhelp").classList.toggle("hidden", mode !== "walk");
     $("#vp-minimap").classList.toggle("hidden", mode !== "walk" || !ground);
     $("#walk-settings").classList.toggle("hidden", mode !== "walk");
@@ -565,7 +649,7 @@ export async function mount(container, ctx, roomId, query) {
       fps = (frames * 1000) / (now - fpsStart);
       frames = 0;
       fpsStart = now;
-      $("#vp-fps").textContent = `${fmt.decimal(fps, 0)} FPS · ${fmt.int(shownSplats)} splat`;
+      $("#vp-fps").textContent = fps < 1 ? "<1 FPS" : `${fmt.decimal(fps, 0)} FPS`;
       if (now < perfUntil) perfSamples.push(fps);
     }
   });
@@ -601,6 +685,8 @@ export async function mount(container, ctx, roomId, query) {
   listen($("#tb-full"), "click", () => (document.fullscreenElement ? document.exitFullscreen() : viewport.requestFullscreen?.()));
 
   function reset() {
+    viewPos = nearestView(startIndex);
+    paintViews();
     if (mode === "orbit" && orbit) orbitFromFrame(startIndex);
     else if (mode === "walk") startWalk(startIndex);
     else if (mode === "tour") {
@@ -618,7 +704,7 @@ export async function mount(container, ctx, roomId, query) {
       return;
     }
     if (!renderer.domElement.captureStream || typeof MediaRecorder === "undefined") {
-      $("#vp-hint").textContent = "Trình duyệt này không quay được video khung xem.";
+      showHint([["Quay video", "trình duyệt này không hỗ trợ quay khung xem"]]);
       return;
     }
     const chunks = [];
@@ -628,14 +714,14 @@ export async function mount(container, ctx, roomId, query) {
     recorder.onstop = () => {
       download(new Blob(chunks, { type: "video/webm" }), `${roomId}_${stamp()}.webm`);
       recorder = null;
-      button.classList.remove("on");
-      button.querySelector(".label").textContent = "Quay video";
+      button.classList.remove("rec");
       button.setAttribute("aria-label", "Quay video");
+      button.title = "Quay video";
     };
     recorder.start(1000);
-    button.classList.add("on");
-    button.querySelector(".label").textContent = "Dừng quay";
+    button.classList.add("rec");
     button.setAttribute("aria-label", "Dừng quay");
+    button.title = "Dừng quay";
   });
   cleanups.push(() => recorder?.state === "recording" && recorder.stop());
 
@@ -682,6 +768,7 @@ export async function mount(container, ctx, roomId, query) {
     }
     if (event.code === "KeyR" && !event.ctrlKey && !event.metaKey) reset();
     if (event.code === "KeyF" && !event.ctrlKey && !event.metaKey) $("#tb-full").click();
+    if (event.code === "KeyI" && !event.ctrlKey && !event.metaKey) togglePanel();
     if (event.code === "Digit1") setMode("orbit");
     if (event.code === "Digit2") setMode("walk");
     if (event.code === "Digit3") setMode("tour");
@@ -707,15 +794,85 @@ export async function mount(container, ctx, roomId, query) {
     });
   }
 
+  // ---------------------------------------------------------------- góc nhìn, phóng to, tự xoay, bảng thông tin
+  function nearestView(index) {
+    if (!views.length) return 0;
+    let best = 0;
+    views.forEach((v, k) => {
+      if (Math.abs(v - index) < Math.abs(views[best] - index)) best = k;
+    });
+    return best;
+  }
+
+  function paintViews() {
+    $("#view-label").textContent = views.length ? `Góc ${viewPos + 1}/${views.length}` : "–";
+    for (const button of page.querySelectorAll("[data-view]")) button.setAttribute("aria-pressed", String(Number(button.dataset.view) === viewPos));
+  }
+
+  function goView(k) {
+    if (!views.length) return;
+    viewPos = (k + views.length) % views.length;
+    const index = views[viewPos];
+    if (mode === "tour") {
+      tour.t = index / Math.max(1, cameras.frames.length - 1);
+      tour.look.set(0, 0, 0);
+    } else if (mode === "walk") {
+      startWalk(index);
+    } else {
+      if (!orbit) setMode("orbit");
+      setSpin(false);
+      orbitFromFrame(index);
+    }
+    paintViews();
+  }
+
+  function dolly(factor) {
+    if (mode !== "orbit" || !orbit) return;
+    const offset = camera.position.clone().sub(orbit.target);
+    const distance = THREE.MathUtils.clamp(offset.length() * factor, orbit.minDistance, orbit.maxDistance);
+    camera.position.copy(orbit.target).add(offset.setLength(distance));
+    orbit.update();
+  }
+
+  function setSpin(on) {
+    if (orbit) {
+      orbit.autoRotate = on;
+      orbit.autoRotateSpeed = 0.8;
+    }
+    $("#tb-spin").setAttribute("aria-pressed", String(Boolean(on && orbit)));
+  }
+
+  function togglePanel(show = document.body.classList.contains("panel-hidden")) {
+    document.body.classList.toggle("panel-hidden", !show);
+    $("#tb-panel").setAttribute("aria-pressed", String(show));
+  }
+
+  $("#views").innerHTML = views.map((index, k) => `<button type="button" data-view="${k}" aria-pressed="false" title="Khung ${index + 1} của đường quay">${k + 1}</button>`).join("");
+  if (!views.length) {
+    $("#views-note").textContent = "Mô hình này không có vị trí camera lúc quay, nên chỉ xoay quanh được.";
+    for (const id of ["#tb-prev", "#tb-next"]) $(id).disabled = true;
+  }
+  for (const button of page.querySelectorAll("[data-view]")) listen(button, "click", () => goView(Number(button.dataset.view)));
+  listen($("#tb-prev"), "click", () => goView(viewPos - 1));
+  listen($("#tb-next"), "click", () => goView(viewPos + 1));
+  listen($("#tb-zoom-in"), "click", () => dolly(0.8));
+  listen($("#tb-zoom-out"), "click", () => dolly(1.25));
+  listen($("#tb-spin"), "click", () => setSpin(!(orbit && orbit.autoRotate)));
+  listen($("#tb-panel"), "click", () => togglePanel());
+  $("#tb-panel").setAttribute("aria-pressed", String(!document.body.classList.contains("panel-hidden")));
+  cleanups.push(() => document.body.classList.remove("panel-hidden"));
+  viewPos = nearestView(startIndex);
+  paintViews();
+
   // đo hiệu năng trên máy đang xem (cho báo cáo: thời gian tải, FPS)
   listen($("#perf-run"), "click", () => {
     const button = $("#perf-run");
     button.disabled = true;
     perfSamples.length = 0;
     perfUntil = performance.now() + 10500;
-    if (mode === "orbit" && orbit) orbit.autoRotate = true;
+    if (mode === "orbit" && orbit) setSpin(true);
     setTimeout(() => {
-      if (orbit) orbit.autoRotate = false;
+      setSpin(false);
       button.disabled = false;
       const gl = renderer.getContext();
       const info = gl.getExtension("WEBGL_debug_renderer_info");
@@ -759,20 +916,5 @@ export async function mount(container, ctx, roomId, query) {
   cleanups.push(() => delete window.__sr3dViewer);
 
   setMode(query?.get("mode") || "orbit");
-  return () => {
-    for (const fn of cleanups.reverse()) {
-      try {
-        fn();
-      } catch (error) {
-        console.error(error);
-      }
-    }
-    if (orbit) orbit.dispose();
-    if (mesh) {
-      scene.remove(mesh);
-      mesh.dispose?.();
-    }
-    renderer.dispose();
-    renderer.forceContextLoss?.();
-  };
+  return dispose;
 }

@@ -89,10 +89,26 @@ class Settings:
     config_file: Path | None = None
     max_upload: int = MAX_TOTAL_BYTES
     build_timeout: float = 80  # giây chờ build_room.sh xếp việc; < 100 giây của proxy Runpod
+    pipeline: dict | None = None  # cấu hình dựng phòng (configs/product.yaml) cho trang web hiển thị; None: chỉ xem
 
     @property
     def logs_dir(self) -> Path:
         return self.ws / "outputs" / "logs"
+
+
+# Mặc định của bước chuẩn bị ảnh mà build_room.sh dùng (src/input/frames.py: DEFAULT_TARGET, DEFAULT_MAX_SIDE; test
+# kiểm tra hai số này khớp). Ghi lại ở đây để server không phải import numpy.
+FRAMES_DEFAULTS = {"video_max_frames": 250, "max_side": 1600}
+
+
+def pipeline_summary(cfg: dict) -> dict:
+    """Phần cấu hình dựng phòng mà trang web hiển thị (đọc từ configs/product.yaml, không tự đặt số)."""
+    model, training, trainer = cfg["model"], cfg["training"], cfg["trainer"]
+    return {"model": model["name"], "description": model.get("description"), "cap_max": model.get("cap_max"),
+            "max_steps": training.get("max_steps"), "init": training.get("init_type"),
+            "data_factor": training.get("data_factor"), "trainer": "gsplat",
+            "trainer_commit": str(trainer.get("commit") or "")[:7], "web_format": cfg["web"].get("format"),
+            "frames": dict(FRAMES_DEFAULTS)}
 
 
 def say(text: str) -> None:
@@ -479,6 +495,8 @@ class Handler(BaseHTTPRequestHandler):
                 "auth": {"required": self.app.s.token is not None, "ok": ok}}
         if ok:
             data["gpu"] = self.app.gpu_status()
+            if self.app.s.pipeline:
+                data["pipeline"] = self.app.s.pipeline
             data["limits"] = {"chunk_bytes": CHUNK_BYTES, "max_upload_bytes": self.app.s.max_upload,
                               "min_photos": sources.MIN_PHOTOS, "recommended_photos": sources.RECOMMENDED_PHOTOS,
                               "photo_exts": sorted(sources.PHOTO_EXTS), "video_exts": list(VIDEO_EXTS)}
@@ -654,6 +672,7 @@ def settings_from(args: argparse.Namespace) -> Settings:
     ws = Path(args.ws or os.environ.get("WS") or product_config.DEFAULT_WS)
     if args.no_auth and (args.host not in LOCAL_HOSTS or not args.view_only):
         raise SystemExit("--no-auth chỉ dùng với --view-only --host 127.0.0.1: link proxy của Runpod là công khai")
+    pipeline = None
     if args.web_dir and args.view_only:
         web_dir = args.web_dir.resolve()
         product_root = web_dir.parent
@@ -661,12 +680,13 @@ def settings_from(args: argparse.Namespace) -> Settings:
         cfg = product_config.load(args.config, ws=str(ws))
         web_dir = Path(args.web_dir or cfg["web"]["dir"])
         product_root = Path(cfg["output_root"])
+        pipeline = pipeline_summary(cfg)
     token = None if args.no_auth else read_token(ws, args.token_file)
     build_script = Path(os.environ.get("SR3D_BUILD_SCRIPT") or REPO / "scripts" / "build_room.sh")
     return Settings(ws=ws, web_dir=web_dir, product_root=product_root, token=token,
                     view_only=args.view_only or not build_script.is_file(), build_script=build_script,
                     config_file=args.config.resolve() if args.config else None,
-                    max_upload=int(args.max_upload_gb * 1024 ** 3))
+                    max_upload=int(args.max_upload_gb * 1024 ** 3), pipeline=pipeline)
 
 
 def main(argv: list[str] | None = None) -> int:

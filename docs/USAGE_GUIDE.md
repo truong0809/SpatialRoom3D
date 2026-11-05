@@ -228,8 +228,8 @@ Thay cho việc chép file vào volume rồi chạy lệnh ở mục 3.8, có th
    Lệnh in địa chỉ và mật khẩu (xem lại: `bash scripts/web_server.sh status`). Lần đầu nó tải thư viện xem 3D (cần Internet).
 2. Trên trang Runpod, một lần cho mỗi pod: **Edit Pod → Expose HTTP Ports → thêm `8000`**, lưu lại.
 3. Mở `https://<POD_ID>-8000.proxy.runpod.net`, nhập mật khẩu.
-4. **Dựng phòng mới**: chọn Video hoặc Ảnh chụp (kéo thả được cả thư mục ảnh), đặt tên, bấm **Bắt đầu dựng**. Trang tải lên theo từng phần (mạng chập chờn thì tự gửi lại), rồi chuyển sang trang **Tiến độ**.
-5. Xong thì bấm **Xem 3D**; phòng cũng có trong **Thư viện phòng**.
+4. **Dự án mới** (nút trên thanh bên, hoặc kéo file vào ô "Tạo dự án mới" ở trang Tổng quan): chọn Video hoặc Ảnh chụp (kéo thả được cả thư mục ảnh), xem trước, đặt tên, bấm **Bắt đầu dựng**. Trang tải lên theo từng phần (mạng chập chờn thì tự gửi lại), rồi chuyển sang trang **Tiến độ**.
+5. Xong thì bấm **Mở trình xem 3D**; cảnh cũng hiện ở trang **Tổng quan** (cảnh mới nhất ở ô lớn đầu trang, lịch sử xử lý ở cuối trang).
 
 Ghi chú:
 - Video / ảnh tải lên nằm ở `/workspace/data/uploads/<phòng>/`; kết quả như mục 3.8. Mỗi lúc chỉ một việc dùng GPU: phòng mới tự xếp hàng.

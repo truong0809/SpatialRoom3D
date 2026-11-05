@@ -147,6 +147,7 @@ Các thành phần dưới đây được cài vào môi trường trên pod (th
 | [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) (chỉ biến thể `mono`) | commit `a561b84`, trọng số bản Small | Apache-2.0 (code và trọng số bản Small; các bản lớn hơn là CC-BY-NC-4.0, không dùng) |
 | [three.js](https://github.com/mrdoob/three.js) (trang web) | 0.180.0, `configs/environment/web_viewer.lock.json` | MIT |
 | [Spark](https://github.com/sparkjsdev/spark) (trang web: vẽ 3D Gaussian Splatting) | 2.4.0, như trên | MIT |
+| [Be Vietnam Pro](https://www.npmjs.com/package/@fontsource/be-vietnam-pro) (phông chữ của trang web, gói Fontsource) | 5.3.0, như trên | SIL OFL 1.1 |
 
 ## Quy ước
 

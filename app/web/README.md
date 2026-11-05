@@ -2,16 +2,16 @@
 
 Luồng người dùng: **tải ảnh hoặc video của căn phòng lên → pod GPU tự dựng phòng → xem tiến độ → xem mô hình 3D**.
 
-Trạng thái (04/11/2026): **đã viết, đã kiểm thử trên CPU** (unit test qua HTTP thật, trọn luồng với `build_room.sh` thật và gsplat giả, trình duyệt Chromium headless với phòng tổng hợp). **Chưa chạy trên pod**, chưa có phòng thật nào dựng bằng trang này.
+Trạng thái (05/11/2026): **đã viết, đã kiểm thử trên CPU** (unit test qua HTTP thật, trọn luồng với `build_room.sh` thật và gsplat giả, trình duyệt Chromium headless với phòng tổng hợp). **Chưa chạy trên pod**, chưa có phòng thật nào dựng bằng trang này. Giao diện làm lại ngày 05/11/2026 (bảng điều khiển nền tối, thanh bên thu gọn được); API giữ nguyên, chỉ thêm hai trường chỉ đọc (`pipeline` trong `/api/status`, `last_build` trong `/api/rooms`).
 
 | Màn | Địa chỉ | Làm gì |
 |---|---|---|
-| Thư viện phòng | `#/` | Phòng đã dựng (ảnh đại diện, số Gaussian, dung lượng, thời gian train) và phòng đang dựng / lỗi |
-| Dựng phòng mới | `#/new` | Chọn video hoặc nhiều ảnh (kéo thả cả thư mục được), đặt tên, tải lên theo từng phần 8 MiB, rồi server gọi `scripts/build_room.sh` |
-| Tiến độ | `#/room/<phòng>` | Bước đang chạy, % train, thời gian từng bước, nhật ký, hủy việc, dựng lại |
-| Xem 3D | `#/view/<phòng>` | Xoay quanh, đi bộ (W A S D, bản đồ nhỏ, giữ trong vùng đã quay), tham quan theo đường quay; camera COLMAP; chụp ảnh, quay video, toàn màn hình; mức chất lượng; tải `.splat` / PLY; đo FPS và thời gian tải |
+| Tổng quan | `#/` | Cảnh 3D mới nhất (ảnh lớn, số Gaussian, dung lượng, số ảnh định vị được), ô kéo thả để tạo dự án, dự án đang dựng / lỗi (tiến độ tổng), các cảnh khác, lịch sử xử lý |
+| Dự án mới | `#/new` | Chọn video hoặc nhiều ảnh (kéo thả cả thư mục được), xem trước, bỏ bớt ảnh, đặt tên; thông số dựng đọc từ `configs/product.yaml`; kiểm tra trước khi dựng; tải lên theo từng phần 8 MiB, rồi server gọi `scripts/build_room.sh` |
+| Tiến độ | `#/room/<phòng>` | Tiến độ tổng (ước lượng: trọng số đặt tay cho từng bước trong `js/ui.js`, chưa đo trên pod), 4 bước với thời gian, nhật ký, hủy việc, dựng lại; lỗi thì hiện bước đã dừng |
+| Xem 3D | `#/view/<phòng>` | Xoay quanh, đi bộ (W A S D, bản đồ nhỏ, giữ trong vùng đã quay), tham quan theo đường quay; camera COLMAP; 12 góc nhìn lấy đều trên đường quay; chụp ảnh, quay video, toàn màn hình; bảng thông tin ẩn / hiện (phím I); mức chất lượng; tải `.splat` / PLY; đo FPS và thời gian tải |
 
-Bản thiết kế giao diện: artifact "SpatialRoom3D Web – mô phỏng giao diện" (6 màn). Chưa làm từ bản thiết kế: trang Kết quả thực nghiệm, và "lượt quay kiểm tra" để chấm điểm phòng tự dựng (`docs/design/product.md` mục 5).
+Chưa làm: trang Kết quả thực nghiệm, và "lượt quay kiểm tra" để chấm điểm phòng tự dựng (`docs/design/product.md` mục 5). Trang không tự đặt số liệu: mọi con số lấy từ `manifest.json`, `progress.json`, `configs/product.yaml` hoặc đo trên máy đang xem.
 
 ## Chạy trên pod
 
@@ -35,7 +35,7 @@ Trên trang Runpod, một lần cho mỗi pod: **Edit Pod → Expose HTTP Ports 
 Chép thư mục `/workspace/outputs/product/web/` về máy, rồi từ thư mục repo:
 
 ```bash
-python3 -m app.web.vendor          # một lần, cần Internet: tải three.js, Spark vào app/web/static/vendor/
+python3 -m app.web.vendor          # một lần, cần Internet: tải three.js, Spark, phông chữ vào app/web/static/vendor/
 python3 -m app.web.server --web-dir <thư mục web đã chép> --view-only --host 127.0.0.1 --no-auth --port 8000
 ```
 
@@ -48,8 +48,8 @@ Mở `http://127.0.0.1:8000`. Chế độ này chỉ xem (không tải lên, kh�
 | `server.py` | Server HTTP (thư viện chuẩn Python): trang tĩnh, thư mục web, API tải lên / phòng / log / hủy / dựng lại, mật khẩu |
 | `uploads.py` | Phiên tải lên: kiểm tra đầu vào (cùng quy tắc với `build_room.sh`), nhận từng phần đúng thứ tự, chuyển thành nguồn của phòng |
 | `rooms.py` | Đọc `manifest.json`, `progress.json`, trạng thái việc nền của `job.sh`, cuối log, file PLY |
-| `vendor.py` | Tải three.js 0.180.0 và Spark 2.4.0 đúng phiên bản và mã kiểm tra trong `configs/environment/web_viewer.lock.json` |
-| `static/` | Trang web: `index.html`, `app.css`, `js/` (`main` điều hướng, `library`, `upload`, `job`, `viewer`, `camera` toán camera, `api`, `fmt`) |
+| `vendor.py` | Tải three.js 0.180.0, Spark 2.4.0 và phông Be Vietnam Pro 5.3.0 (SIL OFL 1.1) đúng phiên bản và mã kiểm tra trong `configs/environment/web_viewer.lock.json` |
+| `static/` | Trang web: `index.html` (khung: thanh bên, hộp đăng nhập), `app.css`, `js/` (`main` điều hướng và thanh bên, `dashboard` tổng quan, `upload` dự án mới, `job` tiến độ, `viewer` xem 3D, `ui` biểu tượng / trạng thái / tiến độ tổng, `camera` toán camera, `api`, `fmt`) |
 | `../../scripts/web_server.sh` | Chạy nền / dừng / xem trạng thái server trên pod |
 
 Server không giữ khóa GPU và không train gì: nó gọi `scripts/build_room.sh <nguồn> <phòng> --name <tên> --background`, rồi chỉ đọc các file luồng sản phẩm ghi ra. Hệ tọa độ: `model.splat` và `cameras.json` cùng hệ đã chuẩn hóa của gsplat, trình xem không xoay mô hình, hướng lên lấy từ trường `up` (`docs/design/product.md` mục 4.4).

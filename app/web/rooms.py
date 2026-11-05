@@ -127,7 +127,8 @@ def summary(build: dict | None) -> dict | None:
 
 def list_rooms(web_dir: Path, product_root: Path, ws: Path) -> list[dict]:
     """Phòng chưa có trong thư viện (đang dựng / lỗi, mới nhất trước), rồi các phòng của thư viện theo thứ tự
-    manifest.json. Phòng của thư viện đang được dựng lại thì kèm `build`."""
+    manifest.json. Phòng của thư viện đang được dựng lại thì kèm `build`; `last_build`: lần dựng gần nhất (có
+    progress.json), kể cả đã xong, cho bảng lịch sử."""
     done = manifest_rooms(web_dir)
     in_library = {entry["id"] for entry in done}
     building = []
@@ -137,14 +138,14 @@ def list_rooms(web_dir: Path, product_root: Path, ws: Path) -> list[dict]:
         build = build_status(product_root, ws, folder.name)
         if build is not None:
             building.append({"id": folder.name, "name": display_name(ws, folder.name), "status": build["status"],
-                             "build": summary(build), "entry": None})
+                             "build": summary(build), "last_build": summary(build), "entry": None})
     building.sort(key=lambda item: item["build"].get("updated_at") or "", reverse=True)
     rooms = []
     for entry in done:
         build = build_status(product_root, ws, entry["id"])
         active = build is not None and build["status"] in progress_file.ACTIVE
         rooms.append({"id": entry["id"], "name": display_name(ws, entry["id"], entry), "status": "done",
-                      "build": summary(build) if active else None, "entry": entry})
+                      "build": summary(build) if active else None, "last_build": summary(build), "entry": entry})
     return building + rooms
 
 

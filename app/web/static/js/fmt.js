@@ -23,6 +23,13 @@ export function bytes(size) {
   return `${int(size)} B`;
 }
 
+// giới hạn tải lên đặt theo GiB (web_server.sh --max-upload-gb, nhân 1024³): hiện đúng con số đã đặt
+export function gib(size) {
+  if (size == null) return "–";
+  const value = size / 1024 ** 3;
+  return `${decimal(value, Number.isInteger(value) ? 0 : 2)} GiB`;
+}
+
 export function duration(seconds) {
   if (seconds == null || !Number.isFinite(seconds)) return "–";
   const s = Math.max(0, Math.round(seconds));
@@ -48,6 +55,17 @@ export function dateTime(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// "vừa xong", "5 phút trước", "3 giờ trước", "2 ngày trước"; xa hơn thì ngày giờ
+export function ago(iso) {
+  const seconds = secondsSince(iso);
+  if (seconds == null) return "–";
+  if (seconds < 60) return "vừa xong";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} phút trước`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} giờ trước`;
+  if (seconds < 7 * 86400) return `${Math.floor(seconds / 86400)} ngày trước`;
+  return dateTime(iso);
 }
 
 export function secondsSince(iso, until) {

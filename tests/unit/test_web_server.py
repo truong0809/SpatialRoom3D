@@ -455,6 +455,43 @@ def test_no_password_is_only_allowed_to_view_on_localhost():
         web_server.settings_from(web_server.parse_args(["--no-auth", "--host", "127.0.0.1", "--web-dir", "/tmp"]))
 
 
+def test_the_build_settings_shown_on_the_web_come_from_the_product_config(web, tmp_path, monkeypatch):
+    """Trang dự án mới hiện cấu hình dựng (mô hình, số Gaussian tối đa, số vòng, khung lấy từ video): đọc từ
+    configs/product.yaml và mặc định của frames.py, không tự đặt số; chỉ gửi cho người đã đăng nhập."""
+    from src.input import frames
+    from src.product import config as product_config
+
+    monkeypatch.delenv("SR3D_WEB_TOKEN", raising=False)
+    ws = tmp_path / "ws_cfg"
+    settings = web_server.settings_from(web_server.parse_args(["--ws", str(ws)]))
+    cfg = product_config.load(None, ws=str(ws))
+    p = settings.pipeline
+    assert p == web_server.pipeline_summary(cfg)
+    assert (p["model"], p["cap_max"], p["max_steps"], p["web_format"]) == (
+        cfg["model"]["name"], cfg["model"]["cap_max"], cfg["training"]["max_steps"], cfg["web"]["format"])
+    assert len(p["trainer_commit"]) == 7 and cfg["trainer"]["commit"].startswith(p["trainer_commit"])
+    # đổi cấu hình thì trang web đổi theo (không có số viết sẵn trong server)
+    other = yaml.safe_load(product_config.DEFAULT_CONFIG.read_text(encoding="utf-8"))
+    other["model"]["cap_max"], other["training"]["max_steps"] = 500_000, 7_000
+    (tmp_path / "other.yaml").write_text(yaml.safe_dump(other, allow_unicode=True), encoding="utf-8")
+    changed = web_server.settings_from(web_server.parse_args(["--ws", str(ws), "--config", str(tmp_path / "other.yaml")]))
+    assert (changed.pipeline["cap_max"], changed.pipeline["max_steps"]) == (500_000, 7_000)
+    # server gọi build_room.sh không kèm tham số cho frames.py (test tải ảnh ở trên), prepare_scene.sh cũng không:
+    # số khung tối đa và cạnh dài là mặc định của frames.py
+    assert p["frames"] == {"video_max_frames": frames.DEFAULT_TARGET, "max_side": frames.DEFAULT_MAX_SIDE}
+    prepare = (REPO / "scripts" / "pipeline" / "prepare_scene.sh").read_text(encoding="utf-8")
+    code = [line for line in prepare.splitlines() if not line.lstrip().startswith("#")]
+    assert not any("--target" in line or "--max-side" in line for line in code)
+    # /api/status: chưa đăng nhập thì không có; chế độ chỉ xem (không đọc cấu hình) thì không có
+    web.settings.pipeline = p
+    assert "pipeline" not in web.request("GET", "/api/status").json
+    web.login()
+    assert web.request("GET", "/api/status").json["pipeline"] == p
+    view_only = web_server.settings_from(web_server.parse_args(["--ws", str(ws), "--web-dir", str(web.web_dir),
+                                                                "--view-only"]))
+    assert view_only.pipeline is None
+
+
 def test_a_password_file_is_created_once_with_private_permissions(tmp_path, monkeypatch):
     monkeypatch.delenv("SR3D_WEB_TOKEN", raising=False)
     token = web_server.read_token(tmp_path, None)

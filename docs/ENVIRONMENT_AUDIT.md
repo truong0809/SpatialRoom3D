@@ -95,7 +95,7 @@ Env này chạy `default`, `mcmc` và luồng sản phẩm.
 
 Depth Anything V2 Small (chỉ dùng cho biến thể `mono`): code commit `a561b84`, trọng số `depth_anything_v2_vits.pth` (Apache-2.0, kiểm SHA-256 khi tải). Chạy trong env `gs-gsplat`; cài bằng `scripts/setup/setup_depth_anything.sh`.
 
-Trang web của sản phẩm (`app/web/`, D22): server chỉ dùng thư viện chuẩn Python (python3 có PyYAML của máy, hoặc của env `gs-gsplat`; `scripts/web_server.sh` tự chọn). Thư viện của trình xem trong trình duyệt: three.js 0.180.0 và Spark 2.4.0 (MIT), ghim phiên bản và integrity SHA-512 của gói npm trong `configs/environment/web_viewer.lock.json`, tải vào `app/web/static/vendor/` (ngoài Git) bằng `python3 -m app.web.vendor`. Trình duyệt cần WebGL2.
+Trang web của sản phẩm (`app/web/`, D22): server chỉ dùng thư viện chuẩn Python (python3 có PyYAML của máy, hoặc của env `gs-gsplat`; `scripts/web_server.sh` tự chọn). Thư viện của trình xem trong trình duyệt: three.js 0.180.0 và Spark 2.4.0 (MIT); phông chữ Be Vietnam Pro 5.3.0 (gói `@fontsource/be-vietnam-pro`, SIL OFL 1.1, chỉ các file latin và vietnamese, 4 độ đậm); ghim phiên bản và integrity SHA-512 của gói npm trong `configs/environment/web_viewer.lock.json`, tải vào `app/web/static/vendor/` (ngoài Git) bằng `python3 -m app.web.vendor`. Trình duyệt cần WebGL2.
 
 ### 4.4 Pod mới từ Jupyter
 

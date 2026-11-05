@@ -57,6 +57,7 @@ from src.input.sources import (
 
 IMAGE_EXTS = PHOTO_EXTS
 DEFAULT_MAX_SIDE = 1600
+DEFAULT_TARGET = 250  # video: số khung tối đa được chọn (--target)
 DEFAULT_FPS = 4.0  # khi không đọc được độ dài video
 # Mọi thứ ghi vào thư mục cảnh từ bước này trở đi; --overwrite xóa hết để không còn kết quả cũ trông như hợp lệ.
 SCENE_OUTPUTS = ("input", "images", "sparse", "distorted", "stereo", "colmap_logs", "frames_candidates",
@@ -445,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="số ứng viên mong muốn cho mỗi đoạn khi tự tính fps (mặc định 4)")
     parser.add_argument("--max-fps", type=float, default=15.0, help="trần của fps tự tính (mặc định 15)")
     parser.add_argument("--target", type=int, default=None,
-                        help="video: số đoạn chia = số frame tối đa được chọn (mặc định 250)")
+                        help=f"video: số đoạn chia = số frame tối đa được chọn (mặc định {DEFAULT_TARGET})")
     parser.add_argument("--blur-ratio", type=float, default=0.4,
                         help="video: bỏ frame có độ nét < tỉ lệ này x trung vị lân cận; ảnh chụp: chỉ cảnh báo "
                              "(mặc định 0.4)")
@@ -472,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
         if old:
             clear_outputs(args.scene_dir)
         report = prepare_from_video(args.video, args.scene_dir, args.fps,
-                                    args.target if args.target is not None else 250, args.blur_ratio,
+                                    args.target if args.target is not None else DEFAULT_TARGET, args.blur_ratio,
                                     max_side=args.max_side, keep_candidates=args.keep_candidates,
                                     ffmpeg=args.ffmpeg, candidates_per_window=args.candidates_per_window,
                                     max_fps=args.max_fps, blur_window_s=args.blur_window_s)

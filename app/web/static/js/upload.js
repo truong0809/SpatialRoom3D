@@ -1,7 +1,9 @@
-// Dựng phòng mới: chọn một video hoặc nhiều ảnh, tải lên theo từng phần, rồi server gọi build_room.sh.
-// Quy tắc đầu vào giống server (app/web/uploads.py, src/input/sources.py): video MP4/MOV...; ảnh JPG/PNG, tối thiểu 10.
+// Dự án mới: chọn một video hoặc nhiều ảnh (xem trước, bỏ bớt ảnh), đặt tên, xem cấu hình dựng, tải lên theo từng
+// phần, rồi server gọi build_room.sh. Quy tắc đầu vào giống server (app/web/uploads.py, src/input/sources.py):
+// video MP4/MOV...; ảnh JPG/PNG, tối thiểu 10.
 import * as api from "./api.js";
 import * as fmt from "./fmt.js";
+import * as ui from "./ui.js";
 
 const PHOTO_RE = /\.(jpe?g|png)$/i;
 const OTHER_IMAGE_RE = /\.(heic|heif|webp|bmp|tiff?|gif|dng|raw)$/i;
@@ -26,7 +28,7 @@ const TIPS = {
 };
 
 // Thư mục kéo thả vào: đọc các file nằm trực tiếp trong thư mục (giống server, không đọc thư mục con)
-async function filesFromDrop(dataTransfer) {
+export async function filesFromDrop(dataTransfer) {
   const items = [...(dataTransfer.items || [])];
   const entries = items.map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
   if (!entries.some((entry) => entry.isDirectory)) return [...dataTransfer.files];
@@ -75,7 +77,7 @@ export function checkSelection(kind, files, limits) {
   }
   const total = chosen.reduce((sum, f) => sum + f.size, 0);
   if (limits?.max_upload_bytes && total > limits.max_upload_bytes) {
-    errors.push(`Tổng dung lượng ${fmt.bytes(total)} vượt giới hạn ${fmt.bytes(limits.max_upload_bytes)} của server.`);
+    errors.push(`Tổng dung lượng ${fmt.gib(total)} vượt giới hạn ${fmt.gib(limits.max_upload_bytes)} của server.`);
   }
   if (chosen.some((f) => f.size === 0)) errors.push("Có file rỗng (0 byte).");
   return { files: chosen, errors, warnings, ignored, total };
@@ -125,105 +127,205 @@ export async function uploadFiles(session, files, { signal, onProgress } = {}) {
   }
 }
 
+const MAX_THUMBS = 47;  // ảnh xem trước; còn lại hiện số lượng
+
+function specList(pipeline) {
+  if (!pipeline) return '<p class="hint">Cấu hình chi tiết hiện khi trang chạy trên pod (server đọc configs/product.yaml).</p>';
+  const init = pipeline.init === "sfm" ? "Điểm 3D từ COLMAP" : pipeline.init || "–";
+  const rows = [
+    ["Số Gaussian tối đa", fmt.int(pipeline.cap_max)],
+    ["Số vòng huấn luyện", fmt.int(pipeline.max_steps)],
+    ["Khởi tạo", init],
+    ["Khung lấy từ video", pipeline.frames?.video_max_frames ? `Tối đa ${fmt.int(pipeline.frames.video_max_frames)} khung nét nhất` : "–"],
+    ["Cạnh dài của ảnh", pipeline.frames?.max_side ? `≤ ${fmt.int(pipeline.frames.max_side)} px` : "–"],
+    ["Thư viện huấn luyện", `${pipeline.trainer || "gsplat"}${pipeline.trainer_commit ? ` ${pipeline.trainer_commit}` : ""}`],
+  ];
+  return `<dl class="spec">${rows.map(([k, v]) => `<dt>${fmt.escapeHtml(k)}</dt><dd>${fmt.escapeHtml(v)}</dd>`).join("")}</dl>`;
+}
+
 export async function mount(container, ctx) {
   const status = ctx.status() || (await ctx.refreshStatus());
   const limits = status?.limits;
-  const page = document.createElement("div");
-  page.className = "page";
-  container.append(page);
+  const wrap = document.createElement("div");
   if (status?.mode === "view") {
-    page.innerHTML = `<div class="page-head"><div><h1>Dựng phòng mới</h1></div></div>
-      <div class="notice">Server này chỉ để xem thư viện. Dựng phòng trên trang web chạy ở pod GPU (<code>bash scripts/web_server.sh start</code>).</div>`;
+    wrap.innerHTML = `${ui.topbar([["Tổng quan", "#/"], ["Dự án mới"]])}
+      <div class="page"><div class="ws-head"><h1>Dự án mới</h1></div>
+      <div class="notice">Server này chỉ để xem các cảnh đã dựng. Dựng cảnh mới trên trang web chạy ở pod GPU (<code>bash scripts/web_server.sh start</code>).</div></div>`;
+    container.append(...wrap.children);
     return () => {};
   }
-  page.innerHTML = `<div class="page-head"><div><h1>Dựng phòng mới</h1>
-      <p class="lead">Tải video hoặc ảnh chụp căn phòng lên. Pod GPU tự tách khung hoặc chuẩn hóa ảnh, chạy COLMAP để ước lượng camera, train mô hình chính rồi đưa phòng vào thư viện.</p></div></div>
-    <div class="columns">
-      <form class="panel main-col" id="up-form" novalidate>
-        <div class="field"><span class="label" id="kind-label">1. Nguồn</span>
-          <div class="seg" role="group" aria-labelledby="kind-label">
-            <button type="button" data-kind="video" aria-pressed="true">Video</button>
-            <button type="button" data-kind="photos" aria-pressed="false">Ảnh chụp</button>
-          </div></div>
-        <div class="field">
-          <label class="dropzone" id="up-drop" for="up-input">
-            <svg aria-hidden="true" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4C9AFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>
-            <strong id="up-drop-title"></strong><span class="muted" id="up-drop-hint"></span>
-          </label>
-          <input id="up-input" type="file" class="sr-only">
-          <div class="row"><button type="button" class="btn small hidden" id="up-folder">Chọn cả thư mục ảnh</button></div>
-          <input id="up-folder-input" type="file" class="sr-only" webkitdirectory multiple>
-          <div class="filelist" id="up-files" aria-live="polite"></div>
+  const minPhotos = limits?.min_photos ?? 10;
+  wrap.innerHTML = `${ui.topbar([["Tổng quan", "#/"], ["Dự án mới"]])}
+    <div class="page">
+      <div class="ws-head"><h1>Dự án mới</h1>
+        <p>Tải video hoặc ảnh chụp căn phòng lên. Pod GPU tách khung hoặc chuẩn hóa ảnh, ước lượng camera bằng COLMAP, huấn luyện 3DGS-MCMC rồi đưa cảnh vào trang tổng quan.</p></div>
+      <form class="ws" id="up-form" novalidate>
+        <div class="ws-main">
+          <section class="panel" aria-labelledby="src-title">
+            <div class="panel-head"><div><h2 id="src-title">Dữ liệu đầu vào</h2><p class="sub" id="src-sub"></p></div>
+              <div class="seg" role="group" aria-label="Loại nguồn">
+                <button type="button" data-kind="video" aria-pressed="true">${ui.icon("video", 16)}Video</button>
+                <button type="button" data-kind="photos" aria-pressed="false">${ui.icon("image", 16)}Ảnh chụp</button></div></div>
+            <label class="dropzone" id="up-drop" for="up-input">${ui.splatArt("art")}<span class="dz-icon" aria-hidden="true">${ui.icon("upload", 20)}</span>
+              <span class="dz-text"><strong id="up-drop-title"></strong><br><span class="hint" id="up-drop-hint"></span></span>
+              <span class="pick"><span class="btn" aria-hidden="true">${ui.icon("upload", 16)}<span id="up-pick-label">Chọn file</span></span></span></label>
+            <input id="up-input" type="file" class="sr-only">
+            <input id="up-folder-input" type="file" class="sr-only" webkitdirectory multiple>
+            <div class="row-folder hidden" id="up-folder-row"><button type="button" class="btn sm quiet" id="up-folder">${ui.icon("folder", 16)}Chọn cả thư mục ảnh</button></div>
+            <div class="preview hidden" id="up-preview" aria-live="polite"></div>
+            <div class="filelist" id="up-files" aria-live="polite"></div>
+          </section>
+          <details class="guide" id="up-guide">
+            <summary>${ui.icon("camera", 18)}<span id="tips-title"></span><span class="chev">${ui.icon("chevDown", 16)}</span></summary>
+            <div class="guide-body"><ul class="tips" id="tips"></ul><p class="hint">Hướng dẫn đầy đủ: <code>docs/data/capture_protocol.md</code>.</p></div>
+          </details>
         </div>
-        <div class="field"><label for="up-name">2. Tên hiển thị</label>
-          <input id="up-name" type="text" maxlength="80" placeholder="vd. Phòng khách" autocomplete="off"></div>
-        <div class="field"><label for="up-room">3. Mã phòng</label>
-          <input id="up-room" type="text" maxlength="64" placeholder="vd. phong_khach" autocomplete="off" spellcheck="false">
-          <span class="hint">Chữ không dấu, số, '.', '_', '-'; dùng làm tên thư mục trên pod. Mỗi phòng một mã.</span></div>
-        <div class="notice">Phòng được dựng bằng <strong>3DGS-MCMC</strong> (gsplat), mô hình chính chọn qua thực nghiệm ngày 31/10/2026: hơn 3DGS mặc định ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS. Tối đa 1 triệu Gaussian, nên file xem trên web ≤ 32 MB.</div>
-        <div class="notice error hidden" id="up-error" role="alert"></div>
-        <div class="upload-progress hidden" id="up-progress">
-          <div class="row" style="justify-content:space-between"><span id="up-progress-text">Đang tải lên…</span><span class="mono" id="up-progress-pct">0 %</span></div>
-          <div class="progressbar"><span id="up-progress-bar"></span></div>
-          <span class="muted" id="up-progress-file"></span>
-        </div>
-        <div class="row">
-          <button type="submit" class="btn primary" id="up-start" disabled>Bắt đầu dựng</button>
-          <button type="button" class="btn danger hidden" id="up-cancel">Hủy tải lên</button>
-          <span class="muted" style="font-size:13px">Train trên RTX 4090 mất khoảng 11 phút (phòng nhóm), chưa tính tách khung và COLMAP.</span>
-        </div>
+        <aside class="ws-side" aria-label="Thiết lập và bắt đầu">
+          <section class="panel" aria-labelledby="set-title">
+            <h2 id="set-title">Thiết lập dự án</h2>
+            <div class="field"><label for="up-name">Tên dự án</label>
+              <input id="up-name" class="input" type="text" maxlength="80" placeholder="Ví dụ: Phòng khách" autocomplete="off"></div>
+            <div class="field"><label for="up-room">Mã dự án</label>
+              <input id="up-room" class="input" type="text" maxlength="64" placeholder="phong_khach" autocomplete="off" spellcheck="false">
+              <span class="hint">Tự tạo từ tên. Chữ không dấu, số, dấu chấm, gạch dưới, gạch ngang; là tên thư mục trên pod nên mỗi dự án một mã.</span></div>
+          </section>
+          <section class="panel" aria-labelledby="method-title">
+            <div class="method"><span class="chipmark">${ui.icon("spark", 18)}</span>
+              <div><b id="method-title">3DGS-MCMC</b><span>Gaussian Splatting huấn luyện kiểu MCMC (Kheradmand và cộng sự, 2024)</span></div></div>
+            ${specList(status?.pipeline)}
+            <p class="hint">Cấu hình cố định của sản phẩm (<code>configs/product.yaml</code>), chọn qua thực nghiệm 31/10/2026: hơn 3DGS mặc định ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS.</p>
+          </section>
+          <section class="panel" aria-labelledby="go-title">
+            <h2 id="go-title">Sẵn sàng dựng</h2>
+            <ul class="checklist" id="up-check">
+              <li data-check="source"><span class="ic">${ui.icon("check", 12, 2.6)}</span><span id="check-source"></span></li>
+              <li data-check="room"><span class="ic">${ui.icon("check", 12, 2.6)}</span><span>Tên và mã dự án hợp lệ</span></li>
+              <li data-check="size"><span class="ic">${ui.icon("check", 12, 2.6)}</span><span>Dung lượng không quá ${fmt.gib(limits?.max_upload_bytes ?? 0)}</span></li>
+            </ul>
+            <div class="notice error hidden" id="up-error" role="alert"></div>
+            <div class="upload-progress hidden" id="up-progress">
+              <div class="row"><span id="up-progress-text">Đang tải lên…</span><span class="num" id="up-progress-pct">0 %</span></div>
+              <div class="progressbar"><span id="up-progress-bar"></span></div>
+              <span class="muted" id="up-progress-file"></span>
+            </div>
+            <button type="submit" class="btn primary lg block" id="up-start" disabled>${ui.icon("spark", 17)}Bắt đầu dựng</button>
+            <button type="button" class="btn danger block hidden" id="up-cancel">Hủy tải lên</button>
+            <p class="hint">Sau khi tải lên, pod tách khung, chạy COLMAP, huấn luyện rồi xuất cảnh cho web; trang chuyển sang tiến độ. Huấn luyện trên RTX 4090 mất khoảng 11 phút (phòng nhóm), chưa tính tách khung và COLMAP.</p>
+          </section>
+        </aside>
       </form>
-      <div class="side-col">
-        <section class="panel quiet"><h2 id="tips-title">Mẹo quay để dựng đẹp</h2><ul class="tips" id="tips"></ul>
-          <p class="muted" style="font-size:13px">Đầy đủ: <code>docs/data/capture_protocol.md</code>.</p></section>
-      </div>
     </div>`;
+  container.append(...wrap.children);
 
-  const $ = (sel) => page.querySelector(sel);
+  const $ = (sel) => container.querySelector(sel);
   const input = $("#up-input");
   const folderInput = $("#up-folder-input");
   const drop = $("#up-drop");
   const nameInput = $("#up-name");
   const roomInput = $("#up-room");
   let kind = "video";
+  let picked = [];  // file người dùng đã chọn (trước khi lọc)
   let selection = { files: [], errors: [], warnings: [], ignored: [], total: 0 };
   let roomEdited = false;
   let controller = null;
   let uploading = false;
+  let unmounted = false;  // đã rời trang: các bước async còn dở không được đụng vào trang mới
+  const urls = new Map();  // File -> object URL của ảnh / video xem trước
+  const urlOf = (file) => {
+    if (!urls.has(file)) urls.set(file, URL.createObjectURL(file));
+    return urls.get(file);
+  };
+  const forget = (keep) => {
+    for (const [file, url] of urls) {
+      if (!keep.has(file)) {
+        URL.revokeObjectURL(url);
+        urls.delete(file);
+      }
+    }
+  };
 
-  function setKind(next) {
+  function setKind(next, files = []) {
     kind = next;
-    for (const button of page.querySelectorAll("[data-kind]")) button.setAttribute("aria-pressed", String(button.dataset.kind === kind));
+    for (const button of container.querySelectorAll("[data-kind]")) button.setAttribute("aria-pressed", String(button.dataset.kind === kind));
     input.multiple = kind === "photos";
     input.accept = kind === "photos" ? "image/jpeg,image/png,.jpg,.jpeg,.png" : "video/*,.mp4,.mov,.m4v,.avi,.mkv,.webm";
-    $("#up-drop-title").textContent = kind === "photos" ? "Kéo thả ảnh hoặc cả thư mục ảnh vào đây, hoặc bấm để chọn" : "Kéo thả video vào đây hoặc bấm để chọn";
-    $("#up-drop-hint").textContent = kind === "photos"
-      ? `JPG hoặc PNG · tối thiểu ${limits?.min_photos ?? 10}, nên từ ${limits?.recommended_photos ?? 30} ảnh`
-      : "MP4 hoặc MOV · 1–3 phút cho một phòng · 4K hoặc 1080p, 30 fps";
-    $("#up-folder").classList.toggle("hidden", kind !== "photos");
-    $("#tips-title").textContent = kind === "photos" ? "Mẹo chụp để dựng đẹp" : "Mẹo quay để dựng đẹp";
+    $("#src-sub").textContent = kind === "photos"
+      ? `Nhiều ảnh chụp cùng căn phòng từ các vị trí khác nhau: tối thiểu ${minPhotos}, nên từ ${limits?.recommended_photos ?? 30} ảnh.`
+      : "Một video đi chậm quanh căn phòng, 1–3 phút.";
+    $("#check-source").textContent = kind === "photos" ? `Ít nhất ${minPhotos} ảnh JPG hoặc PNG` : "Một video MP4, MOV, M4V, AVI, MKV hoặc WEBM";
+    $("#up-folder-row").classList.toggle("hidden", kind !== "photos");
+    $("#tips-title").textContent = kind === "photos" ? "Cách chụp ảnh để dựng đẹp" : "Cách quay video để dựng đẹp";
     $("#tips").innerHTML = TIPS[kind].map((tip) => `<li>${fmt.escapeHtml(tip)}</li>`).join("");
-    select([]);
+    select(files);
+  }
+
+  function addFiles(files) {
+    if (kind !== "photos") return select([...files]);
+    const seen = new Set(picked.map((f) => `${f.name}:${f.size}`));
+    return select([...picked, ...[...files].filter((f) => !seen.has(`${f.name}:${f.size}`))]);
   }
 
   function select(files) {
-    selection = checkSelection(kind, files, limits);
-    const box = $("#up-files");
-    const parts = [];
-    if (selection.files.length) {
-      const names = selection.files.slice(0, 60).map((f) => fmt.escapeHtml(f.name)).join(", ");
-      parts.push(`<span><strong>${selection.files.length === 1 ? fmt.escapeHtml(selection.files[0].name) : `${selection.files.length} ảnh`}</strong> · ${fmt.bytes(selection.total)}</span>`);
-      if (selection.files.length > 1) parts.push(`<span class="names">${names}${selection.files.length > 60 ? " …" : ""}</span>`);
-    }
-    if (selection.ignored.length) parts.push(`<span class="muted">Bỏ qua ${selection.ignored.length} file không phải ảnh JPG/PNG.</span>`);
-    for (const warning of selection.warnings) parts.push(`<span class="notice warn">${fmt.escapeHtml(warning)}</span>`);
-    for (const error of selection.errors) parts.push(`<span class="notice error">${fmt.escapeHtml(error)}</span>`);
-    box.innerHTML = parts.join("");
+    picked = [...files];
+    selection = checkSelection(kind, picked, limits);
+    forget(new Set(selection.files));
+    const has = selection.files.length > 0;
+    drop.classList.toggle("compact", has);
+    $("#up-drop-title").textContent = has
+      ? (kind === "photos" ? "Thêm ảnh hoặc kéo thả thêm vào đây" : "Kéo thả video khác vào đây để đổi")
+      : (kind === "photos" ? "Kéo thả ảnh hoặc cả thư mục ảnh vào đây" : "Kéo thả video căn phòng vào đây");
+    $("#up-drop-hint").textContent = kind === "photos"
+      ? `JPG hoặc PNG, tối thiểu ${minPhotos} ảnh`
+      : "MP4 hoặc MOV, 4K hoặc 1080p, 30 fps";
+    $("#up-pick-label").textContent = has ? (kind === "photos" ? "Thêm ảnh" : "Đổi video") : "Chọn file";
+    paintPreview();
+    const notes = [];
+    if (selection.ignored.length) notes.push(`<span class="notice">Bỏ qua ${selection.ignored.length} file không phải ảnh JPG/PNG.</span>`);
+    for (const warning of selection.warnings) notes.push(`<span class="notice warn">${fmt.escapeHtml(warning)}</span>`);
+    for (const error of selection.errors) notes.push(`<span class="notice error">${fmt.escapeHtml(error)}</span>`);
+    $("#up-files").innerHTML = notes.join("");
     if (!nameInput.value && selection.files.length === 1 && kind === "video") {
       nameInput.value = selection.files[0].name.replace(/\.[^.]+$/, "").slice(0, 80);
       syncRoom();
     }
     validate();
+  }
+
+  function paintPreview() {
+    const box = $("#up-preview");
+    const files = selection.files;
+    box.classList.toggle("hidden", !files.length);
+    if (!files.length) {
+      box.innerHTML = "";
+      return;
+    }
+    if (kind === "video") {
+      const file = files[0];
+      box.innerHTML = `<div class="video-preview"><video controls muted playsinline preload="metadata"></video></div>
+        <dl class="facts-grid"><div><dt>Tên file</dt><dd>${fmt.escapeHtml(file.name)}</dd></div><div><dt>Dung lượng</dt><dd>${fmt.bytes(file.size)}</dd></div>
+          <div><dt>Thời lượng</dt><dd id="vid-duration">–</dd></div><div><dt>Độ phân giải</dt><dd id="vid-size">–</dd></div></dl>`;
+      const video = box.querySelector("video");
+      video.addEventListener("loadedmetadata", () => {
+        if (Number.isFinite(video.duration)) box.querySelector("#vid-duration").textContent = fmt.clock(video.duration);
+        if (video.videoWidth) box.querySelector("#vid-size").textContent = `${video.videoWidth} × ${video.videoHeight}`;
+      });
+      video.addEventListener("error", () => {
+        box.querySelector(".video-preview").innerHTML = '<p class="notice" style="margin:auto">Trình duyệt không xem trước được video này; vẫn tải lên và dựng được.</p>';
+      }, { once: true });
+      video.src = urlOf(file);
+      return;
+    }
+    const shown = files.slice(0, MAX_THUMBS);
+    const more = files.length - shown.length;
+    box.innerHTML = `<div class="preview-head"><div><b>${fmt.int(files.length)} ảnh</b><span class="muted">${fmt.bytes(selection.total)}</span></div>
+        <button type="button" class="btn sm quiet" id="up-clear">${ui.icon("x", 15)}Bỏ tất cả</button></div>
+      <div class="thumbs">${shown.map((file, i) => `<figure><img alt="" decoding="async" data-i="${i}">
+          <figcaption>${fmt.escapeHtml(file.name)}</figcaption>
+          <button type="button" class="rm" data-rm="${i}" aria-label="Bỏ ${fmt.escapeHtml(file.name)}">${ui.icon("x", 14, 2.2)}</button></figure>`).join("")}
+        ${more > 0 ? `<figure class="more">và ${fmt.int(more)} ảnh nữa</figure>` : ""}</div>`;
+    box.querySelectorAll("img[data-i]").forEach((img) => {
+      img.src = urlOf(shown[Number(img.dataset.i)]);
+    });
   }
 
   function syncRoom() {
@@ -235,6 +337,10 @@ export async function mount(container, ctx) {
     const room = roomInput.value.trim();
     const roomOk = ROOM_RE.test(room) && !["web", "uploads", "server"].includes(room.toLowerCase());
     roomInput.classList.toggle("invalid", Boolean(room) && !roomOk);
+    const sourceOk = selection.files.length > 0 && !selection.errors.some((e) => !/dung lượng/i.test(e));
+    const sizeOk = !limits?.max_upload_bytes || selection.total <= limits.max_upload_bytes;
+    const checks = { source: sourceOk, room: roomOk, size: selection.files.length > 0 && sizeOk };
+    for (const li of container.querySelectorAll("#up-check li")) li.classList.toggle("ok", Boolean(checks[li.dataset.check]));
     $("#up-start").disabled = uploading || !roomOk || !selection.files.length || selection.errors.length > 0;
   }
 
@@ -247,8 +353,10 @@ export async function mount(container, ctx) {
   function setUploading(state) {
     uploading = state;
     $("#up-cancel").classList.toggle("hidden", !state);
+    $("#up-start").classList.toggle("hidden", state);
     $("#up-progress").classList.toggle("hidden", !state);
-    for (const el of page.querySelectorAll("#up-form input, [data-kind], #up-folder")) el.disabled = state;
+    for (const el of container.querySelectorAll("#up-form input, [data-kind], #up-folder, #up-clear, .rm")) el.disabled = state;
+    drop.classList.toggle("disabled", state);
     validate();
   }
 
@@ -267,7 +375,7 @@ export async function mount(container, ctx) {
     const eta = speed > 0 ? (total - sent) / speed : null;
     $("#up-progress-text").textContent = retrying
       ? `Mạng lỗi, đang thử lại (lần ${retrying})…`
-      : `Đang tải lên ${fmt.bytes(sent)} / ${fmt.bytes(total)}${speed > 0 ? ` · ${fmt.bytes(speed)}/s · còn khoảng ${fmt.duration(eta)}` : ""}`;
+      : `Đang tải lên ${fmt.bytes(sent)} / ${fmt.bytes(total)}${speed > 0 ? `, ${fmt.bytes(speed)}/s, còn khoảng ${fmt.duration(eta)}` : ""}`;
     $("#up-progress-file").textContent = file ? `File: ${file}` : "";
   }
 
@@ -287,12 +395,17 @@ export async function mount(container, ctx) {
         json: { room, name: nameInput.value.trim() || room, kind, files: selection.files.map((f) => ({ name: f.name, size: f.size })) },
       });
       await uploadFiles(session, selection.files, { signal: controller.signal, onProgress: progress });
-      $("#up-progress-text").textContent = "Đã tải lên đủ. Đang kiểm tra nguồn và xếp việc dựng phòng…";
+      $("#up-progress-text").textContent = "Đã tải lên đủ. Đang kiểm tra nguồn và xếp việc dựng…";
       const result = await api.api(`/api/uploads/${session.id}/finish`, { method: "POST", json: {}, signal: controller.signal });
       setUploading(false);
       ctx.refreshStatus();
+      ctx.refreshRecent?.();
       ctx.navigate(`#/room/${encodeURIComponent(result.room)}`);
     } catch (error) {
+      if (unmounted) {  // rời trang giữa lúc tải lên: chỉ báo server bỏ phiên tải lên dở
+        if (session) api.api(`/api/uploads/${session.id}`, { method: "DELETE" }).catch(() => {});
+        return;
+      }
       setUploading(false);
       if (error.name === "AbortError") {
         showError("Đã hủy tải lên.");
@@ -303,13 +416,31 @@ export async function mount(container, ctx) {
     }
   }
 
-  page.querySelectorAll("[data-kind]").forEach((button) => button.addEventListener("click", () => setKind(button.dataset.kind)));
-  input.addEventListener("change", () => select(input.files));
-  folderInput.addEventListener("change", () => select(folderInput.files));
+  container.querySelectorAll("[data-kind]").forEach((button) => button.addEventListener("click", () => {
+    if (button.dataset.kind !== kind) setKind(button.dataset.kind);
+  }));
+  input.addEventListener("change", () => {
+    addFiles(input.files);
+    input.value = "";  // chọn lại đúng file đó vẫn nhận
+  });
+  folderInput.addEventListener("change", () => {
+    addFiles(folderInput.files);
+    folderInput.value = "";
+  });
   $("#up-folder").addEventListener("click", () => folderInput.click());
+  $("#up-preview").addEventListener("click", (event) => {
+    if (uploading) return;
+    const remove = event.target.closest("[data-rm]");
+    if (remove) {
+      const file = selection.files[Number(remove.dataset.rm)];
+      select(picked.filter((f) => f !== file));
+    } else if (event.target.closest("#up-clear")) {
+      select([]);
+    }
+  });
   drop.addEventListener("dragover", (event) => {
     event.preventDefault();
-    drop.classList.add("drag");
+    if (!uploading) drop.classList.add("drag");
   });
   drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
   drop.addEventListener("drop", async (event) => {
@@ -317,8 +448,11 @@ export async function mount(container, ctx) {
     drop.classList.remove("drag");
     if (uploading) return;
     const files = await filesFromDrop(event.dataTransfer);
-    if (kind === "video" && files.length > 1 && files.every((f) => PHOTO_RE.test(f.name))) setKind("photos");
-    select(files);
+    if (kind === "video" && files.length > 1 && files.every((f) => PHOTO_RE.test(f.name))) setKind("photos", files);
+    else addFiles(files);
+  });
+  drop.addEventListener("click", (event) => {
+    if (uploading) event.preventDefault();
   });
   nameInput.addEventListener("input", syncRoom);
   roomInput.addEventListener("input", () => {
@@ -334,9 +468,17 @@ export async function mount(container, ctx) {
     }
   };
   window.addEventListener("beforeunload", beforeUnload);
-  setKind("video");
+
+  // file kéo thả ở trang tổng quan: chọn sẵn ở đây
+  const handed = ctx.takeHandoff?.();
+  const files = handed?.files || [];
+  const startKind = files.length && files.every((f) => PHOTO_RE.test(f.name) || f.name.startsWith(".")) ? "photos" : "video";
+  setKind(startKind, files);
+  if (!files.length) $("#up-guide").open = true;  // lần đầu: hiện cách quay / chụp
   return () => {
+    unmounted = true;
     window.removeEventListener("beforeunload", beforeUnload);
     controller?.abort();
+    forget(new Set());
   };
 }

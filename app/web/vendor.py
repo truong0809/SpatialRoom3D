@@ -1,4 +1,5 @@
-"""Tải thư viện của trình xem 3D (three.js, Spark) đúng phiên bản ghim vào app/web/static/vendor/.
+"""Tải thư viện của trình xem 3D (three.js, Spark) và phông chữ của trang (Be Vietnam Pro) đúng phiên bản ghim vào
+app/web/static/vendor/.
 
 Phiên bản, địa chỉ và mã kiểm tra (integrity SHA-512 của gói npm) nằm ở configs/environment/web_viewer.lock.json.
 Thư mục vendor/ không đưa lên Git: chạy lệnh này một lần trên mỗi máy (pod, hoặc laptop dùng để xem offline):
