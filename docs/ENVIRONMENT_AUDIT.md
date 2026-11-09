@@ -1,15 +1,15 @@
 # Môi trường thực nghiệm
 
-_Cập nhật: 04/11/2026 (bản rút gọn, D21; lịch sử trong Git). Repo này đã cài và chạy trên pod ngày 31/10/2026 (mục 7). Các file `configs/environment/*.conf` vẫn để `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`)._
+_Cập nhật: 09/11/2026 (bản rút gọn, D21; lịch sử trong Git). Repo này đã cài và chạy trên pod ngày 31/10/2026, chạy lại trên pod mới cùng volume ngày 08/11/2026 (mục 7). Các file `configs/environment/*.conf` vẫn để `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`)._
 
 ## 1. Pod và bố cục `/workspace`
 
-| Mục | Đã chạy ngày 31/10/2026 | Yêu cầu |
+| Mục | Đã chạy ngày 31/10/2026 (và 08/11/2026 khi khác) | Yêu cầu |
 |---|---|---|
 | Cloud | Secure Cloud | Network volume chỉ gắn được với pod Secure Cloud |
-| GPU | 1 × RTX 4090, bản 48 GB, compute capability 8.9 | ≥ 24 GB VRAM; compute capability 8.0 / 8.6 / 8.9 / 9.0 (A100, A6000, A40, RTX 4090, L40S, H100); không dùng Blackwell |
+| GPU | 1 × RTX 4090, bản 48 GB VRAM (bản thường gặp là 24 GB), compute capability 8.9. Ngày 08/11/2026: RTX 4090 24 GB (`nvidia-smi`: 24564 MiB) | ≥ 24 GB VRAM; compute capability 8.0 / 8.6 / 8.9 / 9.0 (A100, A6000, A40, RTX 4090, L40S, H100); không dùng Blackwell |
 | Driver | hỗ trợ CUDA 13.2 | hỗ trợ CUDA ≥ 12.8 (12.6 với `TORCH_CUDA_OVERRIDE=cu126`); COLMAP bản CUDA cần ≥ 12.9, thấp hơn thì tự dùng bản CPU |
-| Image | CUDA 12.8.1, Ubuntu 22.04: nvcc 12.8.93, gcc 11 (tên template chính xác chưa ghi lại) | bản **devel** (có `nvcc`), gcc ≤ 12; `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` cũng đã chạy được (17/10/2026) |
+| Image | CUDA 12.8.1, Ubuntu 22.04: nvcc 12.8.93, gcc 11 (tên template chính xác chưa ghi lại). Ngày 08/11/2026: template PyTorch 2.8.0, CUDA 12.9.0, Ubuntu 22.04 (nvcc 12.9.86) | bản **devel** (có `nvcc`), gcc ≤ 12; `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` cũng đã chạy được (17/10/2026) |
 | Volume | Network volume 170 GB, EU-CZ-1, `fuse` (MooseFS), `chmod` chạy được | Loại **Network volume**, không dùng Global volume; cho đổi quyền file (ô 1 của notebook kiểm tra) |
 
 `/workspace` là network volume: còn nguyên khi Stop hoặc xóa pod. Mọi thứ ngoài `/workspace` (kể cả `/root`) mất khi Stop pod.
@@ -79,7 +79,7 @@ COLMAP 4.2.1 (conda-forge) và ffmpeg, ghim trong `configs/environment/gs-tools.
 
 ### 4.2 Lệnh chạy chính
 
-`README.md` mục "Chạy trên Runpod" và `docs/USAGE_GUIDE.md`. Luồng sản phẩm: `docs/design/product.md` mục 3.
+`README.md` mục 2 ("Cài đặt và chạy") và `docs/USAGE_GUIDE.md`. Luồng sản phẩm: `docs/design/product.md` mục 3.
 
 ### 4.3 Env `gs-gsplat`
 
@@ -138,6 +138,14 @@ Số Inria công bố cho Deep Blending (trung bình 2 cảnh, code hiện hành
 - **`run_panels.sh` với `VIDEO=1`:** có thể bị `Killed` vì hết RAM (31/10/2026, ở `phong_nhom` và `mipnerf360 room`).
 
 ## 7. Lượt chạy trên pod
+
+**08/11/2026, repo này (commit `b428d95`, lấy bằng `git pull`).** Pod mới (RTX 4090 24 GB, image ở mục 1), cùng network volume với lượt 31/10/2026.
+
+| Việc | Thời gian | Kết quả |
+|---|---|---|
+| `run_all` (env đã có: kiểm tra lại, smoke test) | 3 phút 34 giây | 5/5 bước OK |
+| `bash scripts/web_server.sh start` | | Server chạy; trang chỉ vào được sau khi thêm cổng HTTP 8000 (Edit Pod, pod khởi động lại; trước đó proxy trả 404, cổng hiện "Initializing" cho tới khi server chạy) |
+| Dựng phòng `video10` từ trang web (video 2 phút 54 giây) | train 8 phút 23 giây (các bước khác chưa ghi) | Xong: 249 ảnh định vị, `model.splat` 637.031 Gaussian (20,4 MB), xem được 3D (`docs/RESULTS.md` mục 7) |
 
 **31/10/2026, repo này (commit `c0a7a92`).** Pod ở mục 1; code clone qua HTTPS bằng tay.
 

@@ -1,15 +1,16 @@
 # Tài liệu
 
-Giới thiệu dự án, luồng xử lý và cách chạy nhanh: [README](../README.md) ở gốc repo.
+Giới thiệu dự án theo bốn mục của báo cáo tuần 10 (cấu trúc mã nguồn, cài đặt, phần nhóm làm, thực nghiệm và kết quả sơ bộ): [README](../README.md) ở gốc repo.
 
 ## Mục lục
 
 | Tài liệu | Nội dung |
 |---|---|
 | [USAGE_GUIDE.md](USAGE_GUIDE.md) | Hướng dẫn sử dụng trên Runpod: chuẩn bị volume và pod, notebook, cảnh tự chụp, xuất PLY, benchmark, giao diện dòng lệnh, xử lý lỗi |
+| [RESULTS.md](RESULTS.md) | Kết quả tóm tắt: lượt chạy 31/10/2026 (bảng số, biểu đồ, ảnh so sánh trong `results/`) và sản phẩm chạy trên pod 08/11/2026 |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | Trạng thái hiện tại, quyết định đã chốt, việc đã làm kèm bằng chứng, việc còn mở, việc tiếp theo |
 | [PROJECT_PLAN.md](PROJECT_PLAN.md) | Đề bài, phạm vi, phương pháp, giao thức đánh giá, mốc nghiệm thu, rủi ro |
-| [ENVIRONMENT_AUDIT.md](ENVIRONMENT_AUDIT.md) | Môi trường trên pod, phiên bản ghim, cài đặt và kiểm tra, sự cố đã biết; số đo GPU tham khảo ở mục 7 (chưa phải lượt chạy của repo này) |
+| [ENVIRONMENT_AUDIT.md](ENVIRONMENT_AUDIT.md) | Môi trường trên pod, phiên bản ghim, cài đặt và kiểm tra, sự cố đã biết; các lượt chạy trên pod (31/10/2026, 08/11/2026) và số đo của repo trước ở mục 7 |
 | [design/architecture.md](design/architecture.md) | Cây thư mục, bố cục `/workspace`, ba luồng dữ liệu, khai báo đường dẫn, nguồn gốc mã nguồn |
 | [design/training_modes.md](design/training_modes.md) | Hai chế độ huấn luyện `default` và `mcmc`: protocol, giao thức so sánh, thành phần |
 | [design/experiments.md](design/experiments.md) | Benchmark (Deep Blending, Mip-NeRF 360), thực nghiệm chính, dò tham số `mcmc`, lọc Gaussian sau khi train |

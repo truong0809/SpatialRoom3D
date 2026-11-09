@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng: ảnh chụp hoặc video → mô hình 3DGS
 
-_Cập nhật: 04/11/2026_
+_Cập nhật: 09/11/2026_
 
 Giao diện hiện có:
 - notebook `app/notebooks/runpod.ipynb`, chạy trong Jupyter của pod Runpod; ba notebook `b0_inria.ipynb`, `gsplat_default.ipynb`, `gsplat_mcmc.ipynb` chạy riêng từng phương pháp của thực nghiệm chính (mục 5.1.1);
@@ -69,7 +69,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 | 1 | Kiểm tra máy: GPU, driver, `nvcc`, gcc, VRAM, `/workspace` là network volume và cho đổi quyền file (`chmod`), PyYAML, git | Không |
 | 2 | Kiểm tra pod đọc được repo qua HTTPS (mục 1.3) | Không |
 | 3 | Lấy code: chưa có thì clone nhánh `main` qua HTTPS vào `/workspace/SpatialRoom3D`; đã có thì `git pull --ff-only`. Code trên pod có thay đổi chưa commit thì **không cập nhật** và in danh sách (không xóa, không cất gì). Không chạy khi đang có việc nền | Không |
-| 4 | Cài môi trường ở nền: `scripts/pod/run_all.sh` (env `gs-inria`, `gs-tools`, `gs-gsplat`, kèm smoke test). **Không train.** Lần đầu khoảng 80 phút (đo ngày 17/10/2026 trên RTX 4090) | Có (smoke test) |
+| 4 | Cài môi trường ở nền: `scripts/pod/run_all.sh` (env `gs-inria`, `gs-tools`, `gs-gsplat`, kèm smoke test). **Không train.** Lần đầu 37 phút (31/10/2026; repo trước ngày 17/10/2026: khoảng 80 phút), env đã có thì chỉ kiểm tra lại (3 phút 34 giây ngày 08/11/2026); đo trên RTX 4090 | Có (smoke test) |
 | 5 | Theo dõi việc nền, cập nhật mỗi 15 giây; tự dừng khi hết việc | Không |
 | 6 | Kiểm tra dữ liệu (chỉ đọc): thư mục gốc của từng bộ dữ liệu, từng cảnh có `images/` và `sparse/0/` không | Không |
 | 7 | `WHAT` = `experiment` (kế hoạch `EXP`: `main` là thực nghiệm chính, mục 5.1; `tune_mcmc` là dò tham số mcmc, mục 5.2; `CHAY = False` chỉ in kế hoạch), `report` (bảng và biểu đồ của báo cáo mới nhất của `EXP`), hoặc với benchmark `BENCH`: `check` (kiểm tra dữ liệu), `fetch` (tải dữ liệu về volume), `gsplat` (`default` / `mcmc`), `b0` (3DGS gốc của Inria), `evaluate` (lập lại bảng và biểu đồ). Việc chạy nền chỉ chạy khi `CHAY = True`; `gsplat` và `b0` chỉ được xếp hàng khi dữ liệu qua bước kiểm tra (mục 5) | Tùy |
@@ -238,7 +238,7 @@ Thay cho việc chép file vào volume rồi chạy lệnh ở mục 3.8, có th
    cd /workspace/SpatialRoom3D && bash scripts/web_server.sh start
    ```
    Lệnh in địa chỉ và mật khẩu (xem lại: `bash scripts/web_server.sh status`). Lần đầu nó tải thư viện xem 3D (cần Internet).
-2. Trên trang Runpod, một lần cho mỗi pod: **Edit Pod → Expose HTTP Ports → thêm `8000`**, lưu lại.
+2. Cổng HTTP `8000` của pod phải mở. Tốt nhất là thêm ngay khi tạo pod (mục **Expose HTTP Ports**: thêm `8000` bên cạnh `8888`). Pod đang chạy thì **Edit Pod → Expose HTTP Ports → thêm `8000`**, lưu lại: pod sẽ khởi động lại, nên chạy lại `bash scripts/web_server.sh start`. Trong danh sách HTTP Services, cổng hiện "Initializing" cho tới khi server chạy (đã gặp ngày 08/11/2026).
 3. Mở `https://<POD_ID>-8000.proxy.runpod.net`, nhập mật khẩu.
 4. **Dự án mới** (nút trên thanh bên, hoặc kéo file vào ô "Tạo dự án mới" ở trang Tổng quan): chọn Video hoặc Ảnh chụp (kéo thả được cả thư mục ảnh), xem trước, đặt tên, bấm **Bắt đầu dựng**. Trang tải lên theo từng phần (mạng chập chờn thì tự gửi lại), rồi chuyển sang trang **Tiến độ**.
 5. Xong thì bấm **Mở trình xem 3D**; cảnh cũng hiện ở trang **Tổng quan** (cảnh mới nhất ở ô lớn đầu trang, lịch sử xử lý ở cuối trang).
@@ -433,7 +433,7 @@ Gói kết quả gồm báo cáo (kèm ảnh biểu đồ so sánh trong `output
 | `Killed` khi build gsplat | Ô 4: đặt `MAX_JOBS="4"`, chạy lại ô 4 |
 | `compute capability ... is not in TORCH_CUDA_ARCH_LIST` | GPU không được hỗ trợ (vd. T4, RTX 50xx): deploy GPU khác |
 | `another job is using the GPU` | Đang có việc khác chạy: xem ô 5; muốn dừng thì ô 11 |
-| Trang web: không mở được `https://<POD_ID>-8000.proxy.runpod.net` | Chưa mở cổng HTTP 8000 của pod (Edit Pod → Expose HTTP Ports), hoặc server chưa chạy: `bash scripts/web_server.sh status` |
+| Trang web: không mở được `https://<POD_ID>-8000.proxy.runpod.net` (404, hoặc cổng hiện "Initializing") | Chưa mở cổng HTTP 8000 của pod (Edit Pod → Expose HTTP Ports; pod khởi động lại), hoặc server chưa chạy: `bash scripts/web_server.sh status`, rồi `start` |
 | Trang web hỏi mật khẩu | `bash scripts/web_server.sh status` trên pod in mật khẩu. Server vừa khởi động lại thì phải nhập lại (phiên đăng nhập chỉ nằm trong bộ nhớ của server) |
 | Trang web: "Đang có 3 lượt tải lên dở" | Ba lượt tải lên chưa xong đang giữ chỗ trên volume: chờ chúng xong, hoặc chờ 30 phút (lượt ngừng nhận được xóa để nhường chỗ) |
 | Trang web: dựng lại báo "việc trước vẫn đang dừng" | Việc dựng cũ của phòng đang thoát: chờ vài giây rồi bấm lại (`bash scripts/pod/job.sh status room_<phòng>`) |

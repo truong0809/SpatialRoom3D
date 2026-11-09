@@ -170,7 +170,7 @@ def setup(nb: Notebook) -> None:
 
 `scripts/pod/run_all.sh`: kiểm tra máy → Miniforge + env `gs-inria` (3DGS gốc của Inria) → env `gs-tools` (COLMAP, ffmpeg) → env `gs-gsplat` (kèm smoke test) → gói log. Phiên bản ghim trong `configs/environment/`. **Chỉ cài môi trường, không train.**
 
-Lần đầu trên volume trống mất khoảng 80 phút (đo trên RTX 4090 ngày 17/10/2026: `gs-inria` 29 phút, `gs-gsplat` 32 phút, `gs-tools` 18 phút); pod vẫn tính tiền trong lúc cài. Chạy lại khi env đã có thì chỉ kiểm tra lại. Ô này xong ngay, việc chạy tiếp ở nền (theo dõi ở ô 5).
+Lần đầu trên volume trống mất 37 phút (RTX 4090, 31/10/2026; repo trước ngày 17/10/2026: khoảng 80 phút); pod vẫn tính tiền trong lúc cài. Chạy lại khi env đã có thì chỉ kiểm tra lại (3 phút 34 giây ngày 08/11/2026). Ô này xong ngay, việc chạy tiếp ở nền (theo dõi ở ô 5).
 """)
     nb.code(r"""
 %%bash
