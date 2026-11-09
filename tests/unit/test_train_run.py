@@ -175,6 +175,38 @@ def test_test_list_uses_split_file_and_filtered_points(env, tmp_path):
     assert meta["train_view"]["points_kept"] == 1 and meta["train_view"]["points_total"] == 3
 
 
+def test_excluded_images_are_neither_trained_nor_scored(env, tmp_path):
+    # khung đệm của quy tắc segments: không train, không chấm, không tính khi lọc điểm SfM
+    write_points3d(env["scene"] / "sparse" / "0" / "points3D.bin", [
+        {"id": 1, "xyz": (0.0, 0.0, 1.0), "rgb": (1, 2, 3), "error": 0.5, "track": [(1, 0), (2, 0)]},
+        {"id": 2, "xyz": (1.0, 0.0, 1.0), "rgb": (1, 2, 3), "error": 0.5, "track": [(1, 1), (8, 0)]},
+    ])
+    test_list = tmp_path / "test.txt"
+    test_list.write_text("00009.jpg\n", encoding="utf-8")
+    exclude = tmp_path / "exclude.txt"
+    exclude.write_text("00008.jpg\n00010.jpg\n", encoding="utf-8")
+    runner = FakeRunner()
+    assert run(env, "--test-list", str(test_list), "--exclude-list", str(exclude), runner=runner) == 0
+    out = env["out"].resolve()
+    split = json.loads((out / "split.json").read_text(encoding="utf-8"))
+    assert split["test"] == ["00009.jpg"] and split["excluded"] == ["00008.jpg", "00010.jpg"]
+    assert not {"00008.jpg", "00010.jpg"} & set(split["train"]) and len(split["train"]) == 14
+    assert value_after(runner.calls[0]["cmd"], "--split-file") == str(out / "split.json")
+    # điểm 2 có một ảnh train (00001) và một ảnh bỏ ra (00008): không đủ hai ảnh train nên không giữ
+    assert [p.point_id for p in read_points3d_binary(out / "data" / "sparse" / "0" / "points3D.bin")] == [1]
+    meta = json.loads((out / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["split"]["num_excluded"] == 2 and "excluded" not in meta["split"]
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "OK" and summary["split_applied_ok"] is True
+
+
+def test_an_exclude_list_needs_a_test_list(env, tmp_path, capsys):
+    exclude = tmp_path / "exclude.txt"
+    exclude.write_text("00008.jpg\n", encoding="utf-8")
+    assert run(env, "--exclude-list", str(exclude)) == 2
+    assert "only used together" in capsys.readouterr().err and not env["out"].exists()
+
+
 def test_failures_and_reruns(env):
     assert run(env, runner=FakeRunner(fail_on="train")) == 1
     meta = json.loads((env["out"] / "run_meta.json").read_text(encoding="utf-8"))

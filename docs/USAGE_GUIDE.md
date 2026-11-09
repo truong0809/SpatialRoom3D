@@ -187,6 +187,18 @@ Bị từ chối, kèm hướng dẫn chụp thêm. Pipeline 3DGS nhiều góc n
 - Với video, frame test nằm xen giữa các frame train nên điểm số lạc quan (`docs/PROJECT_PLAN.md` mục 4.2).
 - Với ảnh chụp, các ảnh cách nhau xa hơn, nhưng vẫn là ảnh của cùng lượt chụp.
 
+**Đánh giá theo đoạn (khi không có đoạn quay kiểm tra riêng).** Lấy 6 đoạn liền của chính video làm tập test (tổng 1/8 số khung, như quy tắc mặc định), bỏ 3 khung mỗi bên đoạn (không train, không chấm), rồi train `default` và `mcmc` với 3 seed trên đúng tập chia đó:
+
+```bash
+cd /workspace/SpatialRoom3D
+DRY_RUN=1 bash scripts/pod/run_segments.sh phong_nhom                                  # xem trước các lệnh
+bash scripts/pod/job.sh start seg_phong_nhom -- bash scripts/pod/run_segments.sh phong_nhom   # chạy nền
+```
+
+- Cần mô hình COLMAP của cảnh đã có (`outputs/custom_scenes/<cảnh>/colmap`, từ `run_scene.sh`). Không sửa gì ở đó; kết quả để riêng ở `outputs/custom_segments/<cảnh>/` (tập chia: `split/segments.json`), bảng so sánh ở `outputs/reports/segments_<cảnh>_<thời gian>.md`.
+- Khoảng 6 lượt train (2 chế độ × 3 seed), tức khoảng 1,5 giờ GPU cho một phòng cỡ phòng nhóm. Đổi bằng `SEEDS="42"`, `BLOCKS`, `FRACTION`, `GAP`.
+- Khung test vẫn nằm trên đường đã quay (nội suy giữa hai đoạn train), chỉ cách khung train gần nhất ít nhất `GAP + 1` khung (`segments.json` ghi số giây). Đoạn quay kiểm tra theo đường khác (`docs/data/capture_protocol.md` mục 4) vẫn là cách đánh giá chặt hơn.
+
 ### 3.7 Đổi tham số train
 
 Ô 8 và `run_scene.sh` (mặc định) chạy hai lượt chuẩn: `default`, rồi `mcmc` với `cap_max` bằng số Gaussian cuối của `default` (không có số cố định). Muốn thử tham số khác, sau khi cảnh đã có COLMAP, chạy trong terminal của Jupyter. `TAG` cho mỗi lượt một thư mục riêng `<chế_độ>_<TAG>_s<seed>`, lượt chuẩn không bị ghi đè:

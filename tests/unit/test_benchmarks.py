@@ -487,6 +487,14 @@ def test_evaluate_picks_the_result_folder(sh):
     assert sorted(reports.glob("compare_custom_*.md"))
     assert evaluate(sh, "nope").returncode == 2
     assert evaluate(sh, "custom_scene").returncode == 0  # mọi cảnh tự chụp
+    # CUSTOM_ROOT: kết quả để ở thư mục khác (scripts/pod/run_segments.sh)
+    other = sh.root / "segments"
+    out = evaluate(sh, "custom", "phong01", CUSTOM_ROOT=other)
+    assert out.returncode == 1 and f"no results for scene phong01 in {other}" in out.stdout
+    (other / "phong01").mkdir(parents=True)
+    out = evaluate(sh, "custom", "phong01", CUSTOM_ROOT=other, REPORT=reports / "segments_phong01")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert (reports / "segments_phong01.md").is_file()
 
 
 def test_prepare_data_checks_a_benchmark_without_gpu(sh):

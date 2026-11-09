@@ -465,6 +465,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="code Depth Anything V2 cho lượt có sr3d.mono (mặc định: <gsplat-dir>/../depth_anything_v2)")
     parser.add_argument("--seed", type=int, default=None, help="mặc định: default_seed trong file cấu hình")
     parser.add_argument("--test-list", type=Path, help="file danh sách ảnh test (thay cho mỗi ảnh thứ test_every)")
+    parser.add_argument("--exclude-list", type=Path,
+                        help="file danh sách ảnh bỏ ra: không train, không chấm (đi kèm --test-list; vd. khung đệm "
+                             "của python -m src.training.split segments)")
     cap = parser.add_mutually_exclusive_group()
     cap.add_argument("--cap-max", type=int, help="giới hạn số Gaussian cho MCMC (ghi đè chính sách trong cấu hình)")
     cap.add_argument("--cap-max-from", type=Path, help="thư mục lượt chạy baseline cùng cảnh để lấy số Gaussian")
@@ -505,7 +508,7 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
         scene_name = args.scene_name or scene_dir.name
         data_factor = int(spec.protocol["data_factor"])
         scene_info = inspect_scene(scene_dir, data_factor)
-        split = make_split(scene_dir, spec.protocol["test_every"], args.test_list)
+        split = make_split(scene_dir, spec.protocol["test_every"], args.test_list, args.exclude_list)
         seed = args.seed if args.seed is not None else int(config.get("default_seed", 42))
         baseline = load_summary(args.cap_max_from).to_dict() if args.cap_max_from else None
         cap_max, cap_source = resolve_cap_max(spec, args.cap_max, baseline, seed,
@@ -565,7 +568,7 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
                 "cap_max": cap_source, "scene_info": scene_info, "data_dir": str(data_dir),
                 **({"png_cache": str(png_cache_dir(out, data_factor, scene_info["fingerprint"]))}
                    if data_factor > 1 else {}),
-                "split": {k: v for k, v in split.to_dict().items() if k not in ("train", "test")},
+                "split": {k: v for k, v in split.to_dict().items() if k not in ("train", "test", "excluded")},
                 **({"hooks": hook_info} if hooks else {}),
                 **({"mono": shlex.join(mono_cmd)} if mono_cmd else {}),
                 "train": shlex.join(train_cmd), "eval": shlex.join(eval_cmd), "warnings": warnings}
@@ -651,7 +654,7 @@ def main(argv: list[str] | None = None, runner: Callable[..., int] = run_command
         "failed_step": None,
         "spec": spec.to_dict(),
         "cap_max": cap_source,
-        "split": {k: v for k, v in split.to_dict().items() if k not in ("train", "test")},
+        "split": {k: v for k, v in split.to_dict().items() if k not in ("train", "test", "excluded")},
         "scene_info": scene_info,
         "data_dir": str(data_dir),
         "train_view": train_view,

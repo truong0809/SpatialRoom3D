@@ -27,10 +27,11 @@
 #   SPLAT_STATS=force      tinh lai ca khi da co (lan dau doc moi PLY cuoi: vai phut voi thuc nghiem chinh)
 #   ENV_NAME=gs-gsplat     env co numpy de tinh thong ke PLY (khong co thi python3 cua may neu co numpy)
 #   CHARTS=0               khong ve bieu do (mac dinh ve khi co Python co matplotlib: env gs-gsplat, hoac python3)
+#   CUSTOM_ROOT=<thu muc>  canh tu chup: doc ket qua o thu muc nay thay cho results.gsplat cua configs/custom_scene.yaml
 
 set -euo pipefail
 
-usage() { sed -n '2,29p' "$0"; exit 2; }
+usage() { sed -n '2,30p' "$0"; exit 2; }
 [ "$#" -ge 1 ] || usage
 WHAT="$1"
 shift
@@ -67,7 +68,7 @@ fi
 
 case "$WHAT" in
   custom|custom_scene|app)
-    ROOT="$(registry_value custom_scene results.gsplat)"
+    ROOT="${CUSTOM_ROOT:-$(registry_value custom_scene results.gsplat)}"  # CUSTOM_ROOT: vd. scripts/pod/run_segments.sh
     if [ "$#" -eq 0 ]; then
       [ -d "$ROOT" ] || { echo "ERROR: no results of your own scenes in $ROOT"; exit 1; }
       ROOTS+=("$ROOT")

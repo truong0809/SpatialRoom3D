@@ -3,6 +3,8 @@
 Dữ liệu là tên ảnh tổng hợp để kiểm tra logic.
 """
 
+import json
+
 import pytest
 
 from colmap_writer import make_model, write_points3d
@@ -11,9 +13,11 @@ from src.training.split import (
     every_nth_split,
     list_split,
     load_split,
+    main as split_main,
     make_split,
     make_train_view,
     read_test_list,
+    segment_split,
     write_split,
 )
 
@@ -121,3 +125,81 @@ def test_points3d_roundtrip_and_train_view(tmp_path):
     assert (tmp_path / "view" / "sparse" / "0" / "images.bin").is_file()
     with pytest.raises(ValueError, match="enough training images"):
         make_train_view(scene, tmp_path / "view2", split, min_train_views=4)
+
+
+# ------------------------------------------------------------------- ảnh bỏ ra, quy tắc segments
+def test_list_split_with_excluded_images():
+    split = list_split(names(8), ["00004.jpg"], ["00005.jpg", "00003.jpg"])
+    assert split.test == ["00004.jpg"] and split.excluded == ["00003.jpg", "00005.jpg"]
+    assert split.train == ["00001.jpg", "00002.jpg", "00006.jpg", "00007.jpg", "00008.jpg"]
+    data = split.to_dict()
+    assert data["num_excluded"] == 2 and data["excluded"] == ["00003.jpg", "00005.jpg"]
+    assert "excluded" not in list_split(names(8), ["00004.jpg"]).to_dict()  # không có ảnh bỏ ra: như trước
+    with pytest.raises(ValueError, match="both"):
+        list_split(names(8), ["00004.jpg"], ["00004.jpg"])
+    with pytest.raises(ValueError, match="excluded image"):
+        list_split(names(8), ["00004.jpg"], ["99999.jpg"])
+
+
+def test_make_split_with_exclude_list_and_roundtrip(tmp_path):
+    scene = tmp_path / "scene"
+    make_model(scene / "sparse" / "0", names(10))
+    exclude = tmp_path / "exclude.txt"
+    exclude.write_text("# khung đệm\n00009.jpg\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="only used together"):
+        make_split(scene, exclude_list=exclude)
+    test = tmp_path / "test.txt"
+    test.write_text("00010.jpg\n", encoding="utf-8")
+    split = make_split(scene, test_list=test, exclude_list=exclude)
+    assert split.excluded == ["00009.jpg"] and "00009.jpg" not in split.train and len(split.train) == 8
+    write_split(split, tmp_path / "split.json")
+    loaded = load_split(tmp_path / "split.json")
+    assert loaded.excluded == ["00009.jpg"] and loaded.digest() == split.digest()
+
+
+def test_segment_split_holds_out_spread_blocks_with_gaps():
+    frames = names(250)
+    test, excluded, segments = segment_split(frames, blocks=6, test_fraction=0.125, gap=3)
+    assert len(segments) == 6 and [len(item["test"]) for item in segments] == [5] * 6 and len(test) == 30
+    assert [len(item["excluded"]) for item in segments] == [6] * 6 and len(excluded) == 36
+    order = {name: index for index, name in enumerate(frames)}
+    train = [name for name in frames if name not in set(test) | set(excluded)]
+    # khung test cách khung train gần nhất ít nhất gap + 1 khung; các đoạn trải từ đầu tới cuối video
+    assert min(min(abs(order[t] - order[name]) for name in train) for t in test) == 4
+    firsts = [order[item["test"][0]] for item in segments]
+    assert firsts == sorted(firsts) and firsts[0] < 30 and firsts[-1] > 200
+    assert segment_split(frames[::-1], 6, 0.125, 3)[0] == test  # chỉ phụ thuộc tên ảnh, không phụ thuộc thứ tự đưa vào
+
+
+def test_segment_split_refuses_bad_settings():
+    with pytest.raises(ValueError, match="too few"):
+        segment_split(names(30), blocks=6, test_fraction=0.125, gap=3)
+    with pytest.raises(ValueError, match="blocks"):
+        segment_split(names(100), blocks=0)
+    with pytest.raises(ValueError, match="test_fraction"):
+        segment_split(names(100), test_fraction=0.6)
+    with pytest.raises(ValueError, match="left for training"):
+        segment_split(names(40), blocks=2, test_fraction=0.45, gap=1)
+
+
+def test_segments_command_writes_lists_for_the_training_run(tmp_path, capsys):
+    scene = tmp_path / "colmap"
+    make_model(scene / "sparse" / "0", names(120))
+    frames = [{"name": name, "time_s": round(index * 0.5, 3)} for index, name in enumerate(names(120))]
+    (scene / "frames_report.json").write_text(json.dumps({"source_type": "video", "frames": frames}), encoding="utf-8")
+    out = tmp_path / "split"
+    assert split_main(["segments", "--scene", str(scene), "--out", str(out), "--blocks", "4", "--gap", "2"]) == 0
+    info = json.loads((out / "segments.json").read_text(encoding="utf-8"))
+    assert (info["num_test"], info["num_excluded"], info["num_train"]) == (16, 16, 88)
+    assert info["min_frames_to_train"] == 3 and info["min_seconds_to_train"] == 1.5
+    assert all(item["time_s"] is not None for item in info["segments"])
+    assert "(1.5 giay)" in capsys.readouterr().out
+    split = make_split(scene, test_list=out / "test.txt", exclude_list=out / "exclude.txt")
+    assert (len(split.test), len(split.excluded), len(split.train)) == (16, 16, 88)
+
+    (scene / "frames_report.json").unlink()  # ảnh chụp / không có báo cáo khung: không có thời điểm
+    assert split_main(["segments", "--scene", str(scene), "--out", str(tmp_path / "s2"), "--blocks", "4"]) == 0
+    assert json.loads((tmp_path / "s2" / "segments.json").read_text(encoding="utf-8"))["min_seconds_to_train"] is None
+    assert split_main(["segments", "--scene", str(scene), "--out", str(tmp_path / "s3"), "--blocks", "40"]) == 2
+    assert not (tmp_path / "s3").exists()  # lỗi thì không ghi gì
+    assert split_main(["segments", "--scene", str(tmp_path / "none"), "--out", str(tmp_path / "s4")]) == 2
