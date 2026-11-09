@@ -12,7 +12,7 @@ Giao diện hiện có:
 
 ### 1.1 Network volume
 
-Runpod → **Storage → New Network Volume**, chọn loại **Network volume** (không chọn Global volume, mục dưới): ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; chạy cả dò tham số và vòng ghép ở mục 5.2 rồi thêm chế độ mới vào thực nghiệm chính thì nên 170 GB; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
+Runpod → **Storage → New Network Volume**, chọn loại **Network volume** (không chọn Global volume, mục dưới): ≥ 100 GB (thực nghiệm chính ở mục 5.1 giữ mọi file kết quả: khoảng 56 GB cộng môi trường; chạy thêm dò tham số ở mục 5.2 thì khoảng 110 GB, lượt ngày 31/10/2026 dùng 170 GB; volume tăng được, không giảm được), ở một data center Secure Cloud có loại GPU ở mục 1.2. Volume giữ mọi thứ trong `/workspace` (code, env conda, dữ liệu, kết quả) khi Stop hoặc Terminate pod. Pod sau này phải ở **cùng data center** mới gắn được volume này.
 
 Volume phải cho đổi quyền file (`chmod`): git, conda và pip đều cần. Runpod có ba loại:
 
@@ -54,7 +54,7 @@ Tải file `app/notebooks/runpod.ipynb` lên `/workspace` (kéo thả vào thanh
 |---|---|
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
 | Thực nghiệm chính (mục 5.1): tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4) | 7 (`WHAT = "experiment"`, `EXP = "main"`, `CHAY = True`), theo dõi ở ô 5 |
-| Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 8 giờ), rồi vòng ghép khi đã có file kế hoạch | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, sau đó `EXP = "tune_mcmc_combo"`, `CHAY = True`), theo dõi ở ô 5 |
+| Dò tham số mcmc trên `room` (mục 5.2; tốn GPU khoảng 8 giờ) | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, `CHAY = True`), theo dõi ở ô 5 |
 | Bảng và biểu đồ so sánh của thực nghiệm gần nhất (mục 5.1; không cần GPU) | 7 (`WHAT = "report"`, `EXP = "main"` hoặc kế hoạch khác) |
 | Ảnh so sánh các lượt trên cùng ảnh test và video xếp chồng (mục 4; không cần GPU) | 7 (`WHAT = "panels"`) hoặc 9 (`SO_SANH = True`) |
 | Đưa dữ liệu của bạn lên (mục 2.1; trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
@@ -327,7 +327,7 @@ Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "main"`, `VOLUME_GB` = 
 - Chỗ trống được kiểm tra trước khi chạy và trước mỗi seed, chỉ cho các lượt chưa xong: mỗi lượt tính theo dung lượng thật của lượt cùng cảnh, cùng chế độ đã xong ở seed khác (chưa có thì theo ước lượng). Không đủ thì dừng train, các lượt đã xong vẫn giữ; tăng volume rồi chạy lại để làm nốt. `SPACE_CHECK=0` bỏ qua.
 - Pod vẫn tính tiền suốt lượt chạy. `AUTO_STOP = True` ở ô 7 (`AUTO_STOP=1` khi chạy lệnh) dừng pod khi việc cuối cùng xong; chưa thử trên pod.
 - Kết quả: `/workspace/outputs/reports/main_<thời_gian>.md` (các bước, bảng so với `default` của từng benchmark) và gói `/workspace/ket_qua_main_<thời_gian>.tar.gz`; ô 10 cũng in các bước của lượt gần nhất.
-- Biểu đồ tổng của lần chạy: `/workspace/outputs/reports/main_<thời_gian>_charts/`, gồm `01_doi_chieu_inria.png` (`default` so với B0 và số Inria công bố) và `02_so_voi_default.png` (chênh lệch tổng của `mcmc` so với `default` trên mọi cặp (cảnh, seed), gộp hai benchmark, kèm một dòng cho mỗi benchmark); `index.md` ghi cách đọc và bảng số, `main_<thời_gian>.md` dẫn tới các ảnh. Xem trong notebook: ô 7 với `WHAT = "report"` (bảng kẻ sẵn rồi các ảnh, báo cáo mới nhất của `EXP`). Cách đọc, khi nào biểu đồ không vẽ: `docs/design/comparisons.md`, mục Biểu đồ. Cần matplotlib (env `gs-gsplat` có sẵn); `CHARTS=0` thì không vẽ. Trước khi chọn `mcmc_indoor` (mục 5.2, vòng ghép), báo cáo của `main` chỉ dùng để kiểm điều kiện (ảnh đối chiếu Inria); chênh lệch `default` / `mcmc` trên các cảnh ngoài `room` đọc sau khi đã ghi quyết định (`docs/design/experiments.md` mục 3.6, bước 5; notebook in dòng nhắc).
+- Biểu đồ tổng của lần chạy: `/workspace/outputs/reports/main_<thời_gian>_charts/`, gồm `01_doi_chieu_inria.png` (`default` so với B0 và số Inria công bố) và `02_so_voi_default.png` (chênh lệch tổng của `mcmc` so với `default` trên mọi cặp (cảnh, seed), gộp hai benchmark, kèm một dòng cho mỗi benchmark); `index.md` ghi cách đọc và bảng số, `main_<thời_gian>.md` dẫn tới các ảnh. Xem trong notebook: ô 7 với `WHAT = "report"` (bảng kẻ sẵn rồi các ảnh, báo cáo mới nhất của `EXP`). Cách đọc, khi nào biểu đồ không vẽ: `docs/design/comparisons.md`, mục Biểu đồ. Cần matplotlib (env `gs-gsplat` có sẵn); `CHARTS=0` thì không vẽ.
 - Tên bản: `main` là tên của code tổng (việc nền, báo cáo, log, gói kết quả); chạy riêng từng phương pháp mang tên notebook (mục 5.1.1), dò tham số là `tune_mcmc`. Ghi chú, báo cáo đồ án: gọi đúng các tên này (`docs/design/experiments.md` mục 2.5).
 
 #### 5.1.1 Chạy riêng từng phương pháp
@@ -375,10 +375,10 @@ VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --
 Trong notebook: ô 7 với `WHAT = "experiment"`, `EXP = "tune_mcmc"`, `VOLUME_GB`, rồi `CHAY = True`.
 
 - Ước lượng (chưa đo): khoảng 8 giờ GPU trên RTX 4090 (khoảng 6,7 giờ khi chạy sau `main`); thêm khoảng 35 GB trên volume. Lúc tải, `360_v2.zip` (khoảng 12,5 GB) nằm tạm trên volume.
-- Một cảnh, một seed: chỉ để chọn ứng viên cho vòng ghép, chưa phải kết quả "cải thiện". `room` là cảnh dùng để chọn tham số: khi so `mcmc_indoor` trong thực nghiệm chính, kết luận dựa trên 5 cảnh còn lại. Bảng tự động vẫn có `room`; bảng không có `room`: `docs/design/experiments.md` mục 3.1.
+- Một cảnh, một seed: chỉ để sàng lọc, chưa phải kết quả "cải thiện"; đọc theo luật ghi trước khi có số liệu (`docs/design/experiments.md` mục 3.6). `room` là cảnh dùng để dò tham số.
 - Lượt `room/default_s42`, `room/mcmc_s42` dùng chung với thực nghiệm chính: chỉ train một lần, dù `main` chạy trước hay sau. 16 biến thể có tag nên bảng của `main` không lẫn chúng (có một dòng cảnh báo ghi số lượt để ngoài); xem lại bảng của các biến thể: `TAGS="mono kr bilagrid v2 or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth rs30k sh2" SCENES=room bash scripts/run_evaluate.sh mipnerf360` (ô 7: `WHAT = "evaluate"`, `BENCH = "mipnerf360"`, `SCENES = "room"`, `TAGS`).
 - Kết quả: `/workspace/outputs/reports/tune_mcmc_<thời_gian>.md`. Lượt `mono`, `v2` có thêm `mono_depth.json` (depth prior dùng được cho bao nhiêu ảnh train, tương quan với điểm SfM); lượt `kr`, `mono`, `v2` có `sr3d_hooks.jsonl` (nhật ký của hook). Prior không khớp điểm SfM của cảnh thì lượt `mono` (và `v2`) lỗi ở bước `mono`, không train; các lượt khác vẫn chạy. Lượt có hook gặp tham số không hữu hạn thì dừng và lỗi (`FloatingPointError`), không tự tắt thành phần nào.
-- **Vòng ghép** (`docs/design/experiments.md` mục 3.6): từ kết quả, chọn tối đa 3 ứng viên theo luật cố định trước, ghép thành 1–4 cấu hình, chạy 2 seed mới (43, 44) trên `room` để chọn `mcmc_indoor`. File kế hoạch `configs/experiments/tune_mcmc_combo.yaml` được viết khi có số liệu (chưa có); chạy bằng ô 7 với `EXP = "tune_mcmc_combo"`, sau `main` (cần độ lệch chuẩn của `mcmc` trên `room` và dùng lại `default`, `mcmc` seed 43, 44 của nó), trên cùng loại GPU với `main`. Ước lượng: khoảng 1–3,5 giờ GPU, thêm khoảng 10–20 GB.
+- Kết quả ngày 31/10/2026: không biến thể nào tốt hơn `mcmc` rõ ràng (`docs/PROJECT_STATUS.md` mục "Kết quả"); vòng ghép trên 2 seed mới đã bỏ (D25).
 
 ## 6. Giao diện dòng lệnh `python -m app.cli`
 

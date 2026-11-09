@@ -2,11 +2,9 @@
 # của mcmc. 3 biến thể mỗi biến thể thêm một thành phần của notebook demo v2 / v4 của nhóm (depth prior,
 # Kill-then-Relocate, bilateral grid); một biến thể (v2) bật cùng lúc mọi thứ notebook v2 thêm vào mcmc; 12 biến thể mỗi
 # biến thể chỉ đổi một tham số so với mcmc. Sau khi train, mọi lượt được lọc Gaussian rồi chấm lại.
-# Mục đích: sàng lọc cho một chế độ mới (mcmc_indoor trong configs/base.yaml). Các biến thể có ích (trừ v2, là một gói)
-# được ghép thành vài cấu hình, chạy 2 seed mới (43, 44) trên room (vòng ghép, docs/design/experiments.md mục 3.6);
-# cấu hình được chọn thành mcmc_indoor và được so với mcmc trên 6 cảnh × 3 seed của thực nghiệm chính. room là cảnh dùng
-# để chọn, nên kết luận dựa trên 5 cảnh còn lại. Một cảnh, một seed: chỉ để sàng lọc, không đủ để kết luận "cải thiện"
-# (mục 3 của tài liệu đó).
+# Mục đích: sàng lọc tham số của mcmc cho cảnh trong nhà. Một cảnh, một seed: chỉ để sàng lọc, không đủ để kết luận
+# "cải thiện"; kết quả đọc theo luật ghi trước khi có số liệu (docs/design/experiments.md mục 3, 3.6). Đã chạy ngày
+# 31/10/2026: không biến thể nào hơn mcmc rõ ràng, nên không thêm chế độ mới; vòng ghép trên 2 seed mới đã bỏ (D25).
 # Chạy trên pod (một việc nền; dữ liệu còn thiếu thì tự tải; Depth Anything V2 Small cho mono và v2 thì tự tải ở bước
 # depth_anything, không tải được thì chỉ bỏ hai lượt đó; lượt đã xong tự bỏ qua; mọi file kết quả được giữ):
 #   VOLUME_GB=<dung lượng volume> bash scripts/pod/run_experiment.sh tune_mcmc --background
@@ -34,7 +32,7 @@ variants:
   - {mode: mcmc, tag: bilagrid, set: {use_bilateral_grid: true}, description: "bilateral grid của gsplat (Wang et al., ACM TOG 2024): một phép biến đổi màu học riêng cho mỗi ảnh train, hấp thụ phơi sáng / cân bằng trắng tự động; ảnh test render không qua grid"}
   # Gói v2: cùng lúc mọi thứ notebook v2 thêm vào mcmc, nhưng theo protocol chung (30.000 vòng, cap_max theo default,
   # antialiased tắt; không tự tính lại global_scale / tâm cảnh). Chỉ trả lời "gói v2 so với mcmc"; không phải ứng viên
-  # của vòng ghép (docs/design/experiments.md mục 3.6, 3.7).
+  # (docs/design/experiments.md mục 3.6, 3.7).
   - {mode: mcmc, tag: v2, set: {depth_loss: true, random_bkgd: true, use_bilateral_grid: true, strategy.refine_stop_iter: 24000, sr3d.kr: true, sr3d.mono: true}, description: "gói v2: depth + rbg + bilagrid + kr + mono, refine_stop_iter 24000 (0,8 × số vòng, như notebook)"}
   # 12 biến thể tham số:
   - {mode: mcmc, tag: or0001, set: {opacity_reg: 0.001}, description: "opacity_reg 0.001 (giá trị paper 3DGS-MCMC dùng cho Deep Blending)"}

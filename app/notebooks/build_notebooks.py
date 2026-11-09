@@ -229,10 +229,6 @@ def show_report(report):
     if get_ipython is None or get_ipython() is None:  # ngoài Jupyter: in chữ, chỉ ghi tên ảnh
         display = None
     text = open(report, encoding="utf-8").read()
-    if text.startswith("# Thực nghiệm main "):  # docs/design/experiments.md mục 3.6, bước 5
-        print("Nhắc: trước khi chọn mcmc_indoor (vòng ghép), báo cáo của main chỉ dùng để kiểm điều kiện: các bước OK, "
-              "đối chiếu Inria (default so với B0 và số công bố), đủ seed, độ lệch chuẩn của default, mcmc trên room. "
-              "Chênh lệch default / mcmc trên các cảnh ngoài room: đọc sau khi đã ghi quyết định.")
     if display is None:
         print(text)
     else:  # ảnh trong báo cáo dẫn bằng đường dẫn tương đối, không hiện được ở đây: hiện riêng bên dưới
@@ -355,7 +351,7 @@ Notebook này nằm trong repo (`app/notebooks/runpod.ipynb`), dùng cho **pod m
 |---|---|
 | Lần đầu trên pod mới, volume trống: chỉ cài môi trường | 1 → 2 → 3 → 4 (theo dõi ở ô 5) |
 | Thực nghiệm chính: tự tải dữ liệu, so sánh `default` / `mcmc`, 3 seed (tốn GPU nhiều giờ; gửi được ngay sau ô 4, tự chạy khi cài xong) | 7 (`WHAT = "experiment"`, `EXP = "main"`, `CHAY = True`), theo dõi ở ô 5 |
-| Dò tham số mcmc trên `room` (tốn GPU khoảng 8 giờ), rồi vòng ghép khi đã có file kế hoạch | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, sau đó `EXP = "tune_mcmc_combo"`, `CHAY = True`), theo dõi ở ô 5 |
+| Dò tham số mcmc trên `room` (tốn GPU khoảng 8 giờ) | 7 (`WHAT = "experiment"`, `EXP = "tune_mcmc"`, `CHAY = True`), theo dõi ở ô 5 |
 | Đưa dữ liệu của bạn lên (trong lúc ô 4 chạy cũng được), rồi kiểm tra | 6 |
 | Benchmark bạn chọn: tải dữ liệu, Deep Blending / Mip-NeRF 360 (tốn GPU) | 7 (`CHAY = True`), theo dõi ở ô 5 |
 | Cảnh tự chụp: thư mục ảnh hoặc video (tốn GPU) | 8 (`CHAY = True`), theo dõi ở ô 5, kết quả ở ô 9 |
@@ -407,8 +403,8 @@ Chọn `WHAT` (và `BENCH` với các việc của một benchmark). Việc ch�
 
 | `WHAT` | Việc | Ghi chú |
 |---|---|---|
-| `"experiment"` | Một thực nghiệm theo kế hoạch `EXP` trong `configs/experiments/` (`scripts/pod/run_experiment.sh`). `EXP = "main"`: **thực nghiệm chính**, tải dữ liệu còn thiếu → B0 trên Deep Blending → `default`, `mcmc` với seed 42, 43, 44 trên Deep Blending (2 cảnh) và 4 cảnh trong nhà của Mip-NeRF 360 → bảng so sánh → gói kết quả. `EXP = "tune_mcmc"`: **dò tham số mcmc** trên `room`, seed 42: `default`, `mcmc` và 16 biến thể của `mcmc` (depth prior, Kill-then-Relocate, bilateral grid của notebook v2 và gói v2, chạy trước; 12 tham số), lọc Gaussian sau khi train, bảng so với `default`, với `mcmc` và trước / sau khi lọc; tự tải Depth Anything V2 Small cho depth prior (không tải được thì chỉ bỏ hai lượt dùng nó). `EXP = "tune_mcmc_combo"`: **vòng ghép**, 2 seed mới trên `room`, sau `main` (file kế hoạch viết khi có kết quả `tune_mcmc`) | Một việc nền. Ước lượng: `main` khoảng 12 giờ GPU, thêm khoảng 56 GB trên volume; `tune_mcmc` khoảng 8 giờ GPU (khoảng 6,7 giờ khi chạy sau `main`), thêm khoảng 35 GB; vòng ghép khoảng 1–3,5 giờ GPU, thêm khoảng 10–20 GB (giữ mọi file). Đặt `VOLUME_GB` đúng dung lượng volume. `CHAY = False`: chỉ in kế hoạch và dữ liệu đã có. Luôn chạy đầy đủ; `BENCH`, `SEEDS`, `SCENES` không dùng |
-| `"report"` | In báo cáo mới nhất của thực nghiệm `EXP` (`/workspace/outputs/reports/<EXP>_<thời gian>.md`): các bước, bảng của từng benchmark (kẻ bảng sẵn), rồi biểu đồ tổng của lần chạy (ảnh trong `<EXP>_<thời gian>_charts/`: đối chiếu Inria, chênh lệch tổng so với từng mốc, gộp các benchmark; cách đọc và bảng số ở `index.md` của thư mục đó) | Không dùng GPU, chạy ngay. Bản chạy riêng một phương pháp (`b0_inria`, `gsplat_default`, `gsplat_mcmc`): ô "Bảng" của notebook đó. Trước khi chọn `mcmc_indoor` (vòng ghép), báo cáo của `main` chỉ dùng để kiểm điều kiện (ảnh đối chiếu Inria `01_doi_chieu_inria.png`; ô này in dòng nhắc; `docs/design/comparisons.md`, mục Biểu đồ) |
+| `"experiment"` | Một thực nghiệm theo kế hoạch `EXP` trong `configs/experiments/` (`scripts/pod/run_experiment.sh`). `EXP = "main"`: **thực nghiệm chính**, tải dữ liệu còn thiếu → B0 trên Deep Blending → `default`, `mcmc` với seed 42, 43, 44 trên Deep Blending (2 cảnh) và 4 cảnh trong nhà của Mip-NeRF 360 → bảng so sánh → gói kết quả. `EXP = "tune_mcmc"`: **dò tham số mcmc** trên `room`, seed 42: `default`, `mcmc` và 16 biến thể của `mcmc` (depth prior, Kill-then-Relocate, bilateral grid của notebook v2 và gói v2, chạy trước; 12 tham số), lọc Gaussian sau khi train, bảng so với `default`, với `mcmc` và trước / sau khi lọc; tự tải Depth Anything V2 Small cho depth prior (không tải được thì chỉ bỏ hai lượt dùng nó). | Một việc nền. Ước lượng: `main` khoảng 12 giờ GPU, thêm khoảng 56 GB trên volume; `tune_mcmc` khoảng 8 giờ GPU (khoảng 6,7 giờ khi chạy sau `main`), thêm khoảng 35 GB (giữ mọi file). Đặt `VOLUME_GB` đúng dung lượng volume. `CHAY = False`: chỉ in kế hoạch và dữ liệu đã có. Luôn chạy đầy đủ; `BENCH`, `SEEDS`, `SCENES` không dùng |
+| `"report"` | In báo cáo mới nhất của thực nghiệm `EXP` (`/workspace/outputs/reports/<EXP>_<thời gian>.md`): các bước, bảng của từng benchmark (kẻ bảng sẵn), rồi biểu đồ tổng của lần chạy (ảnh trong `<EXP>_<thời gian>_charts/`: đối chiếu Inria, chênh lệch tổng so với từng mốc, gộp các benchmark; cách đọc và bảng số ở `index.md` của thư mục đó) | Không dùng GPU, chạy ngay. Bản chạy riêng một phương pháp (`b0_inria`, `gsplat_default`, `gsplat_mcmc`): ô "Bảng" của notebook đó. |
 | `"check"` | Kiểm tra dữ liệu: bố cục từng cảnh (`scripts/prepare_data.sh <benchmark>`) | Không dùng GPU, chạy ngay |
 | `"fetch"` | Tải `BENCH` về volume (`scripts/pod/fetch_data.sh`): chỉ cảnh còn thiếu (chọn bằng `SCENES`), chỉ các thư mục cần dùng; xóa file zip sau khi giải nén | Không dùng GPU nhưng chạy nền, xếp hàng như việc khác. Deep Blending: `tandt_db.zip` của Inria (650 MB). Mip-NeRF 360: tải cả `360_v2.zip` (7 cảnh) dù chỉ chọn vài cảnh |
 | `"gsplat"` | `default` rồi `mcmc` cùng số Gaussian, 30.000 vòng, bảng so sánh (`scripts/run_train.sh <benchmark> gsplat`) | Tốn GPU. `QUICK = True`: chạy thử 3.000 vòng (thư mục riêng). `SEEDS = "42 43 44"` để đủ 3 seed (cần trước khi nói "cải thiện") |
@@ -416,8 +412,8 @@ Chọn `WHAT` (và `BENCH` với các việc của một benchmark). Việc ch�
 | `"evaluate"` | Lập lại bảng so sánh và biểu đồ từ kết quả đã có, mọi chế độ đã chạy (`scripts/run_evaluate.sh`; ô này hiện biểu đồ ngay sau bảng); `SCENES` chọn cảnh, `TAGS` đưa thêm các biến thể có tag (vd. 16 biến thể của `tune_mcmc`: `"mono kr bilagrid v2 or0001 or0005 or005 sr0001 sr005 nlr250k nlr1m mo002 rbg depth rs30k sh2"`) | Không dùng GPU, chạy ngay |
 | `"panels"` | Ảnh so sánh các lượt của từng cảnh trong `SCENES` trên cùng ảnh test (ảnh gốc, render, vùng cắt phóng to, bản đồ sai số) và video quỹ đạo của các lượt xếp chồng (`scripts/run_panels.sh`); `PANEL_RUNS` chọn lượt, để trống = các lượt seed 42 không có tag | Không dùng GPU, chạy ngay. Kết quả: `/workspace/outputs/panels/<benchmark>[_quick]_<cảnh>_<thời gian>/` (không vào gói kết quả nhẹ) |
 
-- Thực nghiệm chính: khoảng 56 GB (giữ mọi file) cộng môi trường conda khoảng 15–20 GB, nên volume 100 GB đủ theo ước lượng. Chạy cả `main`, `tune_mcmc`, vòng ghép trên cùng volume, rồi thêm chế độ mới vào `main`: nên dùng 170 GB. Tăng volume trên trang Runpod (tăng được, không giảm được) rồi đặt `VOLUME_GB` bằng dung lượng mới. Trước khi chạy và trước mỗi seed, việc kiểm tra chỗ trống; không đủ thì dừng train, các lượt đã xong vẫn giữ.
-- `tune_mcmc`: một cảnh, một seed, chỉ để chọn ứng viên cho vòng ghép; vòng ghép (2 seed mới trên `room`) chọn tham số cho chế độ mới `mcmc_indoor`. Cả hai chưa phải kết quả "cải thiện" (`docs/design/experiments.md` mục 3, 3.6).
+- Thực nghiệm chính: khoảng 56 GB (giữ mọi file) cộng môi trường conda khoảng 15–20 GB, nên volume 100 GB đủ theo ước lượng. Chạy cả `main` và `tune_mcmc` trên cùng volume: khoảng 110 GB (lượt ngày 31/10/2026 dùng 170 GB). Tăng volume trên trang Runpod (tăng được, không giảm được) rồi đặt `VOLUME_GB` bằng dung lượng mới. Trước khi chạy và trước mỗi seed, việc kiểm tra chỗ trống; không đủ thì dừng train, các lượt đã xong vẫn giữ.
+- `tune_mcmc`: một cảnh, một seed, chỉ để sàng lọc, chưa phải kết quả "cải thiện" (`docs/design/experiments.md` mục 3, 3.6). Kết quả ngày 31/10/2026: không biến thể nào tốt hơn `mcmc` rõ ràng; vòng ghép đã bỏ (D25).
 - `gsplat`, `b0`: dữ liệu phải có sẵn; trước khi xếp hàng, ô này kiểm tra dữ liệu (không cần GPU), thiếu thì báo ngay và không xếp hàng. Muốn bảng đối chiếu đủ thì chạy `b0` trước `gsplat`: chưa có B0, việc `gsplat` (30.000 vòng) kết thúc với exit 1 vì phần đối chiếu B0 là INCOMPLETE; các lượt train vẫn được giữ.
 - Thời gian đo trên RTX 4090 ngày 17/10/2026 (repo trước, Deep Blending, seed 42): chạy thử 3.000 vòng 17 phút, B0 khoảng 50 phút, gsplat đầy đủ (`default` + `mcmc`) 74 phút.
 - Chạy một phần cảnh: `SCENES = "playroom"` (Deep Blending), `SCENES = "room counter"` (Mip-NeRF 360).
@@ -427,13 +423,13 @@ WHAT = "experiment"       # "experiment", "report", "check", "fetch", "gsplat", 
 CHAY = False              # True: cho phép việc chạy nền (experiment, fetch, gsplat, b0)
 VOLUME_GB = 100           # experiment: dung lượng thật của network volume (GB)
 AUTO_STOP = False         # experiment: True = dừng pod khi việc cuối cùng xong (chưa thử trên pod)
-EXP = "main"              # experiment, report: "main" (thực nghiệm chính), "tune_mcmc" (dò tham số mcmc trên room), "tune_mcmc_combo" (vòng ghép)
+EXP = "main"              # experiment, report: "main" (thực nghiệm chính), "tune_mcmc" (dò tham số mcmc trên room)
 BENCH = "deep_blending"   # check, fetch, gsplat, b0, evaluate: "deep_blending" hoặc "mipnerf360"
 QUICK = False             # True: chạy thử 3.000 vòng (gsplat, evaluate, panels)
 SEEDS = "42"              # vd. "42 43 44" (gsplat)
 SCENES = ""               # để trống = mọi cảnh của benchmark (fetch, gsplat, b0, evaluate); panels: phải chọn cảnh
 TAGS = ""                 # evaluate: tag các biến thể đưa thêm vào bảng, vd. "or0001 rbg" (tune_mcmc)
-PANEL_RUNS = ""           # panels: lượt đem so, vd. "mcmc_s42 mcmc_indoor_s42" (trống = seed 42, không có tag)
+PANEL_RUNS = ""           # panels: lượt đem so, vd. "mcmc_s42 mcmc_rbg_s42" (trống = seed 42, không có tag)
 
 import glob, os, re, subprocess
 repo = "@CODE@"

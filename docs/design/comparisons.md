@@ -61,8 +61,6 @@ Quy ước trên ảnh:
 - Số thập phân dấu phẩy, số âm dấu trừ "−", số chữ số như bảng (PSNR 3, SSIM và LPIPS 4); chênh lệch luôn có dấu như bảng.
 - Màu theo phương pháp: `mcmc` cam, các biến thể khác xanh ngọc (`default` xanh dương, B0 xám đậm), dòng của một benchmark nhạt hơn dòng tổng; xanh lá / đỏ chỉ cho trong / ngoài ngưỡng, luôn kèm ✓ / ✗. Màu đã qua bộ kiểm tra bảng màu của skill dataviz (phân biệt được cả với người mù màu); xanh ngọc tương phản thấp với nền nên mọi thanh đều có nhãn số.
 - Đầu mỗi ảnh ghi mốc, các cảnh, seed, các mục điều kiện so với mốc chưa đạt và file báo cáo nguồn, để ảnh tách khỏi báo cáo (vd. chèn vào báo cáo đồ án) vẫn đọc đúng. Biểu đồ không tự kết luận phương pháp nào tốt hơn.
-- Biểu đồ của `main` hiện chênh lệch `default` / `mcmc` trên cả các cảnh dùng để kết luận, nổi hơn bảng; khi in báo cáo của `main`, notebook in thêm một dòng nhắc. Trước khi chọn `mcmc_indoor` (`docs/design/experiments.md` mục 3.6, bước 5), phần của `main` chỉ dùng để kiểm điều kiện: các bước OK (bảng các bước), `default` so với B0 từng cảnh và với số công bố (`01_doi_chieu_inria.png`), B0 so với số công bố (`01_b0_so_voi_cong_bo.png` của lần chạy `--only b0`, hoặc bước `b0_<benchmark>` OK), đủ seed (cột n và cột Seed của bảng), độ lệch chuẩn của `default`, `mcmc` trên `room` (bảng đầu). Chênh lệch trên các cảnh khác đọc ở P9 (`docs/PROJECT_STATUS.md`).
-- Khi `main` có `mcmc_indoor` (chọn bằng `room`): các dòng `mcmc_indoor` của ảnh tổng gộp cả `room`. Kết luận về `mcmc_indoor` dùng bảng và biểu đồ không có `room` (`docs/design/experiments.md` mục 3.1).
 
 ## Ảnh so sánh: `scripts/run_panels.sh`
 

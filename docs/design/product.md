@@ -15,7 +15,7 @@ Trạng thái: **đã viết, đã kiểm thử bằng stub và đối chiếu v
 
 Lý do chọn (thực nghiệm chính chạy ngày 31/10/2026, cùng số Gaussian, 6 cảnh trong nhà, 3 seed): `mcmc` tốt hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR, 18/18 về SSIM và LPIPS. ΔPSNR trung bình: Mip-NeRF 360 +0,590 ± 0,181 dB (4 cảnh), Deep Blending +0,338 ± 0,239 dB (2 cảnh). Thời gian train bằng ×0,98–1,10 so với `default`, VRAM đỉnh thấp hơn. Trên Deep Blending, `mcmc` dùng `opacity_reg` 0,001 theo quy ước của benchmark. Sản phẩm giữ 0,01 như Mip-NeRF 360 và phòng nhóm. Phòng nhóm (1 seed) cho kết quả trái chiều: PSNR thấp hơn `default` (39,07 so với 39,32 dB) nhưng SSIM, LPIPS tốt hơn. Ảnh test là các khung kề khung train của cùng video, nên số này không dùng để so với benchmark.
 
-Lượt dò tham số (`tune_mcmc`, `room`, 1 seed) chưa cho biến thể nào tốt hơn rõ ràng. Chỉ `random_bkgd` hơn 0,156 dB, sát ngưỡng dao động. Vì vậy sản phẩm giữ nguyên preset. Nếu vòng ghép sau này xác nhận một cấu hình tốt hơn, chỉ cần sửa `configs/product.yaml`: các phòng đã dựng sẽ được train lại ở lần chạy sau (mục 3).
+Lượt dò tham số (`tune_mcmc`, `room`, 1 seed) chưa cho biến thể nào tốt hơn rõ ràng. Chỉ `random_bkgd` hơn 0,156 dB, sát ngưỡng dao động. Vì vậy sản phẩm giữ nguyên preset; vòng ghép để kiểm lại ứng viên này đã bỏ (D25). Muốn đổi cấu hình sau này, chỉ cần sửa `configs/product.yaml`: các phòng đã dựng sẽ được train lại ở lần chạy sau (mục 3).
 
 ## 2. Khác lượt `mcmc` của thực nghiệm, có chủ ý
 

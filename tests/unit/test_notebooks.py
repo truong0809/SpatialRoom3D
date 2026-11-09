@@ -181,8 +181,7 @@ def test_the_report_of_the_whole_plan_is_shown_in_cell_7_of_runpod(tmp_path, mon
         exec(compile(code, "runpod.ipynb[7]", "exec"), {})
     lines = out.getvalue().splitlines()
     assert lines[0] == str(reports / "main_20261031_100000.md")
-    # báo cáo của main: nhắc luật chọn mcmc_indoor (docs/design/experiments.md mục 3.6, bước 5) trước bảng
-    assert lines[1].startswith("Nhắc: trước khi chọn mcmc_indoor") and lines[2] == "# Thực nghiệm main (20261031_100000)"
+    assert lines[1] == "# Thực nghiệm main (20261031_100000)"
     assert lines[-1] == "01_doi_chieu_inria.png" and str(charts) in lines[-2]
     for file in reports.glob("main_*.md"):
         file.unlink()

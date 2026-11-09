@@ -654,8 +654,7 @@ def test_the_tune_mcmc_plan_is_valid():
 
 def test_variant_tags_are_not_reused_across_plans():
     """Mỗi tag biến thể chỉ thuộc một kế hoạch trong configs/experiments/: bảng lấy mọi seed có trên đĩa của tag được yêu
-    cầu, nên một tag dùng lại ở vòng ghép sẽ đưa lượt seed 42 của lượt dò vào phần quyết định
-    (docs/design/experiments.md mục 3.6)."""
+    cầu, nên một tag dùng lại ở kế hoạch khác (vd. kiểm lại trên seed mới) sẽ đưa lượt seed 42 của lượt dò vào bảng."""
     owner = {}
     for path in sorted((REPO / "configs" / "experiments").glob("*.yaml")):
         plan = load_experiment(path.stem, REPO / "configs", "/workspace")
@@ -667,9 +666,10 @@ def test_variant_tags_are_not_reused_across_plans():
 
 
 def test_a_combination_round_plan_has_several_parameters_per_variant(tmp_path):
-    """Kế hoạch của vòng ghép (docs/design/experiments.md mục 3.6), kiểm ở mức kế hoạch: seed mới 43, 44 trên room, mỗi
-    cấu hình là một biến thể có thể nhiều tham số, mọi cấu hình dùng tag mới (kể cả ứng viên đơn), cùng post_filter với
-    tune_mcmc; hai cấu hình cùng tham số (khác thứ tự) là một cấu hình."""
+    """Kế hoạch kiểu vòng ghép (thiết kế ở D15, vòng ghép đã bỏ, D25; gói v2 của tune_mcmc cũng là biến thể nhiều tham
+    số), kiểm ở mức kế hoạch: seed mới 43, 44 trên room, mỗi cấu hình là một biến thể có thể nhiều tham số, mọi cấu hình
+    dùng tag mới (kể cả ứng viên đơn), cùng post_filter với tune_mcmc; hai cấu hình cùng tham số (khác thứ tự) là một
+    cấu hình."""
     configs = tmp_path / "configs"
     shutil.copytree(REPO / "configs", configs)
     tune = load_experiment("tune_mcmc", configs, "/workspace")

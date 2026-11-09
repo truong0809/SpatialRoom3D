@@ -100,7 +100,7 @@ Số Gaussian và dung lượng PLY (như nhau cho hai chế độ vì cùng s�
 | Kém hơn quá ngưỡng | `or0005`, `or0001`, `rs30k`, `sh2`, `mo002`, `or005`, `bilagrid` (−2,476 dB), `v2` (−2,750 dB) |
 
 - `sr0001` và `depth` có PSNR cao nhưng **chưa vượt ngưỡng**, nên chưa được coi là tốt hơn `mcmc`.
-- Chỉ một seed, nên chưa đủ cơ sở kết luận chính thức; vòng ghép với seed mới chưa chạy.
+- Chỉ một seed, nên chưa đủ cơ sở kết luận chính thức; vòng ghép với seed mới đã bỏ (D25, `design/experiments.md` mục 3.6), sản phẩm giữ preset `mcmc`.
 - `bilagrid` và `v2` giảm mạnh PSNR nhưng LPIPS gần như không đổi. Giả thuyết chưa kiểm: lệch màu vì ảnh test được chấm mà không đi qua bilateral grid.
 
 **Lọc Gaussian sau khi train** (bỏ Gaussian có opacity < 0,02 hoặc trục > 0,1 × `scene_scale`), rồi chấm lại: `default` giảm 1,14 dB; `mcmc` và các biến thể giảm 2,1 đến 9,1 dB. Kết luận: không dùng bộ lọc này để làm nhẹ file cho `mcmc`.
@@ -155,7 +155,7 @@ Chưa đo: thời gian của từng bước còn lại (chọn frame, COLMAP, xu
 
 ## 9. Lựa chọn rút ra và giới hạn
 
-- `mcmc` được chọn làm **mô hình chính của sản phẩm** (`configs/product.yaml`). Lựa chọn này và việc không đưa gói `v2` vào vòng ghép được chốt **sau khi đã có kết quả**; báo cáo phải ghi rõ.
+- `mcmc` được chọn làm **mô hình chính của sản phẩm** (`configs/product.yaml`). Lựa chọn này, việc không xét gói `v2` như một ứng viên và việc bỏ vòng ghép (D25) được chốt **sau khi đã có kết quả**; báo cáo phải ghi rõ.
 - Đóng góp là **tích hợp và đánh giá các kỹ thuật có sẵn** cộng một heuristic, không phải thuật toán mới.
 - Chưa có: thời gian từng bước của luồng sản phẩm (ngoài thời gian train), thời gian tải và FPS của trang web, điểm đánh giá cho phòng tự dựng từ góc nhìn mới, 5/9 cảnh còn lại của Mip-NeRF 360. Danh sách đầy đủ: [PROJECT_STATUS.md](PROJECT_STATUS.md) mục "Còn mở".
 

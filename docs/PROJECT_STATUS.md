@@ -7,7 +7,6 @@ _Cập nhật: 09/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhậ
 1. **Đo nốt sản phẩm trên pod** (D20, D22): ngày 08/11/2026 đã tải video lên trang web, dựng phòng `video10` và xem 3D trên trình duyệt; còn thiếu thời gian từng bước ngoài train, thời gian tải trang, FPS, và kiểm tra số Gaussian của `model.splat` (mục "Còn mở").
 2. **Hoàn thiện trang web theo bản thiết kế** (giai đoạn 5): trang Kết quả thực nghiệm; chấm điểm phòng tự dựng bằng lượt quay kiểm tra (`docs/design/product.md` mục 5).
 3. **Báo cáo đồ án** (giai đoạn 6) từ kết quả thực nghiệm ngày 31/10/2026 (mục "Kết quả").
-4. Tùy chọn: vòng ghép của lượt dò tham số (D15), chỉ khi được duyệt chi phí GPU.
 
 ## Quy ước trạng thái
 
@@ -40,18 +39,18 @@ _Cập nhật: 09/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhậ
 | D22 | 04/11/2026 | Trang web của sản phẩm (`app/web/`): server thư viện chuẩn Python chạy trên pod, gọi đúng `scripts/build_room.sh`; tải lên từng phần 8 MiB vào `data/uploads/<phòng>/`; mật khẩu; trình xem Spark 2.4.0 + three.js 0.180.0 ghim phiên bản. Theo yêu cầu của bạn ("trực quan up ảnh và video lên sau đó ra sản phẩm kết quả rồi xem") |
 | D23 | 05/11/2026 | Giao diện trang web làm lại theo hướng bảng điều khiển nền tối: thanh bên thu gọn được; Tổng quan (cảnh mới nhất, tạo dự án, dự án chưa xong, lịch sử xử lý) → Dự án mới → Tiến độ → Xem 3D (khung xem lớn, bảng thông tin, thanh camera nổi, 12 góc nhìn). Giữ nguyên server, API, luồng dựng và trình vẽ Spark; chỉ thêm hai trường chỉ đọc (`pipeline`, `last_build`) và phông Be Vietnam Pro ghim phiên bản. Theo yêu cầu của bạn ("Redesign my existing SpatialRoom3D website as a high-end commercial AI product") |
 | D24 | 09/11/2026 | Giấy phép MIT cho mã nguồn của repo (`LICENSE`); thêm thông tin nhóm vào README; kết quả tóm tắt của lượt 31/10/2026 ở `docs/RESULTS.md`. Theo yêu cầu của bạn ("Thêm cho tôi File LICENSE", "Thêm kết quả tóm tắt trong repo") |
+| D25 | 09/11/2026 | Bỏ vòng ghép (D15) và chế độ thứ ba `mcmc_indoor`: theo luật chỉ có một ứng viên (`rbg`, +0,156 dB so với ngưỡng 0,150 dB); `random_bkgd` là tùy chọn có sẵn của gsplat; sản phẩm đã chốt `mcmc` (D20). Kế hoạch `tune_mcmc_combo.yaml` chưa từng lên Git, đã xóa; thiết kế còn ở `docs/design/experiments.md` tại commit `b428d95`. Luật đọc kết quả của `tune_mcmc` giữ nguyên (mục 3.6 của file đó). Theo yêu cầu của bạn ("bỏ cái nội dung vòng ghép đi vì chưa chạy dc nên nó bị thừa") |
 
 ## Đề xuất chờ xác nhận
 
 | Hạng mục | Đề xuất | Lý do |
 |---|---|---|
 | Hai tham số của mô hình chính (D20) | `cap_max` cố định 1.000.000; train trên mọi ảnh trừ ảnh số 0, không chấm điểm | Không phải train `default` trước; biết trước dung lượng file web (≤ 32 MB). Ảnh hưởng trên phòng lớn chưa đo (`docs/design/product.md` mục 2) |
-| Vòng ghép (D15) | Chỉ một ứng viên đạt luật (`rbg`, +0,156 dB, sát ngưỡng): chạy cấu hình {A} với seed 43, 44 trên `room`, hoặc bỏ vòng ghép | Dự báo khó đạt bước 4 của luật. Kế hoạch đã viết (`configs/experiments/tune_mcmc_combo.yaml`, chưa đưa lên Git). Khoảng 1,5 giờ GPU |
-| Lưu trữ, GPU | Network volume (không dùng Global volume) cùng data center với GPU; 170 GB nếu chạy tiếp thực nghiệm; RTX 4090 như lượt 31/10/2026 | `docs/ENVIRONMENT_AUDIT.md` mục 1 |
+| Lưu trữ, GPU | Network volume (không dùng Global volume) cùng data center với GPU; ≥ 100 GB (khoảng 110 GB nếu chạy lại cả `tune_mcmc`); RTX 4090 như lượt 31/10/2026 | `docs/ENVIRONMENT_AUDIT.md` mục 1 |
 | Bản gsplat | Giữ commit `6e8c837` | v1.5.3 có lỗi khiến `DefaultStrategy` không reset opacity |
 | Repo cũ trên GitHub | Chuyển sang private hoặc archive | Repo cũ đang public |
 
-Hai lựa chọn được chốt **sau khi đã có kết quả**: dùng `mcmc` làm mô hình của sản phẩm, và không đưa gói `v2` vào vòng ghép. Báo cáo phải ghi rõ điều này.
+Ba lựa chọn được chốt **sau khi đã có kết quả**: dùng `mcmc` làm mô hình của sản phẩm, không xét gói `v2` như một ứng viên, và bỏ vòng ghép (D25; theo luật đã ghi, một ứng viên thì vẫn chạy). Báo cáo phải ghi rõ điều này.
 
 ## Kết quả (lượt chạy pod ngày 31/10/2026)
 
@@ -92,7 +91,6 @@ Code: commit `c0a7a92`. Pod và thời gian từng việc: `docs/ENVIRONMENT_AUD
 | Tải benchmark (`scripts/pod/fetch_data.sh`) | Đã chạy trên pod: Mip-NeRF 360, 4 cảnh trong nhà (SHA-256 ghi lại) | `outputs/reports/fetch_*.json`; `tests/unit/test_fetch.py` |
 | Thực nghiệm chính, B0, bảng và biểu đồ (D12, D17, D18) | Đã chạy trên pod, mọi bước OK; baseline đã kiểm chứng | Mục "Kết quả"; `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_compare_modes.py`, `test_charts.py` |
 | Dò tham số, lọc Gaussian (D14–D16) | Đã chạy trên pod, mọi bước OK | Mục "Kết quả"; `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_prune.py` |
-| Vòng ghép (D15) | Đã viết kế hoạch; **chưa chạy**, chưa đưa lên Git | `configs/experiments/tune_mcmc_combo.yaml` (trong sandbox) |
 | Render lại từ checkpoint, xuất PLY (`src/rendering/render.py`) | Đã kiểm thử với runner giả; **chưa xác nhận trên pod** | `tests/unit/test_render.py` |
 | Ảnh so sánh, video xếp chồng (`scripts/run_panels.sh`) | Đã chạy trên pod; `VIDEO=1` bị dừng vì hết RAM ở 2/3 cảnh | Mục "Còn mở" |
 | Notebook lấy code qua HTTPS, kiểm tra `chmod` (D19) | Đã viết, đã mô phỏng; **ô 1–3 bản mới chưa chạy trên pod** (lượt 31/10 clone bằng tay) | `tests/unit/test_notebooks.py` |
@@ -134,6 +132,5 @@ Tất cả nằm trên network volume tại `/workspace`, không đưa lên Git;
 |---|---|---|
 | 1 | Đo nốt `video10` trên pod: thời gian từng bước (trang Tiến độ hoặc `outputs/product/video10/progress.json`), thời gian tải và FPS (nút "Đo trên máy này" ở trang Xem 3D); kiểm số Gaussian đã train (mục "Còn mở") | Ghi đủ các số vào `docs/RESULTS.md` mục 7; trên trang Xem 3D, góc mở đầu giống ảnh đầu vào tương ứng, ba chế độ chạy được |
 | 2 | Trang Kết quả thực nghiệm của bản thiết kế, số lấy từ báo cáo 31/10 | Mọi số trên trang truy được về `main_20261031_114145*.md` / `.json` |
-| 3 | Quyết định vòng ghép: chạy hoặc bỏ (mục "Đề xuất chờ xác nhận") | Ghi lại quyết định và lý do. Nếu chạy: `tune_mcmc_combo` exit 0, kết luận theo bước 4 của `docs/design/experiments.md` mục 3.6 |
-| 4 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
-| 5 | Repo cũ để private hoặc archive; nếu cần, chép báo cáo `.md` gốc từ volume vào `docs/results/` (`docs/RESULTS.md` mục 11) | Repo cũ không còn public |
+| 3 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
+| 4 | Repo cũ để private hoặc archive; nếu cần, chép báo cáo `.md` gốc từ volume vào `docs/results/` (`docs/RESULTS.md` mục 11) | Repo cũ không còn public |
