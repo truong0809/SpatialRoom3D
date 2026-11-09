@@ -283,7 +283,7 @@ step_export() {
 
 finish_run() {
   [ "$DRY_RUN" != 1 ] || return 0
-  progress done --message "Xong: phòng đã có trong thư viện"
+  progress "done" --message "Xong: phòng đã có trong thư viện"
   echo
   echo "DONE. Room $NAME: $WEB_DIR/rooms/$NAME/ (model.splat, cameras.json, thumbnail.jpg) | library: $WEB_DIR/manifest.json"
   echo "      model: $MODEL_DIR | progress: $PROGRESS | log: $LOG"
