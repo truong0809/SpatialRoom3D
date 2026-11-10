@@ -158,6 +158,7 @@ Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script v
 - Đây là bước **sàng lọc**: một cảnh (`room`), một seed (42). Bảng ghi `seeds=FEW` (hoặc `seeds=DIFF` khi `room` đã có 3 seed của thực nghiệm chính) và không đủ để nói "cải thiện". Một biến thể chỉ được coi là đáng giữ khi hơn `mcmc` rõ ràng hơn độ dao động thường gặp giữa các seed, đo bằng 3 seed của thực nghiệm chính trên `room` (luật ở mục 3.6).
 - Kết quả ngày 31/10/2026: không biến thể nào hơn `mcmc` rõ ràng; theo luật chỉ có một ứng viên, `rbg`, sát ngưỡng (`docs/PROJECT_STATUS.md` mục "Kết quả"). Vì vậy không thêm chế độ thứ ba, vòng ghép không chạy (mục 3.6, D25) và sản phẩm dùng preset `mcmc`.
 - `room` là cảnh dùng để dò (quy tắc ở `docs/design/training_modes.md` mục 4.2): số của các biến thể trên `room` không dùng để kết luận về cảnh khác. Khi báo cáo, dòng của `room` vẫn ghi nhưng nói rõ là cảnh đã dùng để dò.
+- Kiểm lại trên phòng tự quay của nhóm (3 seed, tập test là các đoạn liền của video): `scripts/pod/run_segments.sh` với `VARIANTS` (`docs/USAGE_GUIDE.md` mục 3.6). **Chưa chạy trên pod.**
 - 12 biến thể tham số là tinh chỉnh tham số của một phương pháp có sẵn (3DGS-MCMC trên gsplat) cộng một bước hậu xử lý, không phải thuật toán mới. Ba thành phần của notebook v2 là thay đổi phương pháp ở mức tích hợp: bilateral grid và loss Pearson với độ sâu đơn ảnh là kỹ thuật đã công bố (mục 3.7), Kill-then-Relocate là heuristic của nhóm, không có paper. Không gọi phần nào là thuật toán mới.
 
 ### 3.2 Thiết kế

@@ -633,6 +633,32 @@ def test_missing_depth_anything_stops_before_anything_is_written(env, tmp_path, 
     assert "setup_depth_anything.sh" in capsys.readouterr().err and not (tmp_path / "mcmc_v2").exists()
 
 
+def test_mono_variant_on_a_segment_split_takes_its_budget_from_the_same_split(env, tmp_path, depth_anything):
+    # như scripts/pod/run_segments.sh với VARIANTS: default rồi biến thể sr3d.mono của mcmc, cùng tập chia theo đoạn
+    write_points3d(env["scene"] / "sparse" / "0" / "points3D.bin", [
+        {"id": 1, "xyz": (0.0, 0.0, 1.0), "rgb": (1, 2, 3), "error": 0.5, "track": [(1, 0), (2, 0)]}])
+    test_list = tmp_path / "test.txt"
+    test_list.write_text("00009.jpg\n", encoding="utf-8")
+    exclude = tmp_path / "exclude.txt"
+    exclude.write_text("00008.jpg\n00010.jpg\n", encoding="utf-8")
+    lists = ("--test-list", str(test_list), "--exclude-list", str(exclude))
+    assert run(env, *lists, runner=FakeRunner(), out=tmp_path / "default") == 0
+    variant = ("--cap-max-from", str(tmp_path / "default"), "--tag", "mono", "--set", "sr3d.mono=true",
+               "--depth-anything-dir", str(depth_anything))
+    runner = MonoRunner()
+    assert run(env, *lists, *variant, runner=runner, mode="mcmc", out=tmp_path / "mcmc_mono") == 0
+    out = (tmp_path / "mcmc_mono").resolve()
+    assert [call["step"] for call in runner.calls] == ["mono", "train", "eval"]
+    mono, train, _ = (call["cmd"] for call in runner.calls)
+    split = json.loads((out / "split.json").read_text(encoding="utf-8"))
+    assert split["test"] == ["00009.jpg"] and split["excluded"] == ["00008.jpg", "00010.jpg"]
+    assert value_after(mono, "--split") == str(out / "split.json")  # prior: chỉ kiểm trên ảnh train của tập chia
+    assert value_after(mono, "--scene") == str(env["scene"].resolve())
+    assert value_after(train, "--data-dir") == str(out / "data")
+    other = MonoRunner()  # ngân sách từ default chia theo đoạn, biến thể chia mỗi ảnh thứ 8: từ chối, không chạy gì
+    assert run(env, *variant, runner=other, mode="mcmc", out=tmp_path / "mcmc_mono_8") == 2 and not other.calls
+
+
 def test_dry_run_shows_the_hooks_and_the_depth_prior_command(env, tmp_path, capsys):
     assert run(env, runner=FakeRunner(), out=tmp_path / "default") == 0
     capsys.readouterr()

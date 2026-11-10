@@ -193,10 +193,15 @@ Bị từ chối, kèm hướng dẫn chụp thêm. Pipeline 3DGS nhiều góc n
 cd /workspace/SpatialRoom3D
 DRY_RUN=1 bash scripts/pod/run_segments.sh phong_nhom                                  # xem trước các lệnh
 bash scripts/pod/job.sh start seg_phong_nhom -- bash scripts/pod/run_segments.sh phong_nhom   # chạy nền
+# phòng dựng bằng trang web hoặc build_room.sh: dùng lại COLMAP của sản phẩm
+bash scripts/pod/job.sh start seg_video10 -- env SRC_ROOT=/workspace/outputs/product bash scripts/pod/run_segments.sh video10
+# thêm biến thể của mcmc trên cùng tập chia (ablation trên phòng thật)
+bash scripts/pod/job.sh start seg_bt_phong_nhom -- env VARIANTS="mcmc:mono:sr3d.mono=true mcmc:kr:sr3d.kr=true mcmc:rbg:random_bkgd=true" bash scripts/pod/run_segments.sh phong_nhom
 ```
 
-- Cần mô hình COLMAP của cảnh đã có (`outputs/custom_scenes/<cảnh>/colmap`, từ `run_scene.sh`). Không sửa gì ở đó; kết quả để riêng ở `outputs/custom_segments/<cảnh>/` (tập chia: `split/segments.json`), bảng so sánh ở `outputs/reports/segments_<cảnh>_<thời gian>.md`.
+- Cần mô hình COLMAP của cảnh đã có: mặc định `outputs/custom_scenes/<cảnh>/colmap` (từ `run_scene.sh`); `SRC_ROOT=/workspace/outputs/product` đọc `outputs/product/<phòng>/colmap` của luồng sản phẩm (cùng `prepare_scene.sh`, cùng bố cục). Không sửa gì ở đó, và không dựng lại phòng đó trong lúc chạy; kết quả để riêng ở `outputs/custom_segments/<cảnh>/` (tập chia: `split/segments.json`), bảng so sánh ở `outputs/reports/segments_<cảnh>_<thời gian>.md`.
 - Khoảng 6 lượt train (2 chế độ × 3 seed), tức khoảng 1,5 giờ GPU cho một phòng cỡ phòng nhóm. Đổi bằng `SEEDS="42"`, `BLOCKS`, `FRACTION`, `GAP`.
+- `VARIANTS` (`<chế_độ>:<tag>:<khóa>=<giá_trị>`, như kế hoạch thực nghiệm): mỗi biến thể thêm một lượt train cho mỗi seed, cùng tập chia, cùng số Gaussian với `default` của seed đó. Có biến thể của `mcmc` thì có thêm bảng so với `mcmc`: `segments_<cảnh>_<thời gian>_vs_mcmc.md`. `sr3d.mono=true` cần Depth Anything V2 Small (`bash scripts/setup/setup_depth_anything.sh`, script kiểm trước khi chạy). Một biến thể lỗi thì các lượt khác vẫn chạy, script báo lỗi ở cuối. Chạy lại với `VARIANTS` sau lượt thường: các lượt `default`, `mcmc` đã xong được bỏ qua, chỉ train thêm biến thể. Ý nghĩa các biến thể và kết quả dò trên `room`: `docs/design/experiments.md` mục 3.2, 3.7.
 - Khung test vẫn nằm trên đường đã quay (nội suy giữa hai đoạn train), chỉ cách khung train gần nhất ít nhất `GAP + 1` khung (`segments.json` ghi số giây). Đoạn quay kiểm tra theo đường khác (`docs/data/capture_protocol.md` mục 4) vẫn là cách đánh giá chặt hơn.
 
 ### 3.7 Đổi tham số train

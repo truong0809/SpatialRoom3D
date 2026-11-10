@@ -1,6 +1,6 @@
 # PROJECT STATUS
 
-_Cập nhật: 09/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhật ký kiểm thử, rà soát độc lập, ghi chú từng lần sửa) nằm trong lịch sử Git của file này và trong các bản bàn giao của Project trên claude.ai._
+_Cập nhật: 10/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhật ký kiểm thử, rà soát độc lập, ghi chú từng lần sửa) nằm trong lịch sử Git của file này và trong các bản bàn giao của Project trên claude.ai._
 
 ## Mục tiêu hiện tại
 
@@ -96,8 +96,8 @@ Code: commit `c0a7a92`. Pod và thời gian từng việc: `docs/ENVIRONMENT_AUD
 | Notebook lấy code qua HTTPS, kiểm tra `chmod` (D19) | Đã viết, đã mô phỏng; **ô 1–3 bản mới chưa chạy trên pod** (lượt 31/10 clone bằng tay) | `tests/unit/test_notebooks.py` |
 | Luồng sản phẩm (D20): `configs/product.yaml`, `src/product/`, `scripts/build_room.sh` | Đã viết; đã kiểm thử bằng stub và gsplat giả; đã đối chiếu trên CPU với code thật của gsplat @6e8c837; **đã chạy trên pod 08/11/2026** (RTX 4090): phòng `video10` từ video 2:54, 249 ảnh định vị, 637.031 Gaussian, `model.splat` 20,4 MB, train 8 phút 23 giây | `tests/unit/test_product.py`, `test_product_export.py`, `test_build_room.py`; `docs/design/product.md` mục 7 |
 | Trang web (D22, D23): `app/web/`, `scripts/web_server.sh` | Đã viết; đã kiểm thử trên CPU: API qua HTTP thật, tải lên → `build_room.sh` thật → thư viện; Chromium headless (trọn luồng; camera khớp mô hình theo điểm mốc của phòng tổng hợp); đã rà soát bảo mật độc lập, sửa các lỗi tìm được (mỗi lỗi có test; `docs/design/product.md` mục 8). Giao diện làm lại (D23): đã soát bằng ảnh chụp màn hình ở 1440 × 900 và 390 × 664 với dữ liệu tổng hợp. **đã chạy trên pod 08/11/2026** (sau khi thêm cổng HTTP 8000 bằng Edit Pod): tải video lên, dựng xong `video10`, xem được 3D (ảnh: `docs/results/web/tong_quan.jpg`) | `tests/unit/test_web_server.py`, `test_web_uploads.py`, `tests/browser/` (`SR3D_BROWSER=1`); `docs/design/product.md` mục 8 |
-| Đánh giá phòng tự quay theo đoạn (`python -m src.training.split segments`, `--exclude-list` của `src.training.run`, `scripts/pod/run_segments.sh`): 6 đoạn liền của video làm test, bỏ 3 khung mỗi bên, `default` / `mcmc` × 3 seed | Đã viết, đã kiểm thử trên CPU; **chưa chạy trên pod** | `tests/unit/test_train_split.py`, `test_train_run.py`, `test_run_segments.py`; `docs/USAGE_GUIDE.md` mục 3.6 |
-| Toàn bộ test trên CPU | 595 test đạt, 11 bỏ qua vì cần PyTorch hoặc `SR3D_BROWSER=1` (09/11/2026, Python 3.10) | `python -m pytest` |
+| Đánh giá phòng tự quay theo đoạn (`python -m src.training.split segments`, `--exclude-list` của `src.training.run`, `scripts/pod/run_segments.sh`): 6 đoạn liền của video làm test, bỏ 3 khung mỗi bên, `default` / `mcmc` × 3 seed; đọc được COLMAP của phòng sản phẩm (`SRC_ROOT`), thêm biến thể của `mcmc` trên cùng tập chia (`VARIANTS`, vd. `mono`, `kr`, `rbg`) | Đã viết, đã kiểm thử trên CPU (DRY_RUN; chạy với stub thay train / lập bảng); **chưa chạy trên pod** | `tests/unit/test_train_split.py`, `test_train_run.py`, `test_run_segments.py`; `docs/USAGE_GUIDE.md` mục 3.6 |
+| Toàn bộ test trên CPU | 599 test đạt, 11 bỏ qua vì cần PyTorch hoặc `SR3D_BROWSER=1` (10/11/2026, Python 3.10) | `python -m pytest` |
 
 ## Còn mở
 
@@ -131,6 +131,7 @@ Tất cả nằm trên network volume tại `/workspace`, không đưa lên Git;
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
 | 1 | Đo nốt `video10` trên pod: thời gian từng bước (trang Tiến độ hoặc `outputs/product/video10/progress.json`), thời gian tải và FPS (nút "Đo trên máy này" ở trang Xem 3D); kiểm số Gaussian đã train (mục "Còn mở") | Ghi đủ các số vào `docs/RESULTS.md` mục 7; trên trang Xem 3D, góc mở đầu giống ảnh đầu vào tương ứng, ba chế độ chạy được |
-| 2 | Trang Kết quả thực nghiệm của bản thiết kế, số lấy từ báo cáo 31/10 | Mọi số trên trang truy được về `main_20261031_114145*.md` / `.json` |
-| 3 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
-| 4 | Repo cũ để private hoặc archive; nếu cần, chép báo cáo `.md` gốc từ volume vào `docs/results/` (`docs/RESULTS.md` mục 11) | Repo cũ không còn public |
+| 2 | Đánh giá theo đoạn trên phòng thật (`docs/USAGE_GUIDE.md` mục 3.6): `phong_nhom`, rồi `video10`, `video8`, `video9` với `SRC_ROOT=/workspace/outputs/product`; thêm biến thể `mono`, `kr`, `rbg` của `mcmc` nếu còn giờ GPU | Bảng `segments_<phòng>_*.md` (và `_vs_mcmc.md` khi có biến thể) đủ 3 seed, không lượt lỗi; số chép vào `docs/RESULTS.md`; chỉ nói "cải thiện" theo `docs/design/training_modes.md` mục 4.3 |
+| 3 | Trang Kết quả thực nghiệm của bản thiết kế, số lấy từ báo cáo 31/10 | Mọi số trên trang truy được về `main_20261031_114145*.md` / `.json` |
+| 4 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
+| 5 | Repo cũ để private hoặc archive; nếu cần, chép báo cáo `.md` gốc từ volume vào `docs/results/` (`docs/RESULTS.md` mục 11) | Repo cũ không còn public |
