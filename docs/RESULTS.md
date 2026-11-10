@@ -142,6 +142,8 @@ Lần đầu chạy trọn luồng sản phẩm trên GPU: tải video lên tran
 
 ![Trang Tổng quan của SpatialRoom3D](results/web/tong_quan.jpg)
 
+Video demo (quay màn hình, 11 phút, ngày 08/11/2026): [xem trên Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view); file không đưa lên Git.
+
 Chưa đo: thời gian của từng bước còn lại (chọn frame, COLMAP, xuất file), thời gian tải trang và FPS trên máy xem. Cần kiểm tra thêm: số Gaussian (637.031) thấp hơn `cap_max` 1.000.000 của `configs/product.yaml`. Đây là số Gaussian trong `model.splat`. Giả thuyết chưa kiểm: train đủ 1.000.000, bước xuất bỏ các Gaussian trong suốt hoàn toàn; kiểm bằng `num_gaussians_trained` trong `manifest.json` của web (`PROJECT_STATUS.md` mục "Còn mở").
 
 ## 8. Môi trường

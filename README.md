@@ -182,7 +182,7 @@ Kill-then-Relocate (biến thể `kr`) là heuristic của notebook demo v2 củ
 - **So sánh chính:** `mcmc` tốt hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR và 18/18 cặp về SSIM, LPIPS; trung bình +0,590 ± 0,181 dB trên Mip-NeRF 360, +0,338 ± 0,239 dB trên Deep Blending; thời gian huấn luyện tương đương. Đây là căn cứ chọn `mcmc` cho sản phẩm.
 - **Dò 16 biến thể của `mcmc`** (cảnh `room`, một seed, ngưỡng 0,150 dB ghi trước): không biến thể nào tốt hơn rõ ràng; sản phẩm giữ nguyên preset `mcmc`.
 - **Phòng nhóm tự quay:** chạy được đủ luồng; PSNR khoảng 39 dB không dùng để kết luận vì ảnh test nằm sát ảnh train của cùng video. Đánh giá theo đoạn (`scripts/pod/run_segments.sh`) đã viết, chưa chạy trên GPU.
-- **Sản phẩm trên pod** (08/11/2026, RTX 4090): tải một video 2 phút 54 giây lên trang web, pod dựng phòng `video10` (249 ảnh định vị, `model.splat` 637.031 Gaussian, 20,4 MB, train 8 phút 23 giây), xem được 3D trên trình duyệt. Thời gian các bước khác, thời gian tải trang và FPS chưa đo.
+- **Sản phẩm trên pod** (08/11/2026, RTX 4090): tải một video 2 phút 54 giây lên trang web, pod dựng phòng `video10` (249 ảnh định vị, `model.splat` 637.031 Gaussian, 20,4 MB, train 8 phút 23 giây), xem được 3D trên trình duyệt. Thời gian các bước khác, thời gian tải trang và FPS chưa đo. Video demo (quay màn hình, 11 phút): [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view).
 
 ![Chênh lệch của mcmc so với default trên 6 cảnh](docs/results/charts/main_02_so_voi_default.png)
 *Chênh lệch của `mcmc` so với `default`: thanh là trung bình, chấm đen là từng cặp (cảnh, seed).*
