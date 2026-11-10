@@ -252,7 +252,7 @@ Theo luật đã ghi, có một ứng viên thì vẫn chạy cấu hình đó; 
 
 **Trạng thái: đã kiểm thử trên CPU (mục cuối); đã chạy trên pod ngày 31/10/2026 trong `tune_mcmc`: `kr`, `mono` trong mức dao động; `bilagrid` (−2,476 dB), `v2` (−2,750 dB) kém `mcmc` quá d (`docs/PROJECT_STATUS.md` mục "Kết quả").** Quyết định D16 (`docs/PROJECT_STATUS.md`).
 
-Notebook demo v2 của nhóm (`3D_demo_v2.ipynb`, giống v4 `3D_demo_v4_improved_30k.ipynb` nhưng 7.000 vòng) thêm vào `mcmc`: `global_scale` tính lại cho bền với camera lỗi, tâm cảnh theo vị trí camera, Kill-then-Relocate, bilateral grid, depth prior; cùng `depth_loss` (điểm SfM), `random_bkgd` và `strategy.refine_stop_iter` = 0,8 × số vòng. `depth_loss` và `random_bkgd` đã có ở `depth`, `rbg`. Ba thành phần còn lại thành ba biến thể, mỗi biến thể thêm đúng một thành phần; thêm một gói bật cùng lúc mọi thứ.
+Notebook demo v2 của nhóm ([`3D_demo_v2.ipynb`](../research/references/demo_3dgs_mcmc/3D_demo_v2.ipynb), 7.000 vòng; bản v4 `3D_demo_v4_improved_30k.ipynb` giống hệt, chỉ khác 30.000 vòng) thêm vào `mcmc`: `global_scale` tính lại cho bền với camera lỗi, tâm cảnh theo vị trí camera, Kill-then-Relocate, bilateral grid, depth prior; cùng `depth_loss` (điểm SfM), `random_bkgd` và `strategy.refine_stop_iter` = 0,8 × số vòng. `depth_loss` và `random_bkgd` đã có ở `depth`, `rbg`. Ba thành phần còn lại thành ba biến thể, mỗi biến thể thêm đúng một thành phần; thêm một gói bật cùng lúc mọi thứ.
 
 | Biến thể | `set` | Cách làm trong repo | Nguồn |
 |---|---|---|---|

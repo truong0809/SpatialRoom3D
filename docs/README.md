@@ -19,7 +19,7 @@ Giới thiệu dự án theo bốn mục của báo cáo tuần 10 (cấu trúc 
 | [design/comparisons.md](design/comparisons.md) | Bảng và biểu đồ so sánh các chế độ (`scripts/run_evaluate.sh`, `src/evaluation/charts.py`) |
 | [data/capture_protocol.md](data/capture_protocol.md) | Quy trình quay video và chụp ảnh không gian nội thất |
 | [research/reading_list.md](research/reading_list.md) | Danh sách tài liệu khảo sát |
-| [research/demo_review.md](research/demo_review.md) | Kiểm tra notebook demo 3DGS-MCMC của nhóm và repo SpatialScene3D (bản gốc của notebook: [research/references/demo_3dgs_mcmc/](research/references/demo_3dgs_mcmc/README.md)) |
+| [research/demo_review.md](research/demo_review.md) | Kiểm tra notebook demo 3DGS-MCMC của nhóm và repo SpatialScene3D (bản gốc các notebook demo 1, v2: [research/references/demo_3dgs_mcmc/](research/references/demo_3dgs_mcmc/README.md)) |
 
 Protocol và lệnh của từng benchmark: [experiments/deep_blending/](../experiments/deep_blending/README.md), [experiments/mipnerf360/](../experiments/mipnerf360/README.md).
 
