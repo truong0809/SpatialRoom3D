@@ -9,6 +9,7 @@ dịch được và các dòng chèn nằm đúng chỗ trong vòng lặp của 
 import ast
 import json
 import os
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -304,3 +305,45 @@ def test_the_nan_check_stops_a_run_with_hooks(tmp_path):
     assert record == {"hook": "guard", "step": 1000, "not_finite": ["opacities"]}
     with pytest.raises(FloatingPointError):  # dòng chèn của loss gọi guard mỗi vòng, cả khi chỉ bật kr
         hooks.mono_loss(runner, 1500, {}, None, None)
+
+
+def test_the_nan_check_keeps_zero_size_gaussians_from_the_initialisation(tmp_path, monkeypatch):
+    """Scale -inf (log 0) là Gaussian kích thước 0 mà gsplat tạo lúc khởi tạo khi một điểm SfM có ít nhất 3 điểm khác trùng
+    vị trí (video9 ngày 12/11/2026: mọi lượt kr, mono dừng ở vòng 0, vì dòng chèn của loss gọi guard). Không dừng lượt, chỉ
+    đếm vào nhật ký; NaN, +inf ở scale và -inf ở tham số khác vẫn dừng. Không có PyTorch thì chạy với numpy: guard chỉ
+    dùng isnan / isposinf / isneginf / isfinite, any, sum, cùng tên và cùng nghĩa ở hai thư viện."""
+    try:
+        import torch
+
+        def array(values):
+            return torch.tensor(values, dtype=torch.float32)
+    except ImportError:
+        monkeypatch.setitem(sys.modules, "torch", np)
+
+        def array(values):
+            return np.array(values, dtype=np.float32)
+
+    inf, nan = float("inf"), float("nan")
+
+    def runner(**changes):
+        values = {"means": [[0.0, 0.0, 2.0]] * 3, "scales": [[-4.0] * 3] * 3, "quats": [[1.0, 0.0, 0.0, 0.0]] * 3,
+                  "opacities": [0.0] * 3}
+        values.update(changes)
+        return SimpleNamespace(splats={key: array(value) for key, value in values.items()})
+
+    zero = runner(scales=[[-4.0] * 3, [-inf] * 3, [-inf] * 3])  # hai Gaussian kích thước 0
+    hooks = Hooks(["kr"], log_path=tmp_path / HOOKS_LOG)
+    assert hooks.mono_loss(zero, 0, {}, None, None) == 0.0  # đường lỗi ở video9: không còn dừng ở vòng 0
+    hooks.guard(zero, 499)  # không phải vòng kiểm: không ghi gì
+    hooks.guard(zero, 500)
+    hooks.guard(runner(), 1000)  # mọi tham số hữu hạn: không ghi gì
+    records = [json.loads(line) for line in (tmp_path / HOOKS_LOG).read_text(encoding="utf-8").splitlines()]
+    assert records == [{"hook": "guard", "step": 0, "zero_size": 2}, {"hook": "guard", "step": 500, "zero_size": 2}]
+
+    for name, changes, bad in (("nan_scale", {"scales": [[-4.0] * 3, [nan] * 3, [-inf] * 3]}, ["scales"]),
+                               ("posinf_scale", {"scales": [[-4.0] * 3, [inf, 0.0, 0.0], [-4.0] * 3]}, ["scales"]),
+                               ("neginf_mean", {"means": [[0.0, 0.0, 2.0], [-inf, 0.0, 0.0], [0.0, 0.0, 2.0]]}, ["means"])):
+        log = tmp_path / f"{name}.jsonl"
+        with pytest.raises(FloatingPointError, match="non-finite Gaussian parameters"):
+            Hooks(["kr"], log_path=log).guard(runner(**changes), 500)
+        assert json.loads(log.read_text(encoding="utf-8").splitlines()[-1])["not_finite"] == bad, name

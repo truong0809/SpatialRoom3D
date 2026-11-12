@@ -22,12 +22,16 @@ hoặc biến thể (src/training/profiles.py, HOOK_KEYS).
   (render_mode "RGB+ED") và depth prior của Depth Anything V2 Small tính trước (src/training/mono_depth.py), trên pixel
   có alpha > 0,5 (cần ít nhất 256 pixel), nghịch đảo độ sâu bị chặn trong khoảng phân vị 2–98 % của ảnh; trọng số 0,05,
   bật đến 60 % số vòng. Loss Pearson cho độ sâu đơn ảnh theo FSGS (Zhu et al., ECCV 2024); hằng số theo notebook v2.
-- Kiểm NaN (mọi lượt có hook, `guard`, gọi mỗi vòng qua dòng chèn của loss): mỗi 500 vòng, vị trí / scale / quaternion /
-  opacity của mọi Gaussian phải hữu hạn; không thì dừng lượt với lỗi (FloatingPointError). Không tự tắt thành phần nào
-  rồi train tiếp như notebook.
+- Kiểm NaN (mọi lượt có hook, `guard`, gọi mỗi vòng qua dòng chèn của loss): mỗi 500 vòng, vị trí / quaternion / opacity
+  của mọi Gaussian phải hữu hạn, scale (lưu dạng log) không được NaN hay +inf; không thì dừng lượt với lỗi
+  (FloatingPointError). Không tự tắt thành phần nào rồi train tiếp như notebook. Scale -inf là Gaussian kích thước 0,
+  không phải lỗi số: gsplat đặt scale ban đầu bằng log của khoảng cách trung bình tới 3 điểm SfM gần nhất, nên một điểm
+  có ít nhất 3 điểm khác trùng vị trí cho log 0 (gặp ở video9 ngày 12/11/2026). Chúng có ở mọi chế độ trên cùng cảnh
+  (cùng khởi tạo) và gsplat train bình thường với chúng, nên được giữ như ở lượt không có hook và chỉ được đếm vào
+  nhật ký (`zero_size`).
 
 Nhật ký của hook: <thư mục kết quả>/sr3d_hooks.jsonl (kr: số Gaussian bị dời mỗi lần; mono: loss trung bình mỗi 500
-vòng; guard: tham số không hữu hạn). torch chỉ được import khi hook thật sự tính.
+vòng; guard: tham số không hữu hạn, số Gaussian kích thước 0). torch chỉ được import khi hook thật sự tính.
 """
 
 from __future__ import annotations
@@ -151,7 +155,9 @@ class Hooks:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     def guard(self, runner, step: int) -> None:
-        """Mỗi GUARD_EVERY vòng: tham số Gaussian không hữu hạn thì dừng lượt (FloatingPointError), ghi vào nhật ký."""
+        """Mỗi GUARD_EVERY vòng: tham số Gaussian không hữu hạn thì dừng lượt (FloatingPointError), ghi vào nhật ký.
+
+        Scale -inf (Gaussian kích thước 0, xem đầu file) không dừng lượt; số Gaussian như vậy được ghi (`zero_size`)."""
         if step % GUARD_EVERY != 0:
             return
         splats = getattr(runner, "splats", None)
@@ -159,11 +165,25 @@ class Hooks:
             return
         import torch
 
-        bad = [key for key in GUARDED if key in splats and not bool(torch.isfinite(splats[key]).all())]
+        bad = []
+        for key in GUARDED:
+            if key not in splats:
+                continue
+            values = splats[key]
+            if key == "scales":  # log của kích thước: -inf là kích thước 0, NaN và +inf mới là lỗi số
+                broken = bool(torch.isnan(values).any()) or bool(torch.isposinf(values).any())
+            else:
+                broken = not bool(torch.isfinite(values).all())
+            if broken:
+                bad.append(key)
+        zero_size = int(torch.isneginf(splats["scales"]).any(-1).sum()) if "scales" in splats else 0
+        record = {"hook": "guard", "step": int(step), **({"zero_size": zero_size} if zero_size else {})}
         if bad:
-            self._log({"hook": "guard", "step": int(step), "not_finite": bad})
+            self._log({**record, "not_finite": bad})
             raise FloatingPointError(f"[SR3D] non-finite Gaussian parameters {bad} at step {step}: the run stops "
                                      "(no component is switched off)")
+        if zero_size:
+            self._log(record)
 
     # ------------------------------------------------------------------------------------------------ kr
     def kill_then_relocate(self, runner, step: int) -> int:
