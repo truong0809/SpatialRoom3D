@@ -1,6 +1,6 @@
 # PROJECT STATUS
 
-_Cập nhật: 10/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhật ký kiểm thử, rà soát độc lập, ghi chú từng lần sửa) nằm trong lịch sử Git của file này và trong các bản bàn giao của Project trên claude.ai._
+_Cập nhật: 12/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhật ký kiểm thử, rà soát độc lập, ghi chú từng lần sửa) nằm trong lịch sử Git của file này và trong các bản bàn giao của Project trên claude.ai._
 
 ## Mục tiêu hiện tại
 
@@ -40,6 +40,7 @@ _Cập nhật: 10/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhậ
 | D23 | 05/11/2026 | Giao diện trang web làm lại theo hướng bảng điều khiển nền tối: thanh bên thu gọn được; Tổng quan (cảnh mới nhất, tạo dự án, dự án chưa xong, lịch sử xử lý) → Dự án mới → Tiến độ → Xem 3D (khung xem lớn, bảng thông tin, thanh camera nổi, 12 góc nhìn). Giữ nguyên server, API, luồng dựng và trình vẽ Spark; chỉ thêm hai trường chỉ đọc (`pipeline`, `last_build`) và phông Be Vietnam Pro ghim phiên bản. Theo yêu cầu của bạn ("Redesign my existing SpatialRoom3D website as a high-end commercial AI product") |
 | D24 | 09/11/2026 | Giấy phép MIT cho mã nguồn của repo (`LICENSE`); thêm thông tin nhóm vào README; kết quả tóm tắt của lượt 31/10/2026 ở `docs/RESULTS.md`. Theo yêu cầu của bạn ("Thêm cho tôi File LICENSE", "Thêm kết quả tóm tắt trong repo") |
 | D25 | 09/11/2026 | Bỏ vòng ghép (D15) và chế độ thứ ba `mcmc_indoor`: theo luật chỉ có một ứng viên (`rbg`, +0,156 dB so với ngưỡng 0,150 dB); `random_bkgd` là tùy chọn có sẵn của gsplat; sản phẩm đã chốt `mcmc` (D20). Kế hoạch `tune_mcmc_combo.yaml` chưa từng lên Git, đã xóa; thiết kế còn ở `docs/design/experiments.md` tại commit `b428d95`. Luật đọc kết quả của `tune_mcmc` giữ nguyên (mục 3.6 của file đó). Theo yêu cầu của bạn ("bỏ cái nội dung vòng ghép đi vì chưa chạy dc nên nó bị thừa") |
+| D26 | 12/11/2026 | Đánh giá trên phòng thật theo đoạn: 3 phòng (`video8`, `video9`, `video10`, đọc mô hình COLMAP của luồng sản phẩm), 3 seed, `default`, `mcmc` và 3 biến thể `rbg`, `mono`, `kr`; luật đọc kết quả ghi trước khi chạy (`docs/design/experiments.md` mục 3.8). Không so với cách chia mỗi khung thứ 8. Theo lựa chọn của bạn ("giữ nguyên ban đầu chạy thêm 3 biến thể thôi ko cần thêm nữa", "tai video len dau 3 video 8910", "t chỉ cần so sánh cho hiện tại thôi cái chia cũ bỏ đi") |
 
 ## Đề xuất chờ xác nhận
 
@@ -131,7 +132,7 @@ Tất cả nằm trên network volume tại `/workspace`, không đưa lên Git;
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
 | 1 | Đo nốt `video10` trên pod: thời gian từng bước (trang Tiến độ hoặc `outputs/product/video10/progress.json`), thời gian tải và FPS (nút "Đo trên máy này" ở trang Xem 3D); kiểm số Gaussian đã train (mục "Còn mở") | Ghi đủ các số vào `docs/RESULTS.md` mục 7; trên trang Xem 3D, góc mở đầu giống ảnh đầu vào tương ứng, ba chế độ chạy được |
-| 2 | Đánh giá theo đoạn trên phòng thật (`docs/USAGE_GUIDE.md` mục 3.6): `phong_nhom`, rồi `video10`, `video8`, `video9` với `SRC_ROOT=/workspace/outputs/product`; thêm biến thể `mono`, `kr`, `rbg` của `mcmc` nếu còn giờ GPU | Bảng `segments_<phòng>_*.md` (và `_vs_mcmc.md` khi có biến thể) đủ 3 seed, không lượt lỗi; số chép vào `docs/RESULTS.md`; chỉ nói "cải thiện" theo `docs/design/training_modes.md` mục 4.3 |
+| 2 | Đánh giá theo đoạn trên phòng thật theo D26 (`docs/design/experiments.md` mục 3.8; lệnh ở `docs/USAGE_GUIDE.md` mục 3.6): `video8`, `video9`, `video10` (`SRC_ROOT=/workspace/outputs/product`); `default`, `mcmc`, `rbg`, `mono`, `kr` × 3 seed (45 lượt, khoảng 9–10 giờ GPU); đo dung lượng sau phòng đầu; xong thì lập bảng gộp ba phòng | Bảng từng phòng và bảng gộp (so với `default`, so với `mcmc`) đủ 3 seed, không lượt lỗi; kết luận đúng luật mục 3.8; số chép vào `docs/RESULTS.md` |
 | 3 | Trang Kết quả thực nghiệm của bản thiết kế, số lấy từ báo cáo 31/10 | Mọi số trên trang truy được về `main_20261031_114145*.md` / `.json` |
 | 4 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
 | 5 | Repo cũ để private hoặc archive; nếu cần, chép báo cáo `.md` gốc từ volume vào `docs/results/` (`docs/RESULTS.md` mục 11) | Repo cũ không còn public |

@@ -1,6 +1,6 @@
 # Thực nghiệm: Deep Blending, Mip-NeRF 360, so sánh các chế độ huấn luyện, dò tham số mcmc
 
-_Cập nhật: 09/11/2026_
+_Cập nhật: 12/11/2026_
 
 Mỗi benchmark có một file cấu hình `configs/<benchmark>.yaml` (dữ liệu, nguồn tải, nơi lưu kết quả, mục `benchmark`: protocol, số liệu công bố, ngưỡng) và một thư mục `experiments/<benchmark>/` chỉ chứa `README.md` (protocol, lệnh, kết quả đã ghi nhận). Dữ liệu và kết quả nằm trên volume, không nằm trong `experiments/`.
 
@@ -158,7 +158,7 @@ Kế hoạch: `configs/experiments/tune_mcmc.yaml`. Chạy bằng cùng script v
 - Đây là bước **sàng lọc**: một cảnh (`room`), một seed (42). Bảng ghi `seeds=FEW` (hoặc `seeds=DIFF` khi `room` đã có 3 seed của thực nghiệm chính) và không đủ để nói "cải thiện". Một biến thể chỉ được coi là đáng giữ khi hơn `mcmc` rõ ràng hơn độ dao động thường gặp giữa các seed, đo bằng 3 seed của thực nghiệm chính trên `room` (luật ở mục 3.6).
 - Kết quả ngày 31/10/2026: không biến thể nào hơn `mcmc` rõ ràng; theo luật chỉ có một ứng viên, `rbg`, sát ngưỡng (`docs/PROJECT_STATUS.md` mục "Kết quả"). Vì vậy không thêm chế độ thứ ba, vòng ghép không chạy (mục 3.6, D25) và sản phẩm dùng preset `mcmc`.
 - `room` là cảnh dùng để dò (quy tắc ở `docs/design/training_modes.md` mục 4.2): số của các biến thể trên `room` không dùng để kết luận về cảnh khác. Khi báo cáo, dòng của `room` vẫn ghi nhưng nói rõ là cảnh đã dùng để dò.
-- Kiểm lại trên phòng tự quay của nhóm (3 seed, tập test là các đoạn liền của video): `scripts/pod/run_segments.sh` với `VARIANTS` (`docs/USAGE_GUIDE.md` mục 3.6). **Chưa chạy trên pod.**
+- Kiểm lại trên phòng tự quay của nhóm (3 seed, tập test là các đoạn liền của video): `scripts/pod/run_segments.sh` với `VARIANTS` (`docs/USAGE_GUIDE.md` mục 3.6). Thiết kế và luật đọc kết quả, ghi trước khi chạy: mục 3.8. **Chưa chạy trên pod.**
 - 12 biến thể tham số là tinh chỉnh tham số của một phương pháp có sẵn (3DGS-MCMC trên gsplat) cộng một bước hậu xử lý, không phải thuật toán mới. Ba thành phần của notebook v2 là thay đổi phương pháp ở mức tích hợp: bilateral grid và loss Pearson với độ sâu đơn ảnh là kỹ thuật đã công bố (mục 3.7), Kill-then-Relocate là heuristic của nhóm, không có paper. Không gọi phần nào là thuật toán mới.
 
 ### 3.2 Thiết kế
@@ -288,6 +288,38 @@ Môi trường và cách làm các kiểm tra tay: `docs/PROJECT_STATUS.md` ở 
 
 Chưa biết: thời gian và VRAM thêm của `bilagrid`, `mono`, `v2` (ước lượng ở mục 3.4 giả định +30 %); trọng số thật của Depth Anything V2 cho tương quan bao nhiêu với điểm SfM của `room`.
 
+### 3.8 Kiểm lại trên phòng tự quay: luật ghi trước khi chạy
+
+**Trạng thái: thiết kế và luật dưới đây ghi ngày 10/11/2026, chốt danh sách phòng ngày 12/11/2026 (D26), trước khi có lượt đánh giá theo đoạn nào trên GPU. Chưa chạy.**
+
+Lượt dò ở mục 3.5–3.6 chỉ có một cảnh benchmark (`room`) và một seed. Lượt này kiểm lại ba biến thể trên phòng tự quay của nhóm, 3 seed, với tập test là các đoạn liền của chính video (`docs/USAGE_GUIDE.md` mục 3.6).
+
+| Mục | Giá trị |
+|---|---|
+| Phòng | `video8` (phòng ngủ, video 1:37), `video9` (phòng có bàn ghế, 1:52), `video10` (phòng ký túc xá, 2:54): ba phòng khác nhau, dựng ngày 08/11/2026 bằng cùng luồng sản phẩm; mô hình COLMAP đọc ở `outputs/product/<phòng>/colmap` (`SRC_ROOT`). Không dùng các phòng khác trên volume: `1` dựng lại cùng video với `video10`, clip 13 giây là một vật, `t` và `video2` không chọn |
+| Tập chia | `python -m src.training.split segments`: 6 đoạn, tổng 1/8 số khung, bỏ 3 khung mỗi bên đoạn (`BLOCKS=6`, `FRACTION=0.125`, `GAP=3`) |
+| Seed | 42, 43, 44 |
+| Chế độ | `default`, `mcmc` (như thực nghiệm chính: cùng số Gaussian) |
+| Biến thể của `mcmc` | `rbg` (`random_bkgd=true`), `mono` (`sr3d.mono=true`), `kr` (`sr3d.kr=true`), cùng số Gaussian với `default` của cùng seed. `rbg` là ứng viên duy nhất của lượt dò (mục 3.6); `mono`, `kr` nằm trong mức dao động nhưng nhắm vào đặc điểm của video điện thoại (tường ít họa tiết, ít điểm SfM, floater). Không chạy 13 biến thể còn lại: 8 biến thể kém `mcmc` quá d trên `room`, 3 biến thể trong mức dao động không có lý do riêng cho phòng thật, 2 biến thể (`sr0001`, `depth`) để dành nếu còn chỗ trên volume |
+| Lệnh | Mỗi phòng: `SRC_ROOT=/workspace/outputs/product VARIANTS="mcmc:rbg:random_bkgd=true mcmc:mono:sr3d.mono=true mcmc:kr:sr3d.kr=true" bash scripts/pod/run_segments.sh <phòng>`. Bảng gộp ba phòng, khi cả ba xong: `CUSTOM_ROOT=/workspace/outputs/custom_segments TAGS="rbg mono kr" bash scripts/run_evaluate.sh custom video8 video9 video10`, thêm `BASELINE=mcmc MODES=mcmc` cho bảng so với `mcmc` (`docs/USAGE_GUIDE.md` mục 3.6) |
+| GPU | RTX 4090, mọi lượt cùng một loại GPU |
+| Ước lượng | 45 lượt (3 phòng × 5 cấu hình × 3 seed), khoảng 9–10 giờ GPU; khoảng 22 GB nếu mỗi lượt cỡ lượt `phong_nhom` ngày 31/10/2026 (973.060 Gaussian, PLY 219 MB, cộng checkpoint cỡ tương đương). Đo dung lượng thật sau phòng đầu |
+
+Lượt này chỉ dùng tập chia theo đoạn, không so với cách chia mỗi khung thứ 8: lượt `phong_nhom` ngày 31/10/2026 giữ nguyên như đã ghi (mục "Kết quả" của `docs/PROJECT_STATUS.md`) và không dùng trong luật dưới đây.
+
+**Mức dao động của từng phòng.** Như mục 3.6 nhưng tính riêng cho mỗi phòng r, chỉ từ 6 lượt `default`, `mcmc` của chính phòng đó (không dùng số của biến thể): với mỗi chỉ số (PSNR, SSIM, LPIPS), σ_r = √((σ_default² + σ_mcmc²) / 2) trên 3 seed, d_r = √2·σ_r.
+
+**Một biến thể được gọi là cải thiện so với `mcmc` khi đủ cả ba điều:**
+1. mọi mục kiểm tra của bảng so sánh là OK, ngân sách Gaussian EQUAL;
+2. ở ít nhất 2 trong 3 phòng, chênh lệch trung bình trên 3 seed (biến thể − `mcmc`, cùng seed) tốt hơn quá d_r ở ít nhất một chỉ số (PSNR, SSIM cao hơn; LPIPS thấp hơn);
+3. không phòng nào có chỉ số nào kém `mcmc` quá d_r.
+
+Cách báo cáo:
+- Luôn báo cáo đủ ba biến thể và ba phòng, kể cả biến thể không đạt; không thêm biến thể hay phòng sau khi đã thấy kết quả. Đổi phòng hay danh sách biến thể thì sửa mục này trước khi chạy.
+- Biến thể đạt được gọi đúng loại: `rbg` là chọn cấu hình (tùy chọn có sẵn của gsplat); `mono` là tích hợp kỹ thuật đã công bố (Depth Anything V2, loss Pearson của FSGS, mục 3.7); `kr` là heuristic của notebook v2 của nhóm. Không gọi là thuật toán mới. Phạm vi kết luận: ba phòng tự quay của nhóm, tập test là các đoạn liền của chính video, chưa phải góc nhìn độc lập.
+- Không biến thể nào đạt: ghi kết quả âm đầy đủ, sản phẩm giữ `mcmc`.
+- Đổi mô hình chính của sản phẩm (`configs/product.yaml`) là quyết định riêng, chỉ xét khi có biến thể đạt; trước đó phải đo lại thời gian dựng, dung lượng và FPS trên web (`mono` thêm Depth Anything V2 vào luồng sản phẩm).
+
 ## 4. Lọc Gaussian sau khi train
 
 `src/training/prune.py`; trong kế hoạch: khóa `post_filter`; cho một lượt bất kỳ: `bash scripts/run_filter.sh <luồng> <cảnh> [<lượt> ...]` (vd. `custom phong1 mcmc_s42`). **Trạng thái: đã viết, đã kiểm thử trong sandbox (logic lọc bằng numpy; đọc / ghi checkpoint bằng PyTorch 2.7.1 chạy trên CPU; ghi PLY bằng `export_splats` thật của gsplat @6e8c837; lệnh chấm lại bằng runner giả); đã chạy trên pod ngày 31/10/2026 trong `tune_mcmc`.**
@@ -344,4 +376,5 @@ Biến thể của một kế hoạch (mục 3.2) là một dòng riêng `<chế
 | Dò tham số `mcmc` (`tune_mcmc`, mục 3): biến thể, kiểm tra điểm SfM, lọc theo seed | **Đã chạy trên pod ngày 31/10/2026**, mọi bước OK; kết quả ở `docs/PROJECT_STATUS.md` mục "Kết quả" | Kiểm thử bằng stub: `tests/unit/test_experiment.py`, `test_benchmarks.py`, `test_depth_check.py` |
 | Biến thể từ notebook v2 (mục 3.7): `bilagrid`, `kr`, `mono`, gói `v2`; bản sao có vá của trainer; depth prior; bước `depth_anything` | **Đã chạy trên pod ngày 31/10/2026** trong `tune_mcmc` (Depth Anything V2 Small tải được, mọi bước OK) | `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_setup_depth_anything.py`, `test_gsplat_launcher.py`, `test_train_run.py`, `test_train_profiles.py`, `test_experiment.py`; các kiểm tra ngoài bộ test ghi ở mục 3.7 |
 | Vòng ghép (mục 3.6) | **Đã bỏ, không chạy** (D25, 09/11/2026): theo luật chỉ một ứng viên (`rbg`, sát ngưỡng) | Thiết kế: file này ở commit `b428d95`. Biến thể nhiều tham số (gói `v2` dùng) vẫn có test: `test_experiment.py::test_a_combination_round_plan_has_several_parameters_per_variant`, `test_benchmarks.py::test_variants_run_after_the_modes_into_their_own_folders` |
+| Kiểm lại trên phòng tự quay (mục 3.8): 3 phòng, 3 seed, `rbg`, `mono`, `kr` | **Luật ghi trước khi chạy (10/11/2026, chốt phòng 12/11/2026; D26); chưa chạy trên pod** | `scripts/pod/run_segments.sh`; `tests/unit/test_run_segments.py` |
 | Lọc Gaussian và chấm lại (mục 4) | **Đã chạy trên pod ngày 31/10/2026** (`tune_mcmc`): PSNR của `default` giảm 1,14 dB, của `mcmc` và các biến thể giảm 2,1–9,1 dB; không dùng để làm nhẹ file cho MCMC | `tests/unit/test_prune.py`, `test_compare_modes.py`, `test_gsplat_results.py` |
