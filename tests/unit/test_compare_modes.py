@@ -13,7 +13,8 @@ TOLERANCE = {"PSNR": 0.5, "SSIM": 0.01, "LPIPS": 0.01}
 
 
 def write_run(root, scene, mode, seed, psnr, *, count=2_000_000, split="s1", deviations=None,
-              protocol=None, gpu="RTX A6000", status="OK", args=None, tag="", fingerprint="fp-a", run_tag=None):
+              protocol=None, gpu="RTX A6000", status="OK", args=None, tag="", fingerprint="fp-a", run_tag=None,
+              split_rule="every_n"):
     """`tag`: hậu tố thư mục; `run_tag`: tag ghi trong summary (biến thể của kế hoạch thực nghiệm, run.py --tag)."""
     run = root / scene / f"{mode}{tag}_s{seed}"
     run.mkdir(parents=True)
@@ -22,7 +23,7 @@ def write_run(root, scene, mode, seed, psnr, *, count=2_000_000, split="s1", dev
     summary = {"run_dir": str(run), "scene": scene, "mode": mode, "seed": seed, "status": status,
                "metrics": {"PSNR": psnr, "SSIM": 0.9, "LPIPS": 0.25}, "num_gaussians": count,
                "train_seconds": 1800.0, "peak_vram_mib": 10240.0, "protocol": protocol,
-               "deviations": deviations or {}, "split_sha256": split, "split_rule": "every_n",
+               "deviations": deviations or {}, "split_sha256": split, "split_rule": split_rule,
                "split_applied_ok": True, "gsplat_commit": "6e8c837", "gpu": gpu, "args": args or {},
                "lpips_net": protocol.get("lpips_net"), "scene_fingerprint": fingerprint, "tag": run_tag}
     (run / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
@@ -318,6 +319,46 @@ def test_the_plain_runs_of_a_mode_are_its_baseline_beside_plan_variants(tmp_path
     assert report["baseline"] == "mcmc[opacity-reg=0.001]"
     assert report["deltas"]["playroom"]["mcmc[opacity-reg=0.005]"]["PSNR"] == pytest.approx(0.2)
     assert not any("with a tag" in warning for warning in report["warnings"])
+
+
+def test_segment_runs_of_several_rooms_are_compared_with_default_and_with_mcmc(tmp_path):
+    # scripts/pod/run_segments.sh: mỗi phòng một danh sách test riêng (mã khác nhau); biến thể train qua train_scene.sh
+    # không ghi tag. Bảng gộp ba phòng phải ghép được biến thể giữa các phòng, và tìm được mốc default / mcmc.
+    rooms = ("video8", "video9", "video10")
+    for room in rooms:
+        for seed in (42, 43, 44):
+            common = {"split": f"{room}-segments", "split_rule": "test_list", "fingerprint": f"fp-{room}"}
+            write_run(tmp_path, room, "default", seed, 25.0, **common)
+            write_run(tmp_path, room, "mcmc", seed, 25.5, **common)
+            write_run(tmp_path, room, "mcmc", seed, 25.4, args={"random-bkgd": True}, tag="_rbg", **common)
+            write_run(tmp_path, room, "mcmc", seed, 25.8, args={"sr3d.kr": True}, tag="_kr", **common)
+    out = tmp_path / "r.json"
+    assert main(["--root", str(tmp_path), "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["baseline"] == "default<test-list>" and report["complete_scenes"] == sorted(rooms)
+    assert report["variants"] == ["default<test-list>", "mcmc<test-list>", "mcmc[random-bkgd=True]<test-list>",
+                                  "mcmc[sr3d.kr=True]<test-list>"]
+    assert all(report["deltas"][room]["mcmc<test-list>"]["PSNR"] == pytest.approx(0.5) for room in rooms)
+    assert report["mean_over_scenes"]["mcmc[sr3d.kr=True]<test-list>"]["PSNR"] == pytest.approx(25.8)
+    assert not report["incomplete"]
+    assert main(["--root", str(tmp_path), "--baseline", "mcmc", "--modes", "mcmc", "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["baseline"] == "mcmc<test-list>" and not report["incomplete"]
+    assert all(report["deltas"][room]["mcmc[random-bkgd=True]<test-list>"]["PSNR"] == pytest.approx(-0.1)
+               and report["deltas"][room]["mcmc[sr3d.kr=True]<test-list>"]["PSNR"] == pytest.approx(0.3)
+               and report["deltas"][room]["mcmc[sr3d.kr=True]<test-list>"]["seeds"] == [42, 43, 44] for room in rooms)
+    assert all(checks(report, room, "mcmc[sr3d.kr=True]<test-list>")["split"] == "OK" for room in rooms)
+
+
+def test_two_test_lists_of_one_scene_are_not_mixed(tmp_path):
+    for seed in (42, 43, 44):
+        for name, split in (("_a", "list-a"), ("_b", "list-b")):
+            write_run(tmp_path, "room", "default", seed, 25.0, tag=name, split=split, split_rule="test_list")
+            write_run(tmp_path, "room", "mcmc", seed, 25.5, tag=name, split=split, split_rule="test_list")
+    report = build_report(discover([tmp_path]), "default<test-list>", ["default", "mcmc"])
+    assert sorted(report["scenes"]) == ["room<test:list-a>", "room<test:list-b>"]
+    assert "room: runs with several different test lists; shown separately" in report["warnings"]
+    assert all(report["deltas"][scene]["mcmc<test-list>"]["PSNR"] == pytest.approx(0.5) for scene in report["scenes"])
 
 
 def test_runs_with_a_tag_stay_out_unless_their_tag_is_asked_for(tmp_path):

@@ -7,16 +7,20 @@
 
 - Tìm mọi lượt chạy (thư mục có run_meta.json) dưới --root; mỗi thư mục chỉ tính một lần.
 - Nhóm theo (cảnh, biến thể). Biến thể = chế độ + tham số riêng (`--set`), kèm đánh dấu khi ngân sách
-  Gaussian đặt tay (`--cap-max`) hoặc tập test là danh sách riêng. Ví dụ "mcmc[opacity-reg=0.001]" là biến thể
-  khác "mcmc". Các seed của cùng biến thể được lấy trung bình. Nếu một cảnh có lượt chạy trên nhiều model
-  COLMAP khác nhau (cảnh được dựng lại), mỗi model thành một dòng "cảnh@<mã model>" riêng.
+  Gaussian đặt tay (`--cap-max`) hoặc tập test là danh sách riêng (`<test-list>`, vd. chia theo đoạn của
+  scripts/pod/run_segments.sh). Ví dụ "mcmc[opacity-reg=0.001]" là biến thể khác "mcmc". Các seed của cùng biến thể
+  được lấy trung bình. Nếu một cảnh có lượt chạy trên nhiều model COLMAP khác nhau (cảnh được dựng lại), mỗi model
+  thành một dòng "cảnh@<mã model>" riêng; nhiều danh sách test riêng khác nhau trong một cảnh cũng tách thành
+  "cảnh<test:<mã danh sách>>". Tên biến thể không chứa mã danh sách, nên bảng gộp nhiều cảnh (mỗi cảnh một danh sách
+  test riêng) vẫn ghép đúng các biến thể giữa các cảnh.
 - Lượt chạy có sai khác protocol bị loại khỏi bảng (liệt kê riêng), trừ khi --include-deviating.
   Khi đó chúng thành biến thể riêng, không bao giờ trộn với lượt đúng protocol.
 - Baseline (--baseline) là một biến thể; mặc định "default" (chế độ default, không tham số riêng, đúng protocol).
   Với lượt chạy thử QUICK, baseline là "default{max_steps=3000}". Tên một chế độ chỉ có một biến thể cũng được
   (vd. --baseline mcmc --modes mcmc X: so chế độ X với mcmc; khi đó không đưa --reference-config, vì
   đối chiếu với Inria chỉ dành cho baseline default). Chế độ có thêm các biến thể của một kế hoạch thực nghiệm (lượt có
-  tag, mục `variants`): tên chế độ chọn các lượt không có tag của nó.
+  tag, mục `variants`): tên chế độ chọn các lượt không có tag của nó; lượt biến thể không ghi tag (vd. train qua
+  scripts/pipeline/train_scene.sh) thì chọn biến thể duy nhất không đổi tham số nào của chế độ.
 - Lượt có tag (biến thể của một kế hoạch thực nghiệm, vd. các lượt dò tham số của tune_mcmc nằm cùng thư mục với thực
   nghiệm chính) chỉ vào bảng khi tag nằm trong `--tags`; mặc định bị để ngoài (một dòng cảnh báo ghi số lượt và các
   tag), để bảng của một kế hoạch khác không lẫn chúng.
@@ -87,7 +91,7 @@ def variant_of(run: RunResult) -> str:
     if run.cap_policy == "cli" and run.cap_max:
         label += f"(cap_max={run.cap_max})"
     if run.split_rule == "test_list":
-        label += f"<test:{(run.split_sha256 or '?')[:6]}>"
+        label += "<test-list>"  # danh sách test riêng; danh sách nào thì tách theo cảnh (_scene_keys), không theo tên"
     if run.deviations:
         label += "{" + ", ".join(f"{key}={item.get('used')}" for key, item in sorted(run.deviations.items())) + "}"
     return label
@@ -365,6 +369,11 @@ def resolve_baseline(runs: list[RunResult], baseline: str, include_deviating: bo
         plain = sorted({variant_of(run) for run in usable if run.mode == baseline and not run.tag})
         if len(plain) == 1:
             return plain[0]
+        # biến thể không ghi tag (scripts/pipeline/train_scene.sh không truyền --tag, vd. scripts/pod/run_segments.sh):
+        # mốc là biến thể duy nhất không đổi tham số nào của chế độ
+        bare = sorted({variant_of(run) for run in usable if run.mode == baseline and not run.tag and not run.args})
+        if len(bare) == 1:
+            return bare[0]
         print(f"WARN: mode {baseline} has several variants {candidates}; pass one of them as --baseline",
               file=sys.stderr)
     return candidates[0] if len(candidates) == 1 else baseline
@@ -430,17 +439,23 @@ def b0_check(report: dict, b0_root: Path, scenes: list[str], method: str, iterat
 
 
 def _scene_keys(runs: list[RunResult]) -> dict[str, str]:
-    """run_dir -> khóa cảnh; cảnh có nhiều model COLMAP thì thêm mã model để không trộn lẫn."""
+    """run_dir -> khóa cảnh; cảnh có nhiều model COLMAP thì thêm mã model, có nhiều danh sách test riêng khác nhau thì
+    thêm mã danh sách, để không trộn lẫn."""
     models: dict[str, set] = {}
+    lists: dict[str, set] = {}
     for run in runs:
         models.setdefault(str(run.scene), set()).add(run.scene_fingerprint)
+        if run.split_rule == "test_list":
+            lists.setdefault(str(run.scene), set()).add(run.split_sha256)
     keys = {}
     for run in runs:
         scene = str(run.scene)
+        key = scene
         if len(models[scene]) > 1:
-            keys[run.run_dir] = f"{scene}@{(run.scene_fingerprint or 'unknown')[:8]}"
-        else:
-            keys[run.run_dir] = scene
+            key += f"@{(run.scene_fingerprint or 'unknown')[:8]}"
+        if run.split_rule == "test_list" and len(lists.get(scene, ())) > 1:
+            key += f"<test:{(run.split_sha256 or '?')[:6]}>"
+        keys[run.run_dir] = key
     return keys
 
 
@@ -463,6 +478,8 @@ def build_report(runs: list[RunResult], baseline: str, modes: list[str] | None,
     keys = _scene_keys(selected)
     for scene in sorted({key for key in keys.values() if "@" in key}):
         report["warnings"].append(f"{scene.split('@')[0]}: runs on several COLMAP models; shown separately")
+    for scene in sorted({key.split("@")[0].split("<test:")[0] for key in keys.values() if "<test:" in key}):
+        report["warnings"].append(f"{scene}: runs with several different test lists; shown separately")
     for run in selected:
         if run.status != "OK":
             report["incomplete"].append({"run_dir": run.run_dir, "scene": run.scene, "mode": run.mode,
