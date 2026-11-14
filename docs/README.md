@@ -7,13 +7,13 @@ Giới thiệu dự án theo bốn mục của báo cáo tuần 10 (cấu trúc 
 | Tài liệu | Nội dung |
 |---|---|
 | [USAGE_GUIDE.md](USAGE_GUIDE.md) | Hướng dẫn sử dụng trên Runpod: chuẩn bị volume và pod, notebook, cảnh tự chụp, xuất PLY, benchmark, giao diện dòng lệnh, xử lý lỗi |
-| [RESULTS.md](RESULTS.md) | Kết quả tóm tắt: lượt chạy 31/10/2026 (bảng số, biểu đồ, ảnh so sánh trong `results/`) và sản phẩm chạy trên pod 08/11/2026 |
+| [RESULTS.md](RESULTS.md) | Kết quả tóm tắt: lượt chạy 31/10/2026 (bảng số, biểu đồ, ảnh so sánh trong `results/`), sản phẩm chạy trên pod 08/11/2026, đánh giá theo đoạn trên ba phòng tự quay 12–13/11/2026 (báo cáo gốc chép trong `results/segment_eval/`) |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md) | Trạng thái hiện tại, quyết định đã chốt, việc đã làm kèm bằng chứng, việc còn mở, việc tiếp theo |
 | [PROJECT_PLAN.md](PROJECT_PLAN.md) | Đề bài, phạm vi, phương pháp, giao thức đánh giá, mốc nghiệm thu, rủi ro |
-| [ENVIRONMENT_AUDIT.md](ENVIRONMENT_AUDIT.md) | Môi trường trên pod, phiên bản ghim, cài đặt và kiểm tra, sự cố đã biết; các lượt chạy trên pod (31/10/2026, 08/11/2026) và số đo của repo trước ở mục 7 |
+| [ENVIRONMENT_AUDIT.md](ENVIRONMENT_AUDIT.md) | Môi trường trên pod, phiên bản ghim, cài đặt và kiểm tra, sự cố đã biết; các lượt chạy trên pod (31/10/2026, 08/11/2026, 12–13/11/2026) và số đo của repo trước ở mục 7 |
 | [design/architecture.md](design/architecture.md) | Cây thư mục, bố cục `/workspace`, ba luồng dữ liệu, khai báo đường dẫn, nguồn gốc mã nguồn |
 | [design/training_modes.md](design/training_modes.md) | Hai chế độ huấn luyện `default` và `mcmc`: protocol, giao thức so sánh, thành phần |
-| [design/experiments.md](design/experiments.md) | Benchmark (Deep Blending, Mip-NeRF 360), thực nghiệm chính, dò tham số `mcmc`, lọc Gaussian sau khi train |
+| [design/experiments.md](design/experiments.md) | Benchmark (Deep Blending, Mip-NeRF 360), thực nghiệm chính, dò tham số `mcmc`, đánh giá theo đoạn trên phòng tự quay (luật ghi trước khi chạy, mục 3.8), lọc Gaussian sau khi train |
 | [design/product.md](design/product.md) | Sản phẩm: mô hình chính (`configs/product.yaml`), dựng phòng từ video / ảnh (`scripts/build_room.sh`), hợp đồng với web: `manifest.json`, `model.splat`, `cameras.json`, `progress.json` |
 | [../app/web/README.md](../app/web/README.md) | Trang web của sản phẩm: chạy trên pod (`scripts/web_server.sh`), xem trên laptop không cần pod, các màn, code, kiểm thử |
 | [design/comparisons.md](design/comparisons.md) | Bảng và biểu đồ so sánh các chế độ (`scripts/run_evaluate.sh`, `src/evaluation/charts.py`) |

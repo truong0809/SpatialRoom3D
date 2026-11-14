@@ -2,7 +2,7 @@
 
 Luồng người dùng: **tải ảnh hoặc video của căn phòng lên → pod GPU tự dựng phòng → xem tiến độ → xem mô hình 3D**.
 
-Trạng thái (05/11/2026): **đã viết, đã kiểm thử trên CPU** (unit test qua HTTP thật, trọn luồng với `build_room.sh` thật và gsplat giả, trình duyệt Chromium headless với phòng tổng hợp). **Chưa chạy trên pod**, chưa có phòng thật nào dựng bằng trang này. Giao diện làm lại ngày 05/11/2026 (bảng điều khiển nền tối, thanh bên thu gọn được); API giữ nguyên, chỉ thêm hai trường chỉ đọc (`pipeline` trong `/api/status`, `last_build` trong `/api/rooms`).
+Trạng thái (12/11/2026): **đã chạy trên pod RTX 4090 ngày 08/11/2026**: tải video lên qua proxy của Runpod, dựng 7 phòng, xem 3D trên laptop (`docs/RESULTS.md` mục 7). Đã kiểm thử trên CPU: unit test qua HTTP thật, trọn luồng với `build_room.sh` thật và gsplat giả, trình duyệt Chromium headless với phòng tổng hợp. Giao diện làm lại ngày 05/11/2026 (bảng điều khiển nền tối, thanh bên thu gọn được); API giữ nguyên, chỉ thêm hai trường chỉ đọc (`pipeline` trong `/api/status`, `last_build` trong `/api/rooms`).
 
 | Màn | Địa chỉ | Làm gì |
 |---|---|---|

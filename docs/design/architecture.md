@@ -1,6 +1,6 @@
 # Kiến trúc repository và dữ liệu
 
-_Cập nhật: 28/10/2026_
+_Cập nhật: 13/11/2026_
 
 Tài liệu này ghi:
 - cây thư mục của repo và vai trò từng phần;
@@ -36,7 +36,8 @@ SpatialRoom3D/
 │   ├── rendering/                 render.py: render lại từ checkpoint, xuất PLY
 │   ├── evaluation/                gsplat_results.py, compare_modes.py, compare_reference.py, overview.py,
 │   │                              splat_stats.py (thống kê PLY), panels.py (ảnh so sánh các lượt),
-│   │                              charts.py (biểu đồ tổng của các báo cáo so sánh)
+│   │                              charts.py (biểu đồ tổng của các báo cáo so sánh),
+│   │                              segment_rule.py (đủ lượt và luật của đánh giá theo đoạn, experiments.md mục 3.8)
 │   ├── datasets/                  registry.py: đọc configs/*.yaml, kiểm tra dữ liệu từng luồng; fetch.py: tải benchmark
 │   ├── utils/                     gpu_lock.py: khóa GPU dùng chung với script bash
 │   ├── product/                   SẢN PHẨM (mô hình chính, configs/product.yaml): train_main.py (train, không dùng
@@ -63,7 +64,7 @@ SpatialRoom3D/
 │   ├── pipeline/                  phần thực thi: prepare_scene, prepare_benchmark, train_scene, train_gsplat_modes, train_inria_b0
 │   ├── pod/                       run_all, run_scene (cả luồng một cảnh), run_experiment (thực nghiệm trọn vẹn),
 │   │                              fetch_data (tải benchmark), job (chạy nền, xếp hàng GPU), results, pack_results,
-│   │                              check_datasets
+│   │                              check_datasets, run_segments (đánh giá cảnh tự quay theo đoạn)
 │   ├── setup/                     env_probe, setup_3dgs_inria, setup_data_tools, setup_gsplat, setup_depth_anything,
 │   │                              smoke_test_*.py
 │   └── lib/                       gpu_lock.sh, config.sh (đọc configs/*.yaml), benchmark.sh
@@ -95,6 +96,7 @@ Luồng chính và nơi mỗi bước nằm:
 | Lọc Gaussian, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
 | Evaluate (PSNR / SSIM / LPIPS): bảng và biểu đồ | `src/evaluation/` (biểu đồ: `charts.py`) | `scripts/run_evaluate.sh` |
 | Ảnh so sánh các lượt | `src/evaluation/panels.py` | `scripts/run_panels.sh` |
+| Đánh giá cảnh tự quay theo đoạn (ảnh test là các đoạn liền của video), áp luật ghi trước | `src/training/split.py`, `src/evaluation/segment_rule.py` | `scripts/pod/run_segments.sh` (`docs/USAGE_GUIDE.md` mục 3.6) |
 | Sản phẩm: mô hình chính → file cho web | `src/product/` | `scripts/build_room.sh` (`docs/design/product.md`) |
 
 Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` (script tự đặt), ví dụ `python -m src.training.run`, `python -m src.reconstruction.colmap_runner`, `python -m src.datasets.registry`.
@@ -117,6 +119,8 @@ Mọi lệnh Python chạy với thư mục gốc của repo trong `PYTHONPATH` 
 │   │   ├── colmap/                   ảnh đã chuẩn hóa (input/), COLMAP (images/, sparse/0/), frames_report.json, sfm_report.json
 │   │   └── <chế_độ>_s<seed>/         các lượt train (default_s42, mcmc_s42, ...); render_<quỹ_đạo>_<thời_gian>/ khi render lại,
 │   │                                 filtered/ khi đã lọc Gaussian
+│   ├── custom_segments/<cảnh>/       đánh giá theo đoạn (scripts/pod/run_segments.sh): split/ (tập chia),
+│   │                                 <chế_độ>[_<tag>]_s<seed>/; mô hình COLMAP chỉ đọc từ custom_scenes/ hoặc product/
 │   ├── benchmarks/<benchmark>/
 │   │   ├── inria_b0/<cảnh>/          B0 Inria
 │   │   ├── gsplat/<cảnh>/<chế_độ>[_<tag>]_s<seed>/   tag: biến thể tham số của một kế hoạch (vd. mcmc_or0001_s42)

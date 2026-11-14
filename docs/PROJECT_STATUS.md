@@ -1,12 +1,12 @@
 # PROJECT STATUS
 
-_Cập nhật: 12/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhật ký kiểm thử, rà soát độc lập, ghi chú từng lần sửa) nằm trong lịch sử Git của file này và trong các bản bàn giao của Project trên claude.ai._
+_Cập nhật: 13/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhật ký kiểm thử, rà soát độc lập, ghi chú từng lần sửa) nằm trong lịch sử Git của file này và trong các bản bàn giao của Project trên claude.ai._
 
 ## Mục tiêu hiện tại
 
-1. **Đo nốt sản phẩm trên pod** (D20, D22): ngày 08/11/2026 đã tải video lên trang web, dựng phòng `video10` và xem 3D trên trình duyệt; còn thiếu thời gian từng bước ngoài train, thời gian tải trang, FPS, và kiểm tra số Gaussian của `model.splat` (mục "Còn mở").
+1. **Sản phẩm trên pod** (D20, D22): đã chạy trọn luồng và đo ngày 08/11/2026 (7 phòng; `docs/RESULTS.md` mục 7); còn kiểm số Gaussian đã train so với `cap_max` (mục "Còn mở").
 2. **Hoàn thiện trang web theo bản thiết kế** (giai đoạn 5): trang Kết quả thực nghiệm; chấm điểm phòng tự dựng bằng lượt quay kiểm tra (`docs/design/product.md` mục 5).
-3. **Báo cáo đồ án** (giai đoạn 6) từ kết quả thực nghiệm ngày 31/10/2026 (mục "Kết quả").
+3. **Báo cáo đồ án** (giai đoạn 6) từ kết quả thực nghiệm ngày 31/10/2026 và 12–13/11/2026 (hai mục "Kết quả").
 
 ## Quy ước trạng thái
 
@@ -50,6 +50,7 @@ _Cập nhật: 12/11/2026. Bản rút gọn (D21): lịch sử chi tiết (nhậ
 | Lưu trữ, GPU | Network volume (không dùng Global volume) cùng data center với GPU; ≥ 100 GB (khoảng 110 GB nếu chạy lại cả `tune_mcmc`); RTX 4090 như lượt 31/10/2026 | `docs/ENVIRONMENT_AUDIT.md` mục 1 |
 | Bản gsplat | Giữ commit `6e8c837` | v1.5.3 có lỗi khiến `DefaultStrategy` không reset opacity |
 | Repo cũ trên GitHub | Chuyển sang private hoặc archive | Repo cũ đang public |
+| Thêm một lượt ở `cap_max` 1 triệu (tùy chọn) | Chạy `mcmc` trên ba phòng tự quay, cùng tập chia, 3 seed, với `cap_max` 1.000.000 như sản phẩm; ghi luật đọc kết quả trước khi chạy | Đánh giá theo đoạn dùng ngân sách của `default` (tới 3,6 triệu ở `video10`); chưa biết sản phẩm mất bao nhiêu chất lượng ở 1 triệu |
 
 Ba lựa chọn được chốt **sau khi đã có kết quả**: dùng `mcmc` làm mô hình của sản phẩm, không xét gói `v2` như một ứng viên, và bỏ vòng ghép (D25; theo luật đã ghi, một ứng viên thì vẫn chạy). Báo cáo phải ghi rõ điều này.
 
@@ -83,6 +84,21 @@ Code: commit `c0a7a92`. Pod và thời gian từng việc: `docs/ENVIRONMENT_AUD
   - kém quá d: `or0005`, `or0001`, `rs30k`, `sh2`, `mo002`, `or005`, `bilagrid` (−2,476 dB), `v2` (−2,750 dB);
   - lọc Gaussian (opacity < 0,02, trục > 0,1 × `scene_scale`): `default` −1,14 dB, `mcmc` và các biến thể −2,1 đến −9,1 dB. Không dùng bộ lọc này để làm nhẹ file cho MCMC.
 
+## Kết quả: ba phòng tự quay, test theo đoạn (lượt chạy pod ngày 12–13/11/2026)
+
+Bảng đầy đủ và biểu đồ: `docs/RESULTS.md` mục 6.2 (ảnh so sánh chỉ có trong gói kết quả, không đưa vào repo). Thiết kế và luật ghi trước khi chạy: `docs/design/experiments.md` mục 3.8 (D26).
+
+Code: commit `49c208b` (28 lượt) và `52afb1d` (17 lượt chạy sau khi sửa bộ kiểm NaN ở `4251ff2`); gsplat `6e8c837`; RTX 4090. Số liệu lấy từ `outputs/reports/danh_gia_theo_doan/` trên volume (bản chép: `docs/results/segment_eval/`).
+
+- 3 phòng (`video8` phòng ngủ, `video9` phòng học, `video10` phòng ký túc xá) × 5 cấu hình × 3 seed: **45/45 lượt OK**, mọi điều kiện so sánh đạt; ảnh test là 6 đoạn liền của chính video (30 ảnh mỗi phòng).
+- `mcmc` so với `default`: tốt hơn ở **9/9** cặp (phòng, seed) ở cả ba chỉ số; trung bình PSNR +2,182 dB, SSIM +0,0262, LPIPS −0,0262. Theo phòng: `video8` +0,339 dB (trong mức dao động, d_r 0,765 dB), `video9` +3,923 dB, `video10` +2,285 dB.
+- Ba biến thể so với `mcmc` theo luật mục 3.8: **không biến thể nào đạt**, sản phẩm giữ `mcmc`.
+  - `rbg`: trong mức dao động ở cả ba phòng;
+  - `mono`: tốt hơn quá d_r chỉ ở `video10` (cả ba chỉ số; +0,549 dB), luật cần 2 phòng;
+  - `kr`: kém quá d_r ở `video10` (cả ba chỉ số; −0,460 dB).
+- Chi phí: `mono` train lâu hơn `mcmc` ×1,20–1,77, các biến thể khác ×0,99–1,05; 45 lượt mất 9,1 giờ train, PLY cộng checkpoint 34 GB.
+- Giới hạn: ảnh test vẫn nằm trên đường đã quay; ngân sách Gaussian bằng `default` (0,76 / 0,83 / 3,63 triệu), khác `cap_max` 1 triệu của sản phẩm.
+
 ## Đã thực hiện
 
 | Hạng mục | Trạng thái | Bằng chứng |
@@ -95,15 +111,17 @@ Code: commit `c0a7a92`. Pod và thời gian từng việc: `docs/ENVIRONMENT_AUD
 | Render lại từ checkpoint, xuất PLY (`src/rendering/render.py`) | Đã kiểm thử với runner giả; **chưa xác nhận trên pod** | `tests/unit/test_render.py` |
 | Ảnh so sánh, video xếp chồng (`scripts/run_panels.sh`) | Đã chạy trên pod; `VIDEO=1` bị dừng vì hết RAM ở 2/3 cảnh | Mục "Còn mở" |
 | Notebook lấy code qua HTTPS, kiểm tra `chmod` (D19) | Đã viết, đã mô phỏng; **ô 1–3 bản mới chưa chạy trên pod** (lượt 31/10 clone bằng tay) | `tests/unit/test_notebooks.py` |
-| Luồng sản phẩm (D20): `configs/product.yaml`, `src/product/`, `scripts/build_room.sh` | Đã viết; đã kiểm thử bằng stub và gsplat giả; đã đối chiếu trên CPU với code thật của gsplat @6e8c837; **đã chạy trên pod 08/11/2026** (RTX 4090): phòng `video10` từ video 2:54, 249 ảnh định vị, 637.031 Gaussian, `model.splat` 20,4 MB, train 8 phút 23 giây | `tests/unit/test_product.py`, `test_product_export.py`, `test_build_room.py`; `docs/design/product.md` mục 7 |
-| Trang web (D22, D23): `app/web/`, `scripts/web_server.sh` | Đã viết; đã kiểm thử trên CPU: API qua HTTP thật, tải lên → `build_room.sh` thật → thư viện; Chromium headless (trọn luồng; camera khớp mô hình theo điểm mốc của phòng tổng hợp); đã rà soát bảo mật độc lập, sửa các lỗi tìm được (mỗi lỗi có test; `docs/design/product.md` mục 8). Giao diện làm lại (D23): đã soát bằng ảnh chụp màn hình ở 1440 × 900 và 390 × 664 với dữ liệu tổng hợp. **đã chạy trên pod 08/11/2026** (sau khi thêm cổng HTTP 8000 bằng Edit Pod): tải video lên, dựng xong `video10`, xem được 3D (ảnh: `docs/results/web/overview.jpg`; video quay màn hình demo: [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view)) | `tests/unit/test_web_server.py`, `test_web_uploads.py`, `tests/browser/` (`SR3D_BROWSER=1`); `docs/design/product.md` mục 8 |
-| Đánh giá phòng tự quay theo đoạn (`python -m src.training.split segments`, `--exclude-list` của `src.training.run`, `scripts/pod/run_segments.sh`): 6 đoạn liền của video làm test, bỏ 3 khung mỗi bên, `default` / `mcmc` × 3 seed; đọc được COLMAP của phòng sản phẩm (`SRC_ROOT`), thêm biến thể của `mcmc` trên cùng tập chia (`VARIANTS`, vd. `mono`, `kr`, `rbg`) | Đã viết, đã kiểm thử trên CPU (DRY_RUN; chạy với stub thay train / lập bảng); **chưa chạy trên pod** | `tests/unit/test_train_split.py`, `test_train_run.py`, `test_run_segments.py`; `docs/USAGE_GUIDE.md` mục 3.6 |
-| Toàn bộ test trên CPU | 599 test đạt, 11 bỏ qua vì cần PyTorch hoặc `SR3D_BROWSER=1` (10/11/2026, Python 3.10) | `python -m pytest` |
+| Luồng sản phẩm (D20): `configs/product.yaml`, `src/product/`, `scripts/build_room.sh` | Đã viết; đã kiểm thử bằng stub và gsplat giả; đã đối chiếu trên CPU với code thật của gsplat @6e8c837; **đã chạy trên pod 08/11/2026** (RTX 4090, 7 phòng): video 2:54 → 250 khung, 249 ảnh định vị, khoảng 640 nghìn Gaussian, `model.splat` 20,5 MB; tổng 18 phút 45 giây (COLMAP 9 phút 40 giây, train 8 phút 32 giây) | `tests/unit/test_product.py`, `test_product_export.py`, `test_build_room.py`; `docs/design/product.md` mục 7 |
+| Trang web (D22, D23): `app/web/`, `scripts/web_server.sh` | Đã viết; đã kiểm thử trên CPU: API qua HTTP thật, tải lên → `build_room.sh` thật → thư viện; Chromium headless (trọn luồng; camera khớp mô hình theo điểm mốc của phòng tổng hợp); đã rà soát bảo mật độc lập, sửa các lỗi tìm được (mỗi lỗi có test; `docs/design/product.md` mục 8). Giao diện làm lại (D23): đã soát bằng ảnh chụp màn hình ở 1440 × 900 và 390 × 664 với dữ liệu tổng hợp. **đã chạy trên pod 08/11/2026** (sau khi thêm cổng HTTP 8000 bằng Edit Pod): tải video lên, dựng phòng, xem 3D ở cả ba chế độ; trên laptop GPU tích hợp Intel UHD: tải 956 ms, khung đầu 1,15 giây, 10,5 FPS khi đang quay màn hình (`docs/RESULTS.md` mục 7; video quay màn hình demo: [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view)) | `tests/unit/test_web_server.py`, `test_web_uploads.py`, `tests/browser/` (`SR3D_BROWSER=1`); `docs/design/product.md` mục 8 |
+| Đánh giá phòng tự quay theo đoạn (`python -m src.training.split segments`, `--exclude-list` của `src.training.run`, `scripts/pod/run_segments.sh`): 6 đoạn liền của video làm test, bỏ 3 khung mỗi bên, `default` / `mcmc` × 3 seed; đọc được COLMAP của phòng sản phẩm (`SRC_ROOT`), thêm biến thể của `mcmc` trên cùng tập chia (`VARIANTS`, vd. `mono`, `kr`, `rbg`) | Đã kiểm thử trên CPU (DRY_RUN; chạy với stub thay train / lập bảng). **Đã chạy trên pod 12–13/11/2026: 45/45 lượt OK**; bảng từng phòng, bảng gộp (so với `default`, so với `mcmc`), luật mục 3.8 (`python -m src.evaluation.segment_rule`) và ảnh so sánh đã có; đạt tiêu chí nghiệm thu đã đặt (đủ 3 seed, không lượt lỗi, kết luận theo luật, số chép vào `docs/RESULTS.md`). Ở `video9`, 6 lượt `mono`, `kr` đầu tiên dừng ở vòng 0 vì bộ kiểm NaN coi Gaussian kích thước 0 lúc khởi tạo là lỗi; sửa ở `4251ff2` rồi chạy lại (`docs/design/experiments.md` cuối mục 3.8) | Mục "Kết quả: ba phòng tự quay"; `tests/unit/test_train_split.py`, `test_train_run.py`, `test_run_segments.py`, `test_segment_rule.py`; `docs/USAGE_GUIDE.md` mục 3.6 |
+| Toàn bộ test trên CPU | 599 test đạt, 19 bỏ qua vì máy kiểm thử không có PyTorch, matplotlib hoặc `SR3D_BROWSER=1` (12/11/2026, Python 3.13, commit `52afb1d`) | `python -m pytest` |
 
 ## Còn mở
 
-- Luồng sản phẩm đã chạy trên pod (08/11/2026, `video10`) nhưng mới có thời gian train (8 phút 23 giây); thời gian các bước còn lại và ảnh hưởng của `cap_max` 1 triệu chưa đo. `model.splat` của `video10` có 637.031 Gaussian, thấp hơn `cap_max`. Giả thuyết chưa kiểm: train đủ 1.000.000, bước xuất bỏ các Gaussian trong suốt hoàn toàn (alpha về 0 khi lượng tử hóa 8 bit, `src/product/export_web.py`). Kiểm bằng `num_gaussians_trained` trong `outputs/product/web/manifest.json` hoặc dòng `[export_web]` trong `outputs/logs/build_room_video10_*.log`.
-- Trang web đã chạy trên pod, tải video lên qua proxy của Runpod được; thời gian tải trang và FPS trên máy thật chưa đo. Chưa có trang Kết quả thực nghiệm, chấm điểm bằng lượt quay kiểm tra, tự dừng pod.
+- Luồng sản phẩm: `model.splat` của mọi phòng có 430–820 nghìn Gaussian, thấp hơn `cap_max` 1.000.000. Giả thuyết chưa kiểm: train đủ 1.000.000, bước xuất bỏ các Gaussian trong suốt hoàn toàn (alpha về 0 khi lượng tử hóa 8 bit, `src/product/export_web.py`). Kiểm bằng `num_gaussians_trained` trong `outputs/product/web/manifest.json` hoặc dòng `[export_web]` trong `outputs/logs/build_room_<phòng>_*.log`. Ảnh hưởng của `cap_max` 1 triệu chưa đo: đánh giá theo đoạn chạy với ngân sách của `default` (tới 3,6 triệu ở `video10`), nên chưa trả lời câu này.
+- Trang web: FPS mới đo một lần trên GPU tích hợp, trong lúc đang quay màn hình (10,5 FPS); chưa đo khi không quay màn hình, ở các mức chất lượng, trên GPU rời, điện thoại. Đi bộ ra xa đường đã quay thấy vệt nhòe, floater. Chưa có trang Kết quả thực nghiệm, chấm điểm bằng lượt quay kiểm tra, tự dừng pod.
+- `video9`: 157 điểm SfM nằm trong cụm ít nhất 4 điểm trùng vị trí, nên thành Gaussian kích thước 0 lúc khởi tạo (`zero_size` trong `sr3d_hooks.jsonl`; về 0 từ vòng 1.000–1.500); `video8`, `video10` không có. Chưa kiểm `points3D` của mô hình COLMAP phòng này (`outputs/product/video9/colmap` trên volume) để biết vì sao có điểm trùng.
+- `scripts/pod/job.sh status`: `last_line` cắt 4.000 byte cuối của log bằng `tail -c`; khi chỗ cắt rơi vào giữa một ký tự UTF-8 nhiều byte (chữ tiếng Việt, thanh tiến độ), `grep` (bản 3.11 trong locale UTF-8) coi là file nhị phân và in `binary file matches` thay cho dòng cuối. Chỉ ảnh hưởng phần hiển thị; sửa bằng `grep -a` (chưa sửa).
 - Phòng tự dựng chưa có điểm đánh giá: cần một đoạn quay kiểm tra định vị chung mô hình COLMAP với video chính (`scripts/pipeline/prepare_scene.sh`, chưa có).
 - Lượt 31/10/2026: chưa xác minh `repo_dirty` trong `run_meta.json` (notebook từng được mở thẳng trong repo trên pod).
 - `run_panels.sh` với `VIDEO=1` bị `Killed` (hết RAM) ở `phong_nhom` và `mipnerf360 room`; link tải `/files/workspace/...` của Jupyter chưa xác nhận chạy được.
@@ -121,18 +139,17 @@ Phiên bản ghim, cách cài, sự cố đã biết, cấu hình pod đã chạ
 
 Tất cả nằm trên network volume tại `/workspace`, không đưa lên Git; bố cục: `docs/design/architecture.md` mục 2.
 - Dữ liệu gốc: `data/benchmarks/{deep_blending,mipnerf360}/`, `data/custom_scenes/<cảnh>/`.
-- Kết quả thực nghiệm: `outputs/benchmarks/<benchmark>/{inria_b0,gsplat}/`, `outputs/custom_scenes/phong_nhom/`.
-- Báo cáo và biểu đồ: `outputs/reports/` (`main_20261031_114145.*`, `tune_mcmc_20261031_155033.*`, `compare_custom_20261031_214710.md`).
-- Gói kết quả: `ket_qua_main_20261031_114145.tar.gz` (123 MB), `ket_qua_tune_mcmc_20261031_155033.tar.gz` (244 MB).
-- Sản phẩm: `outputs/product/<phòng>/` và thư mục web `outputs/product/web/`; video / ảnh tải lên từ trang web: `data/uploads/<phòng>/`; mật khẩu của server: `outputs/product/server/token`. Phòng đã dựng: `video10` (08/11/2026). Video quay màn hình demo (11 phút): [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view), file không đưa lên Git.
-- Ảnh và biểu đồ kết quả trong repo (chép từ volume, khoảng 4 MB): `docs/results/` (`docs/RESULTS.md`).
+- Kết quả thực nghiệm: `outputs/benchmarks/<benchmark>/{inria_b0,gsplat}/`, `outputs/custom_scenes/phong_nhom/`, đánh giá theo đoạn `outputs/custom_segments/<phòng>/<cấu hình>_s<seed>/` (lượt dừng lỗi trước khi sửa giữ ở `*.prev_<thời điểm>`).
+- Báo cáo và biểu đồ: `outputs/reports/` (`main_20261031_114145.*`, `tune_mcmc_20261031_155033.*`, `compare_custom_20261031_214710.md`, `danh_gia_theo_doan/`).
+- Gói kết quả: `ket_qua_main_20261031_114145.tar.gz` (123 MB), `ket_qua_tune_mcmc_20261031_155033.tar.gz` (244 MB), `ket_qua_danh_gia_theo_doan_day_du_20261112_180406.tar.gz` (337 MB; gói `ket_qua_danh_gia_theo_doan_20261112_180311.tar.gz` đóng trước đó một phút giống hệt, chỉ thiếu ảnh so sánh và vài dòng log cuối).
+- Sản phẩm: `outputs/product/<phòng>/` và thư mục web `outputs/product/web/`; video / ảnh tải lên từ trang web: `data/uploads/<phòng>/`; mật khẩu của server: `outputs/product/server/token`. Phòng đã dựng ngày 08/11/2026: `t`, `video2`, `video8`, `video9`, `1789028710123_…`, `video10`, `1`. Video quay màn hình demo (11 phút): [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view), file không đưa lên Git.
+- Ảnh, biểu đồ và báo cáo kết quả trong repo (chép từ volume, khoảng 4 MB): `docs/results/` (`docs/RESULTS.md`).
 
 ## Việc tiếp theo
 
 | Bước | Việc | Tiêu chí nghiệm thu |
 |---|---|---|
-| 1 | Đo nốt `video10` trên pod: thời gian từng bước (trang Tiến độ hoặc `outputs/product/video10/progress.json`), thời gian tải và FPS (nút "Đo trên máy này" ở trang Xem 3D); kiểm số Gaussian đã train (mục "Còn mở") | Ghi đủ các số vào `docs/RESULTS.md` mục 7; trên trang Xem 3D, góc mở đầu giống ảnh đầu vào tương ứng, ba chế độ chạy được |
-| 2 | Đánh giá theo đoạn trên phòng thật theo D26 (`docs/design/experiments.md` mục 3.8; lệnh ở `docs/USAGE_GUIDE.md` mục 3.6): `video8`, `video9`, `video10` (`SRC_ROOT=/workspace/outputs/product`); `default`, `mcmc`, `rbg`, `mono`, `kr` × 3 seed (45 lượt, khoảng 9–10 giờ GPU); đo dung lượng sau phòng đầu; xong thì lập bảng gộp ba phòng | Bảng từng phòng và bảng gộp (so với `default`, so với `mcmc`) đủ 3 seed, không lượt lỗi; kết luận đúng luật mục 3.8; số chép vào `docs/RESULTS.md` |
-| 3 | Trang Kết quả thực nghiệm của bản thiết kế, số lấy từ báo cáo 31/10 | Mọi số trên trang truy được về `main_20261031_114145*.md` / `.json` |
-| 4 | Viết chương kết quả của báo cáo từ mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume |
-| 5 | Repo cũ để private hoặc archive; nếu cần, chép báo cáo `.md` gốc từ volume vào `docs/results/` (`docs/RESULTS.md` mục 11) | Repo cũ không còn public |
+| 1 | Kiểm số Gaussian đã train (`num_gaussians_trained` trong `outputs/product/web/manifest.json`) của `video10`, `1`; nếu có máy GPU rời, đo FPS bằng nút "Đo trên máy này" | Ghi vào `docs/RESULTS.md` mục 7; giả thuyết ở mục "Còn mở" được xác nhận hoặc bác bỏ |
+| 2 | Trang Kết quả thực nghiệm của bản thiết kế, số lấy từ báo cáo 31/10 | Mọi số trên trang truy được về `main_20261031_114145*.md` / `.json` |
+| 3 | Viết chương kết quả của báo cáo từ hai mục "Kết quả" (bảng, biểu đồ `main_*_charts/`, ảnh so sánh; ba phòng tự quay: `docs/RESULTS.md` mục 6.2) | Mọi số trong báo cáo truy được về báo cáo `.md` / `.json` trên volume hoặc bản chép trong `docs/results/` |
+| 4 | Repo cũ để private hoặc archive; nếu cần, chép báo cáo `.md` gốc từ volume vào `docs/results/` (`docs/RESULTS.md` mục 11) | Repo cũ không còn public |

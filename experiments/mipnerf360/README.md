@@ -53,7 +53,7 @@ bash scripts/run_evaluate.sh mipnerf360
 bash scripts/pod/run_experiment.sh tune_mcmc --plan           # dò tham số mcmc trên room: kế hoạch, các bước
 ```
 
-Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất khoảng 13–20 phút mỗi cảnh mỗi chế độ (số đo ở `docs/ENVIRONMENT_AUDIT.md` mục 7). Mip-NeRF 360, 4 cảnh trong nhà × 2 chế độ × 3 seed: 6 giờ 13 phút (31/10/2026, `docs/ENVIRONMENT_AUDIT.md` mục 7); 5 cảnh ngoài trời chưa đo.
+Trên RTX 4090, Deep Blending mất khoảng 13–20 phút mỗi cảnh mỗi chế độ (số đo ở `docs/ENVIRONMENT_AUDIT.md` mục 7). Mip-NeRF 360, 4 cảnh trong nhà × 2 chế độ × 3 seed: 6 giờ 13 phút (31/10/2026, `docs/ENVIRONMENT_AUDIT.md` mục 7); 5 cảnh ngoài trời chưa đo.
 
 ## Đã kiểm tra những gì
 
@@ -61,4 +61,4 @@ Chạy trên GPU khi được duyệt. Trên RTX 4090, Deep Blending mất kho�
 - Biến thể tham số của `tune_mcmc` (thư mục `<chế_độ>_<tag>_s<seed>`, cùng `cap_max` lấy từ `default`, tham số của biến thể đứng sau quy ước mcmc của benchmark): `tests/unit/test_benchmarks.py`, `tests/unit/test_experiment.py`, chạy với stub. Biến thể có code (`kr`, `mono`, `v2`): `tests/unit/test_trainer_hooks.py`, `test_mono_depth.py`, `test_train_run.py`, kiểm trên CPU; đã chạy trên GPU trong `tune_mcmc` ngày 31/10/2026 (`docs/design/experiments.md` mục 3.7).
 - Tải và giải nén (chỉ cảnh và thư mục cần dùng, bỏ file ẩn / symlink, dừng khi đường dẫn không an toàn hoặc thiếu thư mục): `tests/unit/test_fetch.py`, với curl giả và file zip tổng hợp; đã tải file thật trên pod ngày 31/10/2026 (4 cảnh trong nhà).
 - Bản xem dữ liệu, cache PNG dùng chung, cache dở dang hoặc có file lạ bị xóa, hai cảnh không dùng chung cache, cùng cấu hình thì bỏ qua: `tests/unit/test_train_run.py`, với runner giả ghép ảnh đúng như gsplat 6e8c837 (bắt được lỗi khi dấu `.complete` nằm trong thư mục PNG).
-- **Chưa chạy** với gsplat thật hay dữ liệu thật.
+- Với gsplat thật và dữ liệu thật: đã chạy trên pod ngày 31/10/2026 (4 cảnh trong nhà, 3 seed; `docs/RESULTS.md`).

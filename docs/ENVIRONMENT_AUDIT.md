@@ -1,6 +1,6 @@
 # Môi trường thực nghiệm
 
-_Cập nhật: 09/11/2026 (bản rút gọn, D21; lịch sử trong Git). Repo này đã cài và chạy trên pod ngày 31/10/2026, chạy lại trên pod mới cùng volume ngày 08/11/2026 (mục 7). Các file `configs/environment/*.conf` vẫn để `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`)._
+_Cập nhật: 13/11/2026 (bản rút gọn, D21; lịch sử trong Git). Repo này đã cài và chạy trên pod ngày 31/10/2026, chạy lại trên pod mới cùng volume ngày 08/11/2026 và 12–13/11/2026 (mục 7). Các file `configs/environment/*.conf` vẫn để `provisional` (`scripts/pod/run_all.sh` đặt `ALLOW_PROVISIONAL=1`)._
 
 ## 1. Pod và bố cục `/workspace`
 
@@ -127,6 +127,8 @@ Số Inria công bố cho Deep Blending (trung bình 2 cảnh, code hiện hành
   - bản CUDA cần driver hỗ trợ CUDA ≥ 12.9 (mục 4.1);
   - bản không có CUDA mà bật GPU thì cần OpenGL: `colmap_runner.py` chỉ bật GPU khi có CUDA, và chạy với `QT_QPA_PLATFORM=offscreen`.
 - **`df` trên network volume:** báo dung lượng của cả cụm lưu trữ (hàng PB), không phải quota. Xem dung lượng trên trang Runpod.
+- **Edit Pod làm pod khởi động lại** (08/11/2026 khi thêm cổng; 12/11/2026 giữa lượt đánh giá theo đoạn): việc đang chạy hoặc xếp hàng của `scripts/pod/job.sh` mất (trạng thái MẤT). Gửi lại cùng lệnh: `run_segments.sh` bỏ qua lượt đã OK, lượt dở được dời sang `*.prev_<thời điểm>` rồi chạy lại từ đầu.
+- **`job.sh status` in `binary file matches`:** dòng cuối của log lấy từ 4.000 byte cuối (`tail -c`); khi chỗ cắt rơi vào giữa một ký tự UTF-8 nhiều byte, `grep` 3.11 trong locale UTF-8 coi là file nhị phân. Chỉ ảnh hưởng phần hiển thị; xem log bằng `tail -n`. Sửa đề xuất: `grep -a` (chưa sửa).
 - **Volume không cho `chmod`** (31/10/2026, volume mới tạo ở một data center khác EU-RO-1): `chmod` báo `Operation not permitted`, nên `git clone`, conda và pip đều hỏng. Trang tạo volume lúc đó đang chọn Global volume (beta); chưa xác nhận đó đúng là loại của volume lỗi. Network volume thì `chmod` bình thường (EU-RO-1 ngày 17/10, EU-CZ-1 ngày 31/10/2026). Ô 1 của notebook kiểm tra `chmod`.
 - **PyTorch:** `pip install torch==2.7.1` coi bản khác biến thể CUDA là đủ, nên script ghi rõ `torch==2.7.1+cu128`.
 - **Phiên bản ghim:** `opencv-python-headless` 4.11.0.86 (bản 4.12 cần `numpy>=2`, xung đột với gsplat); `viser` 0.2.23.
@@ -139,6 +141,18 @@ Số Inria công bố cho Deep Blending (trung bình 2 cảnh, code hiện hành
 
 ## 7. Lượt chạy trên pod
 
+**12–13/11/2026, repo này (commit `49c208b`, sau đó `52afb1d`, lấy bằng `git pull`).** RTX 4090 (`torch` 2.7.1+cu128, Python 3.10.22 trong env `gs-gsplat`), cùng network volume với các lượt trước, đã tăng dung lượng trong lượt chạy. Giờ ghi theo đồng hồ pod (UTC; giờ Việt Nam cộng 7).
+
+| Việc | Thời gian | Kết quả |
+|---|---|---|
+| `seg_video8` (`scripts/pod/run_segments.sh video8`, 15 lượt) | 2 giờ 47 phút (07:06–09:53) | 15/15 lượt OK |
+| `seg_video9` | 1 giờ 23 phút (09:53–11:16) | FAILED: 9 lượt OK; 6 lượt `mono`, `kr` dừng ở vòng 0 vì bộ kiểm NaN (sửa ở `4251ff2`) |
+| `seg_video10` | từ 11:16 tới khi pod khởi động lại (Edit Pod, sau 12:55) | 4 lượt OK; lượt thứ năm (`kr`, seed 42) đang chấm thì mất |
+| `danh_gia_theo_doan` (chạy nốt `video9`, `video10`; bảng từng phòng và bảng gộp; luật mục 3.8; đóng gói) | 4 giờ 54 phút (13:09–18:03) | 17 lượt OK, đủ 45/45; gói `ket_qua_danh_gia_theo_doan_20261112_180311.tar.gz` (308 MB) |
+| `dong_goi` (ảnh so sánh ba phòng, đóng gói lại) | khoảng 1 phút | `ket_qua_danh_gia_theo_doan_day_du_20261112_180406.tar.gz` (337 MB): như gói trên, thêm ảnh so sánh |
+
+Tổng thời gian train của 45 lượt: 9,1 giờ (`video8` 2,4; `video9` 2,1; `video10` 4,7 giờ), chưa kể bước chấm. PLY cộng checkpoint: 34 GB, mỗi lượt khoảng 0,34 / 0,37 / 1,6 GB ở `video8` / `video9` / `video10` (`video10` có khoảng 3,6 triệu Gaussian). Số liệu: `docs/RESULTS.md` mục 6.2.
+
 **08/11/2026, repo này (commit `b428d95`, lấy bằng `git pull`).** Pod mới (RTX 4090 24 GB, image ở mục 1), cùng network volume với lượt 31/10/2026.
 
 | Việc | Thời gian | Kết quả |
@@ -146,6 +160,7 @@ Số Inria công bố cho Deep Blending (trung bình 2 cảnh, code hiện hành
 | `run_all` (env đã có: kiểm tra lại, smoke test) | 3 phút 34 giây | 5/5 bước OK |
 | `bash scripts/web_server.sh start` | | Server chạy; trang chỉ vào được sau khi thêm cổng HTTP 8000 (Edit Pod, pod khởi động lại; trước đó proxy trả 404, cổng hiện "Initializing" cho tới khi server chạy) |
 | Dựng phòng `video10` từ trang web (video 2 phút 54 giây) | train 8 phút 23 giây (các bước khác chưa ghi) | Xong: 249 ảnh định vị, `model.splat` 637.031 Gaussian (20,4 MB), xem được 3D (`docs/RESULTS.md` mục 7) |
+| Dựng lại cùng video (phòng `1`, quay màn hình demo) | 18 phút 45 giây: tách khung 12 giây, COLMAP 9 phút 40 giây, train 8 phút 32 giây, xuất 18 giây | Xong: 642.142 Gaussian (20,5 MB); cả ngày 7 phòng dựng xong, 2 dự án dừng ở bước COLMAP |
 
 **31/10/2026, repo này (commit `c0a7a92`).** Pod ở mục 1; code clone qua HTTPS bằng tay.
 

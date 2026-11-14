@@ -2,7 +2,7 @@
 
 Luồng sản phẩm nhận **một video hoặc một thư mục ảnh** của căn phòng, dựng mô hình 3D bằng **mô hình chính** (một cấu hình duy nhất, chọn qua thực nghiệm), rồi xuất các file mà trang web đọc để xem phòng. Tài liệu này là hợp đồng giữa phần xử lý trên pod và phần web: file nào, nằm ở đâu, định dạng ra sao, hệ tọa độ nào, tiến độ đọc ở đâu.
 
-Trạng thái: **đã viết, đã kiểm thử bằng stub và đối chiếu với code thật của gsplat trên CPU (mục 7); chưa chạy trên GPU, chưa dựng phòng thật nào bằng luồng này.** Trang web đọc các file này (tải ảnh / video lên, tiến độ, xem 3D: mục 8) đã viết và kiểm thử trên CPU, chưa chạy trên pod.
+Trạng thái: **đã chạy trên pod RTX 4090 ngày 08/11/2026**: 7 phòng dựng từ video tải lên trang web; một video 2 phút 54 giây mất 18 phút 45 giây (`docs/RESULTS.md` mục 7). Đã kiểm thử bằng stub và đối chiếu với code thật của gsplat trên CPU (mục 7). Trang web đọc các file này (tải ảnh / video lên, tiến độ, xem 3D: mục 8) cũng đã chạy trên pod ngày đó.
 
 ## 1. Mô hình chính
 
@@ -56,7 +56,7 @@ DRY_RUN=1 bash scripts/build_room.sh <nguồn> <phòng>   # chỉ kiểm tra đ�
 - Chạy lại an toàn. Phòng đã có COLMAP thì dùng lại (`--redo-colmap`: làm lại). Mô hình đã train từ đúng COLMAP đó với đúng cấu hình thì không train lại (`--retrain`: train lại), và không cần GPU: chỉ xuất lại file web. Kết quả cũ không bị xóa mà được đổi tên `model.prev_<thời gian>`; xóa tay khi cần chỗ trên volume (mỗi bản khoảng 0,5 GB với 1 triệu Gaussian).
 - Dữ liệu đã có trên volume không bị đụng tới. Luồng sản phẩm chỉ ghi vào `$WS/outputs/product/`, log `build_room_*` và việc nền `room_*`, kể cả khi tên phòng trùng tên một cảnh thực nghiệm. Có test kiểm tra từng byte (mục 7). Clone lại repo cũng không mất gì: mọi dữ liệu và kết quả nằm ngoài thư mục repo.
 - Mỗi phòng một tên (chữ, số, `.`, `_`, `-`). Tên đã dùng cho một nguồn khác thì dừng và báo.
-- Thời gian: lượt thực nghiệm `mcmc` trên phòng nhóm mất 10,8 phút train trên RTX 4090 (khoảng 0,97 triệu Gaussian), chưa tính tách khung và COLMAP. Thời gian của cả luồng sản phẩm **chưa đo**.
+- Thời gian: đo ngày 08/11/2026 trên RTX 4090, một video 2 phút 54 giây mất 18 phút 45 giây cho cả luồng (tách khung 12 giây, COLMAP 9 phút 40 giây, train 8 phút 32 giây, xuất 18 giây; `docs/RESULTS.md` mục 7).
 
 ## 4. Hợp đồng với web
 
@@ -202,8 +202,8 @@ Lưu ý với Runpod: [tài liệu của Runpod](https://docs.runpod.io/pods/con
 - **Chưa chấm điểm phòng tự dựng** (`metrics` = `null`). Muốn PSNR / SSIM / LPIPS phản ánh góc nhìn mới cần một lượt quay kiểm tra riêng, định vị trong cùng mô hình COLMAP nhưng không dùng để train ("Lượt quay kiểm tra" trong bản thiết kế trang "Dựng phòng mới"). Chưa có code.
 - `.splat` bỏ SH bậc 1–3 (mục 4.3). Đơn vị tương đối (mục 4.4).
 - `cap_max` cố định 1 triệu: ảnh hưởng tới chất lượng trên phòng lớn chưa đo (mục 2).
-- Chưa chạy trên GPU; chưa đo thời gian và dung lượng của cả luồng trên một phòng thật.
-- Trang web (mục 8): chưa chạy trên pod; tải lên qua proxy của Runpod và FPS trên máy thật chưa đo. Chưa có trang Kết quả thực nghiệm của bản thiết kế, chưa tự dừng pod.
+- Thời gian và dung lượng đã đo ngày 08/11/2026 trên 7 phòng, mỗi phòng dựng một lần (`docs/RESULTS.md` mục 7); chưa lặp lại.
+- Trang web (mục 8): đã chạy trên pod ngày 08/11/2026, tải lên qua proxy của Runpod; FPS trên máy thật mới đo một lần, trong lúc đang quay màn hình (đang đo lại). Chưa có trang Kết quả thực nghiệm của bản thiết kế, chưa tự dừng pod.
 
 ## 6. Đọc code
 
@@ -247,7 +247,7 @@ Ngoài repo, ngày 04/11/2026, trên CPU với PyTorch 2.7.1 và mã nguồn gsp
 - `.splat`: 20.000 Gaussian ngẫu nhiên, PLY do `export_splats` của gsplat ghi. 19.110 bản ghi trùng từng byte RGBA và quaternion với `export_splats(format="splat")` của gsplat. Độ lớn lệch trong mức làm tròn float32. Chỉ khác thứ tự, và 890 Gaussian có A = 0 bị bỏ.
 - `cameras.json`: cảnh COLMAP tổng hợp, thế giới COLMAP xoay / co giãn / dời ngẫu nhiên, `Parser` thật của gsplat. Chiếu các điểm khởi tạo Gaussian (đã chuẩn hóa) qua camera trong `cameras.json` ra đúng pixel quan sát gốc, sai số ≤ 0,001 px. `up` lệch hướng lên thật 0,06°. Lần đầu, cảnh tổng hợp có hướng lên đúng bằng +y đã làm lộ nhánh phản xạ trong phép chuẩn hóa của gsplat. Trường `right_handed` và cảnh báo của mục 4.4 được thêm từ đó.
 
-Chưa chạy: train trên GPU, một phòng thật, trang web trên pod.
+Trên GPU: đã chạy trên pod ngày 08/11/2026, dựng 7 phòng từ video tải lên trang web (`docs/RESULTS.md` mục 7).
 
 ## 8. Trang web
 

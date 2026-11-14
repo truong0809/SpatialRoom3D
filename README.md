@@ -4,7 +4,7 @@
 
 Đồ án tốt nghiệp. Hệ thống nhận video hoặc ảnh chụp một căn phòng bằng camera điện thoại (không cần LiDAR), ước lượng camera bằng COLMAP, tái tạo cảnh bằng **3D Gaussian Splatting (3DGS)** trên thư viện [gsplat](https://github.com/nerfstudio-project/gsplat), rồi cho xem và đi lại trong cảnh trên trình duyệt. Chất lượng được đánh giá bằng PSNR / SSIM / LPIPS trên ảnh không dùng để huấn luyện.
 
-> **Trạng thái (09/11/2026):** thực nghiệm chính và lượt dò tham số đã chạy trên GPU ngày 31/10/2026. Luồng sản phẩm và trang web đã chạy trên pod ngày 08/11/2026: tải một video lên, dựng phòng `video10` và xem 3D trên trình duyệt; thời gian tải trang và FPS chưa đo. Kết quả: mục 4 và [docs/RESULTS.md](docs/RESULTS.md); bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+> **Trạng thái (13/11/2026):** thực nghiệm chính và lượt dò tham số đã chạy trên GPU ngày 31/10/2026. Luồng sản phẩm và trang web đã chạy trên pod ngày 08/11/2026: tải video lên, dựng 7 phòng, xem 3D trên trình duyệt (một phòng từ video 2 phút 54 giây mất 18 phút 45 giây). Đánh giá theo đoạn trên ba phòng tự quay đã chạy trên pod ngày 12–13/11/2026 (45/45 lượt): `mcmc` tốt hơn `default` ở 9/9 cặp (phòng, seed); không biến thể nào của `mcmc` đạt luật ghi trước khi chạy ([docs/design/experiments.md](docs/design/experiments.md) mục 3.8). Kết quả: mục 4 và [docs/RESULTS.md](docs/RESULTS.md); bằng chứng và việc tiếp theo: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
 
 | Nhóm thực hiện | |
 |---|---|
@@ -63,6 +63,7 @@ experiments/      protocol và lệnh của từng benchmark (Deep Blending, Mip
 | Lọc Gaussian sau khi train, chấm lại (tùy chọn) | `src/training/prune.py` | `scripts/run_filter.sh` |
 | Đánh giá, so sánh các chế độ (bảng và biểu đồ) | `src/evaluation/` | `scripts/run_evaluate.sh` |
 | Ảnh so sánh các lượt trên cùng ảnh test | `src/evaluation/panels.py` | `scripts/run_panels.sh` |
+| Đánh giá phòng tự quay theo đoạn (ảnh test là các đoạn liền của video), áp luật ghi trước khi chạy | `src/training/split.py`, `src/evaluation/segment_rule.py` | `scripts/pod/run_segments.sh` |
 | **Sản phẩm**: video / ảnh → mô hình chính → file cho web | `src/product/` | `scripts/build_room.sh` |
 | **Trang web**: tải lên, dựng phòng, xem 3D | `app/web/` | `scripts/web_server.sh` |
 
@@ -126,7 +127,7 @@ Vài test tích hợp cần `ffmpeg` và `colmap`, tự bỏ qua khi máy không
 
 ### 3.1 Nhóm tự viết
 
-Toàn bộ mã trong `src/`, `app/`, `scripts/`, `configs/` và `tests/`: luồng xử lý từ video / ảnh đến mô hình 3D (chọn khung, kiểm tra đầu vào, chạy COLMAP và kiểm tra chất lượng trước khi tốn GPU); khung thực nghiệm (cùng số Gaussian, cùng tập test, nhiều seed, kiểm chứng baseline với số công bố, ngưỡng ghi trước khi có số liệu); 16 biến thể dò tham số; công cụ đánh giá; luồng sản phẩm và bộ xuất `.splat`; trang web và trình xem 3D; hạ tầng chạy trên pod (cài đặt, việc nền, khóa GPU); bộ kiểm thử. Không có mã của bên thứ ba được chép vào các thư mục này; `docs/research/references/demo_3dgs_mcmc/` lưu nguyên notebook demo 1 của nhóm để đối chiếu (mục 3.3).
+Toàn bộ mã trong `src/`, `app/`, `scripts/`, `configs/` và `tests/`: luồng xử lý từ video / ảnh đến mô hình 3D (chọn khung, kiểm tra đầu vào, chạy COLMAP và kiểm tra chất lượng trước khi tốn GPU); khung thực nghiệm (cùng số Gaussian, cùng tập test, nhiều seed, kiểm chứng baseline với số công bố, ngưỡng ghi trước khi có số liệu); 16 biến thể dò tham số; công cụ đánh giá; luồng sản phẩm và bộ xuất `.splat`; trang web và trình xem 3D; hạ tầng chạy trên pod (cài đặt, việc nền, khóa GPU); bộ kiểm thử. Không có mã của bên thứ ba được chép vào các thư mục này; `docs/research/references/demo_3dgs_mcmc/` lưu nguyên hai notebook demo của nhóm (demo 1, demo v2) để đối chiếu (mục 3.3).
 
 ### 3.2 Thành phần bên ngoài
 
@@ -181,8 +182,8 @@ Kill-then-Relocate (biến thể `kr`) là heuristic của notebook demo v2 củ
 - **Kiểm chứng baseline (đạt):** `default` lệch −0,168 dB PSNR so với số công bố của Inria trên Deep Blending, −0,339 / −0,136 dB so với B0 nhóm tự chạy; ngưỡng 0,5 dB.
 - **So sánh chính:** `mcmc` tốt hơn `default` ở 17/18 cặp (cảnh, seed) về PSNR và 18/18 cặp về SSIM, LPIPS; trung bình +0,590 ± 0,181 dB trên Mip-NeRF 360, +0,338 ± 0,239 dB trên Deep Blending; thời gian huấn luyện tương đương. Đây là căn cứ chọn `mcmc` cho sản phẩm.
 - **Dò 16 biến thể của `mcmc`** (cảnh `room`, một seed, ngưỡng 0,150 dB ghi trước): không biến thể nào tốt hơn rõ ràng; sản phẩm giữ nguyên preset `mcmc`.
-- **Phòng nhóm tự quay:** chạy được đủ luồng; PSNR khoảng 39 dB không dùng để kết luận vì ảnh test nằm sát ảnh train của cùng video. Đánh giá theo đoạn (`scripts/pod/run_segments.sh`) đã viết, chưa chạy trên GPU.
-- **Sản phẩm trên pod** (08/11/2026, RTX 4090): tải một video 2 phút 54 giây lên trang web, pod dựng phòng `video10` (249 ảnh định vị, `model.splat` 637.031 Gaussian, 20,4 MB, train 8 phút 23 giây), xem được 3D trên trình duyệt. Thời gian các bước khác, thời gian tải trang và FPS chưa đo. Video demo (quay màn hình, 11 phút): [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view).
+- **Phòng nhóm tự quay:** lượt đầu (`phong_nhom`, 31/10/2026) cho PSNR khoảng 39 dB, không dùng để kết luận vì ảnh test nằm sát ảnh train của cùng video. Lượt đánh giá theo đoạn (12–13/11/2026; các đoạn liền của chính video làm ảnh test, `scripts/pod/run_segments.sh`) trên ba phòng `video8`, `video9`, `video10`, 3 seed: `mcmc` tốt hơn `default` ở 9/9 cặp (phòng, seed) ở cả ba chỉ số, trung bình +2,182 dB PSNR; ba biến thể `rbg`, `mono`, `kr` đều không đạt luật ghi trước khi chạy (`docs/design/experiments.md` mục 3.8), nên sản phẩm giữ `mcmc`.
+- **Sản phẩm trên pod** (08/11/2026, RTX 4090): tải một video 2 phút 54 giây lên trang web, pod dựng phòng trong 18 phút 45 giây (COLMAP 9 phút 40 giây, train 8 phút 32 giây): 249 ảnh định vị, `model.splat` khoảng 640 nghìn Gaussian, 20,5 MB. Xem trên laptop GPU tích hợp Intel UHD, đo một lần trong lúc đang quay màn hình demo (tự xoay, chất lượng Cao): tải file 1 giây, 10,5 FPS; cả ba chế độ xem chạy được. Ngày 08/11 dựng xong 7 phòng. Video demo (quay màn hình, 11 phút): [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view).
 
 ![Chênh lệch của mcmc so với default trên 6 cảnh](docs/results/charts/main_02_vs_default.png)
 *Chênh lệch của `mcmc` so với `default`: thanh là trung bình, chấm đen là từng cặp (cảnh, seed).*
@@ -197,7 +198,7 @@ Bảng đầy đủ theo cảnh, biểu đồ và ảnh so sánh: [docs/RESULTS.
 | | |
 |---|---|
 | [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md) | Hướng dẫn sử dụng trên Runpod: volume, pod, notebook, cảnh tự quay, benchmark, xử lý lỗi |
-| [docs/RESULTS.md](docs/RESULTS.md) | Kết quả tóm tắt: thực nghiệm chính, kiểm chứng baseline, dò tham số, phòng của nhóm (31/10/2026), sản phẩm trên pod (08/11/2026) |
+| [docs/RESULTS.md](docs/RESULTS.md) | Kết quả tóm tắt: thực nghiệm chính, kiểm chứng baseline, dò tham số, phòng của nhóm (31/10/2026); sản phẩm trên pod (08/11/2026); ba phòng tự quay, test theo đoạn (12–13/11/2026) |
 | [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | Trạng thái, quyết định đã chốt, kết quả, bằng chứng, việc tiếp theo |
 | [docs/design/product.md](docs/design/product.md) | Sản phẩm: mô hình chính, dựng phòng, hợp đồng với web (file, định dạng, hệ tọa độ, tiến độ) |
 | [app/web/README.md](app/web/README.md) | Trang web: chạy trên pod, xem trên laptop không cần pod, các màn, kiểm thử |
@@ -214,4 +215,5 @@ Mã nguồn của repo dùng giấy phép [MIT](LICENSE). Các thành phần bê
 - Không đưa dataset, checkpoint, `.ply`, video hay log thô lên Git; không đưa token, mật khẩu, API key hay file `.env`.
 - Mọi số liệu trong báo cáo phải truy được về file kết quả, cấu hình và commit tương ứng; số công bố và số tự chạy luôn ghi tách bạch.
 - Dữ liệu trong `tests/` là dữ liệu tổng hợp để kiểm tra logic, không phải kết quả thực nghiệm.
-- Commit message dạng `loại(phạm vi): mô tả`, phạm vi có thể bỏ (vd. `docs: ...`).
+- Commit message một dòng, tiếng Việt ngắn gọn: `loại: mô tả` (vd. `docs: thêm kết quả đánh giá theo đoạn`).
+- Tên file và thư mục mới dùng tiếng Anh, chữ thường, nối bằng `_`.
