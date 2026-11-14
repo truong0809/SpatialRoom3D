@@ -36,10 +36,10 @@ Tóm tắt kết quả của lượt chạy trên pod ngày **31/10/2026**, đ�
 | Deep Blending | +0,338 ± 0,239 · 5/6 | +0,0030 · 6/6 | −0,0135 · 6/6 |
 | Mip-NeRF 360 | +0,590 ± 0,181 · 12/12 | +0,0088 · 12/12 | −0,0165 · 12/12 |
 
-![Chênh lệch của mcmc so với default trên 6 cảnh](results/charts/main_02_so_voi_default.png)
+![Chênh lệch của mcmc so với default trên 6 cảnh](results/charts/main_02_vs_default.png)
 *Chênh lệch của `mcmc` so với `default`: thanh là trung bình, chấm đen là từng cặp (cảnh, seed). Nguồn: `main_20261031_114145_deep_blending.json`, `main_20261031_114145_mipnerf360.json`.*
 
-![Chênh lệch của mcmc so với default trên Mip-NeRF 360](results/charts/main_03_mipnerf360_so_voi_default.png)
+![Chênh lệch của mcmc so với default trên Mip-NeRF 360](results/charts/main_03_mipnerf360_vs_default.png)
 *Riêng 4 cảnh Mip-NeRF 360. Nguồn: `modes_mipnerf360_20261031_044043.json`.*
 
 ### 2.2. Theo từng cảnh
@@ -66,7 +66,7 @@ Tóm tắt kết quả của lượt chạy trên pod ngày **31/10/2026**, đ�
 | `default` so với B0 (3DGS gốc của Inria, tự chạy) | **PASS**: drjohnson −0,339 dB, playroom −0,136 dB |
 | Mip-NeRF 360 so với số công bố | **SKIPPED**: mới chạy 4/9 cảnh, không so được với trung bình 9 cảnh |
 
-![Đối chiếu default với Inria](results/charts/main_01_doi_chieu_inria.png)
+![Đối chiếu default với Inria](results/charts/main_01_vs_inria.png)
 *Đối chiếu `default` với B0 tự chạy (từng cảnh) và với số Inria công bố (trung bình); vùng xám là ngưỡng chấp nhận (±0,5 dB, ±0,01, ±0,01).*
 
 ## 4. Chi phí tính toán
@@ -105,10 +105,10 @@ Số Gaussian và dung lượng PLY (như nhau cho hai chế độ vì cùng s�
 
 **Lọc Gaussian sau khi train** (bỏ Gaussian có opacity < 0,02 hoặc trục > 0,1 × `scene_scale`), rồi chấm lại: `default` giảm 1,14 dB; `mcmc` và các biến thể giảm 2,1 đến 9,1 dB. Kết luận: không dùng bộ lọc này để làm nhẹ file cho `mcmc`.
 
-![Các biến thể so với mcmc](results/charts/tune_02_so_voi_mcmc.png)
+![Các biến thể so với mcmc](results/charts/tune_02_vs_mcmc.png)
 *Từng biến thể so với `mcmc` (cùng seed 42). Báo cáo ghi điều kiện "seeds=DIFF" chưa đạt ở 16/16 cặp, nên **chưa được nói "cải thiện"**.*
 
-![Các biến thể so với default](results/charts/tune_01_so_voi_default.png)
+![Các biến thể so với default](results/charts/tune_01_vs_default.png)
 *Các biến thể so với `default` trên `room` (`mcmc` có 3 seed, các biến thể 1 seed).*
 
 ## 6. Phòng của nhóm (`phong_nhom`)
@@ -122,7 +122,7 @@ Một video tự quay, 1 seed.
 
 Hai chế độ trái chiều nhau (PSNR nghiêng về `default`; SSIM, LPIPS nghiêng về `mcmc`). Ảnh test là các khung kề khung train của cùng video, nên số này **không so được với benchmark** và cao hơn mức thật khi nhìn từ góc mới.
 
-![phong_nhom: mcmc so với default](results/charts/custom_phong_nhom_so_voi_default.png)
+![phong_nhom: mcmc so với default](results/charts/custom_phong_nhom_vs_default.png)
 *ΔPSNR −0,250 dB, ΔSSIM +0,0019, ΔLPIPS −0,0086 (1 seed). Báo cáo ghi điều kiện "seeds=FEW" chưa đạt, nên chưa được nói "cải thiện". Nguồn: `compare_custom_20261031_214710.json`.*
 
 ## 7. Sản phẩm chạy trên pod (08/11/2026)
@@ -140,7 +140,7 @@ Lần đầu chạy trọn luồng sản phẩm trên GPU: tải video lên tran
 | GPU | NVIDIA GeForce RTX 4090 |
 | Trạng thái | Hoàn thành, mở được trong trình xem 3D |
 
-![Trang Tổng quan của SpatialRoom3D](results/web/tong_quan.jpg)
+![Trang Tổng quan của SpatialRoom3D](results/web/overview.jpg)
 
 Video demo (quay màn hình, 11 phút, ngày 08/11/2026): [xem trên Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view); file không đưa lên Git.
 

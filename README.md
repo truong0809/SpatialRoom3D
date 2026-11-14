@@ -184,10 +184,10 @@ Kill-then-Relocate (biến thể `kr`) là heuristic của notebook demo v2 củ
 - **Phòng nhóm tự quay:** chạy được đủ luồng; PSNR khoảng 39 dB không dùng để kết luận vì ảnh test nằm sát ảnh train của cùng video. Đánh giá theo đoạn (`scripts/pod/run_segments.sh`) đã viết, chưa chạy trên GPU.
 - **Sản phẩm trên pod** (08/11/2026, RTX 4090): tải một video 2 phút 54 giây lên trang web, pod dựng phòng `video10` (249 ảnh định vị, `model.splat` 637.031 Gaussian, 20,4 MB, train 8 phút 23 giây), xem được 3D trên trình duyệt. Thời gian các bước khác, thời gian tải trang và FPS chưa đo. Video demo (quay màn hình, 11 phút): [Google Drive](https://drive.google.com/file/d/1FG4LS7gpBTIIer8L2jTSQQHPk12BszV4/view).
 
-![Chênh lệch của mcmc so với default trên 6 cảnh](docs/results/charts/main_02_so_voi_default.png)
+![Chênh lệch của mcmc so với default trên 6 cảnh](docs/results/charts/main_02_vs_default.png)
 *Chênh lệch của `mcmc` so với `default`: thanh là trung bình, chấm đen là từng cặp (cảnh, seed).*
 
-![Trang Tổng quan của SpatialRoom3D chạy trên pod RTX 4090](docs/results/web/tong_quan.jpg)
+![Trang Tổng quan của SpatialRoom3D chạy trên pod RTX 4090](docs/results/web/overview.jpg)
 *Trang Tổng quan khi chạy trên pod (08/11/2026): phòng `video10` dựng từ một video 2 phút 54 giây.*
 
 Bảng đầy đủ theo cảnh, biểu đồ và ảnh so sánh: [docs/RESULTS.md](docs/RESULTS.md). Bằng chứng và giới hạn: [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) mục "Kết quả". Thiết kế thực nghiệm: [docs/design/experiments.md](docs/design/experiments.md), [docs/design/training_modes.md](docs/design/training_modes.md).
